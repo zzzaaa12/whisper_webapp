@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登入嘗試管理 - Whisper 工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .table th { background-color: #e9ecef; }
+        .blocked { color: #dc3545; font-weight: bold; }
+        .warning { color: #ffc107; font-weight: bold; }
+        .safe { color: #198754; }
+    </style>
+</head>
+<body>
+    <div class="container mt-5">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3">登入嘗試管理</h1>
+            <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">系統設定</h5>
+                        <p class="card-text">
+                            <strong>最大嘗試次數：</strong> {{ max_attempts }} 次<br>
+                            <strong>封鎖時間：</strong> {{ block_duration }} 分鐘<br>
+                            <strong>重置時間：</strong> 1 小時
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">統計資訊</h5>
+                        <p class="card-text">
+                            <strong>總記錄數：</strong> {{ attempts|length }} 個 IP<br>
+                            <strong>被封鎖：</strong> {{ attempts|selectattr('is_blocked')|list|length }} 個 IP<br>
+                            <strong>活躍記錄：</strong> {{ attempts|rejectattr('is_blocked')|list|length }} 個 IP
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">登入嘗試記錄</h5>
+            </div>
+            <div class="card-body">
+                {% if attempts %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>IP 地址</th>
+                                    <th>嘗試次數</th>
+                                    <th>剩餘次數</th>
+                                    <th>首次嘗試時間</th>
+                                    <th>狀態</th>
+                                    <th>封鎖剩餘時間</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for attempt in attempts %}
+                                <tr>
+                                    <td><code>{{ attempt.ip }}</code></td>
+                                    <td>
+                                        <span class="{% if attempt.attempts >= max_attempts %}blocked{% elif attempt.attempts >= max_attempts - 2 %}warning{% else %}safe{% endif %}">
+                                            {{ attempt.attempts }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="{% if attempt.remaining <= 2 %}warning{% else %}safe{% endif %}">
+                                            {{ attempt.remaining }}
+                                        </span>
+                                    </td>
+                                    <td>{{ attempt.first_attempt }}</td>
+                                    <td>
+                                        {% if attempt.is_blocked %}
+                                            <span class="badge bg-danger">已封鎖</span>
+                                        {% elif attempt.remaining <= 2 %}
+                                            <span class="badge bg-warning">警告</span>
+                                        {% else %}
+                                            <span class="badge bg-success">正常</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if attempt.is_blocked %}
+                                            <span class="blocked">{{ attempt.block_remaining }}</span>
+                                        {% else %}
+                                            <span class="text-muted">{{ attempt.block_remaining }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-4">
+                        <p>目前沒有任何登入嘗試記錄</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <div class="alert alert-info">
+                <h6>說明：</h6>
+                <ul class="mb-0">
+                    <li><strong>正常</strong>：剩餘嘗試次數 > 2</li>
+                    <li><strong>警告</strong>：剩餘嘗試次數 ≤ 2</li>
+                    <li><strong>已封鎖</strong>：達到最大嘗試次數，暫時封鎖</li>
+                    <li>記錄會在 1 小時後自動重置</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html> 

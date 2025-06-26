@@ -1,0 +1,64 @@
+/* 咖啡色主題樣式 */
+
+/* 書籤按鈕樣式 */
+.btn-bookmark {
+    border-color: #8B4513 !important;
+    color: #8B4513 !important;
+}
+
+.btn-bookmark:hover {
+    background-color: #8B4513 !important;
+    border-color: #8B4513 !important;
+    color: white !important;
+}
+
+.btn-bookmark.active,
+.btn-bookmark.bookmarked {
+    background-color: #8B4513 !important;
+    border-color: #8B4513 !important;
+    color: white !important;
+}
+
+/* 書籤圖示顏色 */
+.bookmark-icon {
+    color: #8B4513 !important;
+}
+
+/* 書籤批量操作工具列 */
+.batch-toolbar.bookmark-theme {
+    background-color: #D2B48C !important;
+}
+
+/* 書籤連結樣式 */
+.nav-bookmark {
+    border-color: #8B4513 !important;
+    color: #8B4513 !important;
+}
+
+.nav-bookmark:hover {
+    background-color: #8B4513 !important;
+    border-color: #8B4513 !important;
+    color: white !important;
+}
+
+/* 書籤連結 - 實心樣式（咖啡底白字） */
+.nav-bookmark-solid {
+    background-color: #8B4513 !important;
+    border-color: #8B4513 !important;
+    color: white !important;
+}
+
+.nav-bookmark-solid:hover {
+    background-color: #A0522D !important;
+    border-color: #A0522D !important;
+    color: white !important;
+}
+
+/* 確保按鈕在各種狀態下都保持一致 */
+.btn-bookmark:focus,
+.btn-bookmark:active {
+    background-color: #8B4513 !important;
+    border-color: #8B4513 !important;
+    color: white !important;
+    box-shadow: 0 0 0 0.2rem rgba(139, 69, 19, 0.25) !important;
+} 
