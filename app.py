@@ -1001,7 +1001,7 @@ def handle_cancel_processing():
         else:
             log_and_emit("❌ 沒有可取消的任務", 'error', sid)
 
-@app.route('/summaries')
+@app.route('/summary')
 def list_summaries():
     if not SUMMARY_FOLDER.exists(): return "摘要資料夾不存在。", 500
     files = sorted(SUMMARY_FOLDER.glob('*.txt'), key=os.path.getmtime, reverse=True)
