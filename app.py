@@ -1240,12 +1240,21 @@ def api_process_youtube():
 
         data = request.get_json()
         youtube_url = data.get('youtube_url', '').strip()
+        access_code = data.get('access_code', '').strip()
 
         if not youtube_url:
             return jsonify({
                 'status': 'error',
                 'message': '缺少 youtube_url 參數'
             }), 400
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'status': 'error',
+                'message': '通行碼錯誤'
+            }), 401
 
         # 加強 URL 驗證
         import re
@@ -1601,6 +1610,91 @@ def api_get_config_status():
         return jsonify({
             'success': False,
             'message': f'獲取配置狀態失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/upload_subtitle', methods=['POST'])
+def api_upload_subtitle():
+    """API: 上傳字幕檔案到 summaries 目錄"""
+    try:
+        # 檢查請求格式
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'message': '請求格式錯誤，需要 JSON 格式'
+            }), 400
+
+        data = request.get_json()
+
+        # 檢查必要參數
+        filename = data.get('filename', '').strip()
+        content = data.get('content', '')
+        access_code = data.get('access_code', '').strip()
+
+        if not filename:
+            return jsonify({
+                'success': False,
+                'message': '缺少檔案名稱參數'
+            }), 400
+
+        if not content:
+            return jsonify({
+                'success': False,
+                'message': '缺少檔案內容參數'
+            }), 400
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        # 檔案名稱安全處理
+        safe_filename = sanitize_filename(filename)
+        if not safe_filename:
+            return jsonify({
+                'success': False,
+                'message': '檔案名稱無效'
+            }), 400
+
+        # 確保檔案名稱有 .txt 副檔名
+        if not safe_filename.lower().endswith('.txt'):
+            safe_filename += '.txt'
+
+        # 檢查檔案是否已存在
+        file_path = SUMMARY_FOLDER / safe_filename
+        if file_path.exists():
+            return jsonify({
+                'success': False,
+                'message': f'檔案 {safe_filename} 已存在'
+            }), 409
+
+        # 限制檔案內容大小 (最大 10MB)
+        if len(content.encode('utf-8')) > 10 * 1024 * 1024:
+            return jsonify({
+                'success': False,
+                'message': '檔案內容過大，最大限制 10MB'
+            }), 413
+
+        # 確保 summaries 目錄存在
+        SUMMARY_FOLDER.mkdir(exist_ok=True)
+
+        # 寫入檔案
+        file_path.write_text(content, encoding='utf-8')
+
+        return jsonify({
+            'success': True,
+            'message': '檔案上傳成功',
+            'filename': safe_filename,
+            'path': str(file_path),
+            'size': len(content.encode('utf-8'))
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'上傳檔案時發生錯誤：{str(e)}'
         }), 500
 
 # --- Main Execution ---
