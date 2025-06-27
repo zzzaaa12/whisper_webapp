@@ -25,7 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const timestamp = `${month}/${day} ${hours}:${minutes}:${seconds}`;
 
         const logEntry = document.createElement('div');
-        
+
         let colorClass = '';
         if (type === 'error') {
             colorClass = 'text-danger';
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         logContainer.appendChild(logEntry);
-        
+
         // 智能滾動：如果使用者沒有手動滾動，則自動滾動到底部
         const isAtBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 10;
         if (isAtBottom) {
@@ -74,14 +74,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm('確定要取消目前的處理任務嗎？')) {
             appendLog('🛑 使用者取消處理任務', 'info');
             socket.emit('cancel_processing');
-            
+
             // 重置按鈕狀態
             submitBtn.disabled = false;
             submitBtn.textContent = '開始處理';
             urlInput.disabled = false;
             accessCodeInput.disabled = false;
             cancelBtn.style.display = 'none';
-            
+
             // 隱藏影片資訊
             videoInfoCard.style.display = 'none';
         }
@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if(wasDisconnected){
             appendLog('重新連接成功！', 'success');
         }
-        
+
         // 定期更新 GPU 狀態（每 30 秒）
         if (window.gpuUpdateInterval) {
             clearInterval(window.gpuUpdateInterval);
@@ -112,9 +112,9 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.textContent = '伺服器忙碌中';
         accessCodeInput.disabled = true;
         cancelBtn.style.display = 'none';
-        
+
         videoInfoCard.style.display = 'none';
-        
+
         // 清除 GPU 更新定時器
         if (window.gpuUpdateInterval) {
             clearInterval(window.gpuUpdateInterval);
@@ -178,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.disabled = false;
         // accessCodeInput.disabled = true; // 移除這行，保持通行碼輸入框可輸入
         cancelBtn.style.display = 'none';
-        
+
         // 清空通行碼輸入框，讓使用者重新輸入
         accessCodeInput.value = '';
         accessCodeInput.focus();
@@ -190,9 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const deviceName = data.device_name || '未知設備';
         const deviceMode = data.device === 'cuda' ? 'GPU 模式' : 'CPU 模式';
         const cudaStatus = data.cuda_available ? '可用' : '不可用';
-        
+
         const gpuInfo = `🖥️ 系統資訊 - 設備: ${deviceName} | 模式: ${deviceMode} | CUDA: ${cudaStatus}`;
-        
+
         // 檢查是否已經顯示過 GPU 資訊，避免重複
         const existingGpuInfo = logContainer.querySelector('.gpu-info');
         if (existingGpuInfo) {
@@ -226,11 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
         urlInput.disabled = true;
         // accessCodeInput.disabled = true; // 移除這行，保持通行碼輸入框可輸入
         cancelBtn.style.display = 'inline-block';
-        
+
         videoInfoCard.style.display = 'none';
 
         appendLog(`收到請求，準備處理網址: ${url}`);
-        
+
         socket.emit('start_processing', {
             'audio_url': url,
             'access_code': accessCode

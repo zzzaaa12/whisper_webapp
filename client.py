@@ -13,11 +13,11 @@ from typing import Dict, Optional, Union
 
 class WhisperClient:
     """Whisper WebApp 客戶端"""
-    
+
     def __init__(self, server_url: str = "http://localhost:5000"):
         """
         初始化客戶端
-        
+
         Args:
             server_url: Whisper WebApp 伺服器網址
         """
@@ -28,14 +28,14 @@ class WhisperClient:
             'Content-Type': 'application/json',
             'User-Agent': 'WhisperClient/1.0'
         })
-    
+
     def send_youtube_url(self, youtube_url: str) -> Dict[str, Union[str, int]]:
         """
         發送 YouTube URL 到伺服器
-        
+
         Args:
             youtube_url: YouTube 影片網址
-            
+
         Returns:
             Dict 包含狀態資訊
         """
@@ -44,14 +44,14 @@ class WhisperClient:
             data = {
                 'youtube_url': youtube_url
             }
-            
+
             # 發送 POST 請求
             response = self.session.post(
                 self.api_endpoint,
                 json=data,
                 timeout=30
             )
-            
+
             # 解析回應
             if response.status_code == 200:
                 result = response.json()
@@ -78,7 +78,7 @@ class WhisperClient:
                         'message': f'HTTP {response.status_code}: {response.text}',
                         'http_code': response.status_code
                     }
-                    
+
         except requests.exceptions.ConnectionError:
             return {
                 'success': False,
@@ -100,11 +100,11 @@ class WhisperClient:
                 'message': f'發生錯誤：{str(e)}',
                 'http_code': 0
             }
-    
+
     def check_server_status(self) -> Dict[str, Union[str, int]]:
         """
         檢查伺服器狀態
-        
+
         Returns:
             Dict 包含伺服器狀態資訊
         """
@@ -143,21 +143,21 @@ def main():
         print("  python client.py https://www.youtube.com/watch?v=example")
         print("  python client.py https://www.youtube.com/watch?v=example --server http://192.168.1.100:5000")
         sys.exit(1)
-    
+
     # 解析命令列參數
     youtube_url = sys.argv[1]
     server_url = "http://localhost:5000"
-    
+
     if len(sys.argv) > 3 and sys.argv[2] == "--server":
         server_url = sys.argv[3]
-    
+
     # 建立客戶端
     client = WhisperClient(server_url)
-    
+
     print(f"連接到伺服器：{server_url}")
     print(f"YouTube URL：{youtube_url}")
     print("-" * 50)
-    
+
     # 檢查伺服器狀態
     print("檢查伺服器狀態...")
     status_result = client.check_server_status()
@@ -166,19 +166,19 @@ def main():
         sys.exit(1)
     else:
         print(f"✅ {status_result['message']}")
-    
+
     # 發送 YouTube URL
     print("\n發送 YouTube URL...")
     result = client.send_youtube_url(youtube_url)
-    
+
     # 顯示結果
     print(f"\n結果：")
     print(f"狀態：{result['status']}")
     print(f"訊息：{result['message']}")
-    
+
     if result.get('task_id'):
         print(f"任務 ID：{result['task_id']}")
-    
+
     if result['success']:
         print("\n✅ 請求已成功發送")
         if result['status'] == 'busy':

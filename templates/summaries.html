@@ -69,7 +69,7 @@
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
             </div>
         </div>
-        
+
         <!-- 搜尋欄 -->
         <div class="card mb-3">
             <div class="card-body">
@@ -89,7 +89,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="card">
             <!-- 批量操作工具列 -->
             <div class="batch-toolbar" id="batch-toolbar">
@@ -104,7 +104,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="list-group list-group-flush" id="summaries-list">
                 {% if summaries %}
                     {% for summary in summaries %}
@@ -151,16 +151,16 @@
             checkboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', updateSelection);
             });
-            
+
             // 搜尋功能
             const searchInput = document.getElementById('search-input');
             const clearButton = document.getElementById('clear-search');
             const searchResults = document.getElementById('search-results');
-            
+
             if (searchInput) {
                 searchInput.addEventListener('input', performSearch);
                 clearButton.addEventListener('click', clearSearch);
-                
+
                 // 按 ESC 清除搜尋
                 searchInput.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
@@ -179,7 +179,7 @@
 
             const toolbar = document.getElementById('batch-toolbar');
             const countSpan = document.getElementById('selected-count');
-            
+
             if (selectedItems.size > 0) {
                 toolbar.classList.add('show');
                 countSpan.textContent = `已選擇 ${selectedItems.size} 個項目`;
@@ -224,14 +224,14 @@
                             item.remove();
                         }
                     });
-                    
+
                     // 重置選擇狀態
                     selectedItems.clear();
                     updateSelection();
-                    
+
                     // 顯示成功訊息
                     showMessage('檔案已移動到回收桶', 'success');
-                    
+
                     // 檢查是否還有項目
                     const remainingItems = document.querySelectorAll('.summary-item');
                     if (remainingItems.length === 0) {
@@ -251,15 +251,15 @@
             const summaryItems = document.querySelectorAll('.summary-item');
             const searchResults = document.getElementById('search-results');
             let visibleCount = 0;
-            
+
             summaryItems.forEach(item => {
                 const filename = item.getAttribute('data-filename').toLowerCase();
                 const isVisible = filename.includes(searchTerm);
-                
+
                 item.style.display = isVisible ? 'flex' : 'none';
                 if (isVisible) visibleCount++;
             });
-            
+
             // 更新搜尋結果文字
             const totalCount = summaryItems.length;
             if (searchTerm === '') {
@@ -267,7 +267,7 @@
             } else {
                 searchResults.textContent = `找到 ${visibleCount} 個項目，共 ${totalCount} 個`;
             }
-            
+
             // 重置勾選狀態（隱藏的項目不應該被選中）
             selectedItems.clear();
             document.querySelectorAll('.summary-select').forEach(checkbox => {
@@ -275,7 +275,7 @@
             });
             updateSelection();
         }
-        
+
         function clearSearch() {
             document.getElementById('search-input').value = '';
             performSearch();
@@ -286,11 +286,11 @@
             // 檢查當前狀態
             const isCurrentlyBookmarked = buttonElement.classList.contains('bookmarked');
             const action = isCurrentlyBookmarked ? 'remove' : 'add';
-            
+
             // 準備 API 請求
             const apiUrl = `/api/bookmarks/${action}`;
             const requestData = { filename: filename };
-            
+
             fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -334,7 +334,7 @@
                 </div>
             `;
             document.body.insertAdjacentHTML('beforeend', alertHtml);
-            
+
             setTimeout(() => {
                 const alert = document.querySelector('.alert');
                 if (alert) alert.remove();

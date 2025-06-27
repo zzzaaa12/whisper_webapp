@@ -156,17 +156,17 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
         // 頁面載入完成後初始化搜尋功能
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('search-input');
             const clearButton = document.getElementById('clear-search');
-            
+
             if (searchInput) {
                 searchInput.addEventListener('input', performSearch);
                 clearButton.addEventListener('click', clearSearch);
-                
+
                 // 按 ESC 清除搜尋
                 searchInput.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
@@ -175,21 +175,21 @@
                 });
             }
         });
-        
+
         function performSearch() {
             const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
             const trashItems = document.querySelectorAll('.trash-item');
             const searchResults = document.getElementById('search-results');
             let visibleCount = 0;
-            
+
             trashItems.forEach(item => {
                 const filename = item.querySelector('h6').textContent.toLowerCase();
                 const isVisible = filename.includes(searchTerm);
-                
+
                 item.style.display = isVisible ? 'block' : 'none';
                 if (isVisible) visibleCount++;
             });
-            
+
             // 更新搜尋結果文字
             const totalCount = trashItems.length;
             if (searchTerm === '') {
@@ -198,16 +198,16 @@
                 searchResults.textContent = `找到 ${visibleCount} 個項目，共 ${totalCount} 個`;
             }
         }
-        
+
         function clearSearch() {
             document.getElementById('search-input').value = '';
             performSearch();
             document.getElementById('search-input').focus();
         }
-        
+
         function restoreItem(trashId) {
             if (!confirm('確定要還原這個檔案嗎？')) return;
-            
+
             fetch('/api/trash/restore', {
                 method: 'POST',
                 headers: {
@@ -233,7 +233,7 @@
 
         function deleteItem(trashId) {
             if (!confirm('確定要永久刪除這個檔案嗎？此操作無法撤銷！')) return;
-            
+
             fetch('/api/trash/delete', {
                 method: 'POST',
                 headers: {
@@ -259,11 +259,11 @@
 
         function restoreAll() {
             if (!confirm('確定要還原所有檔案嗎？')) return;
-            
+
             const items = document.querySelectorAll('[data-trash-id]');
             let completed = 0;
             let total = items.length;
-            
+
             items.forEach(item => {
                 const trashId = item.getAttribute('data-trash-id');
                 fetch('/api/trash/restore', {
@@ -296,11 +296,11 @@
 
         function deleteAll() {
             if (!confirm('確定要永久刪除所有檔案嗎？此操作無法撤銷！')) return;
-            
+
             const items = document.querySelectorAll('[data-trash-id]');
             let completed = 0;
             let total = items.length;
-            
+
             items.forEach(item => {
                 const trashId = item.getAttribute('data-trash-id');
                 fetch('/api/trash/delete', {
@@ -352,7 +352,7 @@
                 </div>
             `;
             document.body.insertAdjacentHTML('beforeend', alertHtml);
-            
+
             // 自動移除訊息
             setTimeout(() => {
                 const alert = document.querySelector('.alert');
