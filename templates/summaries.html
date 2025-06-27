@@ -77,8 +77,8 @@
                     <span class="input-group-text">
                         <i class="bi bi-search"></i>
                     </span>
-                    <input type="text" class="form-control" id="search-input" 
-                           placeholder="搜尋摘要檔案名稱..." 
+                    <input type="text" class="form-control" id="search-input"
+                           placeholder="搜尋摘要檔案名稱..."
                            autocomplete="off">
                     <button class="btn btn-outline-secondary" type="button" id="clear-search">
                         <i class="bi bi-x-lg"></i>
@@ -110,15 +110,15 @@
                     {% for summary in summaries %}
                     <div class="summary-item" data-filename="{{ summary.filename }}">
                         <div class="form-check summary-checkbox">
-                            <input class="form-check-input summary-select" type="checkbox" 
+                            <input class="form-check-input summary-select" type="checkbox"
                                    value="{{ summary.filename }}" id="check-{{ loop.index }}">
                         </div>
                         <div class="summary-content" onclick="viewSummary('{{ summary.filename }}')">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span>{{ summary.filename.replace('.txt', '') }}</span>
                                 <div class="d-flex align-items-center">
-                                    <button type="button" 
-                                            class="btn btn-sm btn-outline-secondary btn-bookmark me-2 {{ 'bookmarked' if summary.is_bookmarked else '' }}" 
+                                    <button type="button"
+                                            class="btn btn-sm btn-outline-secondary btn-bookmark me-2 {{ 'bookmarked' if summary.is_bookmarked else '' }}"
                                             onclick="event.stopPropagation(); toggleBookmark('{{ summary.filename }}', this)"
                                             title="{{ '移除書籤' if summary.is_bookmarked else '加入書籤' }}">
                                         <i class="bi {{ 'bi-bookmark-fill' if summary.is_bookmarked else 'bi-bookmark' }}"></i>
@@ -327,7 +327,7 @@
         function showMessage(message, type) {
             const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
             const alertHtml = `
-                <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                <div class="alert ${alertClass} alert-dismissible fade show position-fixed"
                      style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
                     ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -342,4 +342,4 @@
         }
     </script>
 </body>
-</html> 
+</html>

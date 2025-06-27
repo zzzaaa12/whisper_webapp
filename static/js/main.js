@@ -139,8 +139,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         const viewCount = data.view_count ? data.view_count.toLocaleString() : 'N/A';
         videoDetails.innerHTML = `
-            ${data.upload_date} &bull; 
-            觀看次數：${viewCount} &bull; 
+            ${data.upload_date} &bull;
+            觀看次數：${viewCount} &bull;
             時長：${data.duration_string}
         `;
         videoInfoCard.style.display = 'block';
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             const logEntry = document.createElement('div');
             logEntry.className = 'gpu-info';
-            logEntry.style.color = '#0000FF'; 
+            logEntry.style.color = '#0000FF';
 
             logEntry.innerHTML = gpuInfo;
             logContainer.appendChild(logEntry);
@@ -231,10 +231,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         appendLog(`收到請求，準備處理網址: ${url}`);
         
-        socket.emit('start_processing', { 
+        socket.emit('start_processing', {
             'audio_url': url,
             'access_code': accessCode
         });
     });
 
-}); 
+});

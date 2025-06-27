@@ -469,7 +469,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
         
         return f if f else "unknown"
     def segments_to_srt(segs):
-        def fmt_ts(s): 
+        def fmt_ts(s):
             h, r = divmod(s, 3600)
             m, s = divmod(r, 60)
             return f"{int(h):02}:{int(m):02}:{int(s):02},{int((s-int(s))*1000):03}"
@@ -584,7 +584,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         
                         # 使用更簡單的參數進行轉錄
                         segments, _ = model.transcribe(
-                            str(audio_file), 
+                            str(audio_file),
                             beam_size=1,  # 減少 beam_size
                             language="zh",  # 指定語言
                             vad_filter=True  # 啟用語音活動檢測
@@ -605,7 +605,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 
                                 # 重新嘗試轉錄
                                 segments, _ = model.transcribe(
-                                    str(audio_file), 
+                                    str(audio_file),
                                     beam_size=1,
                                     language="zh",
                                     vad_filter=True
@@ -784,7 +784,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 
                                 # 使用更簡單的參數進行轉錄
                                 segments, _ = model.transcribe(
-                                    str(audio_file), 
+                                    str(audio_file),
                                     beam_size=1,  # 減少 beam_size
                                     language="zh",  # 指定語言
                                     vad_filter=True  # 啟用語音活動檢測
@@ -805,7 +805,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                         
                                         # 重新嘗試轉錄
                                         segments, _ = model.transcribe(
-                                            str(audio_file), 
+                                            str(audio_file),
                                             beam_size=1,
                                             language="zh",
                                             vad_filter=True
@@ -918,7 +918,7 @@ def handle_connect():
     log_and_emit('成功連接至後端伺服器。', 'success', sid)
 
 @socketio.on('disconnect')
-def handle_disconnect(): 
+def handle_disconnect():
     sid = request.sid
     print(f"Client disconnected: {sid}")
     
@@ -1508,7 +1508,7 @@ def remove_bookmark(filename):
         original_length = len(bookmarks_data['bookmarks'])
         
         bookmarks_data['bookmarks'] = [
-            bookmark for bookmark in bookmarks_data['bookmarks'] 
+            bookmark for bookmark in bookmarks_data['bookmarks']
             if bookmark['filename'] != filename
         ]
         
@@ -1572,4 +1572,4 @@ if __name__ == '__main__':
         results_queue.put('STOP')
         worker_process.join(timeout=5)
         if worker_process.is_alive(): worker_process.terminate()
-        print("程式已完全關閉。") 
+        print("程式已完全關閉。")

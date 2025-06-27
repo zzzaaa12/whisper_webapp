@@ -136,8 +136,8 @@
                     <span class="input-group-text">
                         <i class="bi bi-search"></i>
                     </span>
-                    <input type="text" class="form-control" id="search-input" 
-                           placeholder="搜尋書籤標題或內容..." 
+                    <input type="text" class="form-control" id="search-input"
+                           placeholder="搜尋書籤標題或內容..."
                            autocomplete="off">
                     <button class="btn btn-outline-secondary" type="button" id="clear-search">
                         <i class="bi bi-x-lg"></i>
@@ -169,7 +169,7 @@
                     {% for bookmark in bookmarks %}
                     <div class="bookmark-item" data-filename="{{ bookmark.filename }}">
                         <div class="form-check bookmark-checkbox">
-                            <input class="form-check-input bookmark-select" type="checkbox" 
+                            <input class="form-check-input bookmark-select" type="checkbox"
                                    value="{{ bookmark.filename }}" id="check-{{ loop.index }}">
                         </div>
                         <div class="bookmark-content" onclick="viewSummary('{{ bookmark.filename }}')">
@@ -183,7 +183,7 @@
                             {% endif %}
                             <div class="bookmark-meta">
                                 <span>
-                                    <i class="bi bi-calendar3"></i> 
+                                    <i class="bi bi-calendar3"></i>
                                     {% set added_date = bookmark.added_date %}
                                     {% if added_date %}
                                         {{ added_date[:16].replace('T', ' ') }}
@@ -192,7 +192,7 @@
                                     {% endif %}
                                 </span>
                                 <span>
-                                    <i class="bi bi-file-earmark-text"></i> 
+                                    <i class="bi bi-file-earmark-text"></i>
                                     {% if bookmark.file_size %}
                                         {{ "%.1f"|format(bookmark.file_size / 1024) }} KB
                                     {% else %}
@@ -202,14 +202,14 @@
                             </div>
                         </div>
                         <div class="bookmark-actions">
-                            <button type="button" 
-                                    class="btn btn-sm btn-outline-danger" 
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-danger"
                                     onclick="event.stopPropagation(); removeBookmark('{{ bookmark.filename }}', this)"
                                     title="移除書籤">
                                 <i class="bi bi-bookmark-x"></i>
                             </button>
-                            <button type="button" 
-                                    class="btn btn-sm btn-outline-primary" 
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-primary"
                                     onclick="event.stopPropagation(); viewSummary('{{ bookmark.filename }}')"
                                     title="查看摘要">
                                 <i class="bi bi-eye"></i>
@@ -327,7 +327,7 @@
                 return;
             }
 
-            const promises = Array.from(selectedItems).map(filename => 
+            const promises = Array.from(selectedItems).map(filename =>
                 fetch('/api/bookmarks/remove', {
                     method: 'POST',
                     headers: {
@@ -389,8 +389,8 @@
                 const title = item.querySelector('.bookmark-title').textContent.toLowerCase();
                 const preview = item.querySelector('.bookmark-preview')?.textContent.toLowerCase() || '';
                 
-                const isVisible = filename.includes(searchTerm) || 
-                                 title.includes(searchTerm) || 
+                const isVisible = filename.includes(searchTerm) ||
+                                 title.includes(searchTerm) ||
                                  preview.includes(searchTerm);
                 
                 item.style.display = isVisible ? 'flex' : 'none';
@@ -422,7 +422,7 @@
         function showMessage(message, type) {
             const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
             const alertHtml = `
-                <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                <div class="alert ${alertClass} alert-dismissible fade show position-fixed"
                      style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
                     ${message}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -448,4 +448,4 @@
         }
     </script>
 </body>
-</html> 
+</html>
