@@ -1651,7 +1651,7 @@ def api_upload_subtitle():
             }), 401
 
         # 檔案名稱安全處理
-        safe_filename = sanitize_filename(filename)
+        safe_filename = filename
         if not safe_filename:
             return jsonify({
                 'success': False,
