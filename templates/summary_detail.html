@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title }} - 摘要內容</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <style>
         body { background-color: #f8f9fa; }
         .summary-content {
@@ -14,13 +15,103 @@
             border-radius: 0.375rem;
             padding: 1.5rem;
         }
+
+        /* 自定義按鈕樣式 */
+        .btn-primary {
+            background-color: #0d6efd; /* 藍色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #0d6efd;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* 灰色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #6c757d;
+        }
+
+        /* hover 效果 */
+        .btn-primary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        .btn-secondary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        /* 標題樣式 */
+        .page-title {
+            word-break: break-word; /* 允許長單詞換行 */
+            overflow-wrap: break-word; /* 更好的換行支援 */
+            margin-bottom: 0;
+            line-height: 1.3;
+        }
+
+        /* 標題容器 */
+        .title-container {
+            flex: 1;
+            margin-right: 1rem;
+            min-width: 0; /* 允許flex項目縮小 */
+        }
+
+        /* 按鈕容器 */
+        .button-container {
+            flex-shrink: 0; /* 防止按鈕被壓縮 */
+        }
+
+        /* 響應式布局 */
+        @media (max-width: 768px) {
+            .header-row {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1rem;
+            }
+
+            .title-container {
+                margin-right: 0;
+                width: 100%;
+            }
+
+            .button-container {
+                align-self: flex-end;
+            }
+        }
+
+        /* 超長標題處理 */
+        @media (min-width: 769px) {
+            .page-title {
+                max-width: calc(100vw - 300px); /* 預留按鈕空間 */
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            .page-title:hover {
+                white-space: normal;
+                overflow: visible;
+                background-color: #f8f9fa;
+                padding: 0.5rem;
+                border-radius: 0.25rem;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                position: relative;
+                z-index: 10;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container mt-5">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h1 class="h3">{{ title }}</h1>
-            <a href="{{ url_for('list_summaries') }}" class="btn btn-secondary">返回列表</a>
+        <div class="d-flex justify-content-between align-items-center mb-4 header-row">
+            <div class="title-container">
+                <h1 class="h3 page-title" title="{{ title }}">{{ title }}</h1>
+            </div>
+            <div class="btn-group button-container">
+                <button onclick="history.back()" class="btn btn-primary">
+                    <i class="bi bi-arrow-left"></i> 回上一頁
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-secondary">回到主頁</a>
+            </div>
         </div>
 
         <div class="card">
