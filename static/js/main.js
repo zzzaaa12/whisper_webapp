@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
             colorClass = 'text-success';
         }
 
-        logEntry.innerHTML = `[${timestamp}] ${message}`;
+        logEntry.textContent = `[${timestamp}] ${message}`;
         if(colorClass) {
             logEntry.classList.add(colorClass);
         }
@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('response', (msg) => {
-        console.log('Received response:', msg);
+        // Response received - no longer logging to console for production
     });
 
     socket.on('update_log', (data) => {
@@ -138,11 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
             videoThumbnail.src = data.thumbnail;
         }
         const viewCount = data.view_count ? data.view_count.toLocaleString() : 'N/A';
-        videoDetails.innerHTML = `
-            ${data.upload_date} &bull;
-            觀看次數：${viewCount} &bull;
-            時長：${data.duration_string}
-        `;
+        // 安全地設置文本內容，避免 XSS
+        const safeUploadDate = (data.upload_date || '').replace(/[<>]/g, '');
+        const safeDuration = (data.duration_string || '').replace(/[<>]/g, '');
+        videoDetails.textContent = `${safeUploadDate} • 觀看次數：${viewCount} • 時長：${safeDuration}`;
         videoInfoCard.style.display = 'block';
     });
 
@@ -196,13 +195,13 @@ document.addEventListener('DOMContentLoaded', () => {
         // 檢查是否已經顯示過 GPU 資訊，避免重複
         const existingGpuInfo = logContainer.querySelector('.gpu-info');
         if (existingGpuInfo) {
-            existingGpuInfo.innerHTML = gpuInfo;
+            existingGpuInfo.textContent = gpuInfo;
         } else {
             const logEntry = document.createElement('div');
             logEntry.className = 'gpu-info';
             logEntry.style.color = '#0000FF';
 
-            logEntry.innerHTML = gpuInfo;
+            logEntry.textContent = gpuInfo;
             logContainer.appendChild(logEntry);
         }
     };

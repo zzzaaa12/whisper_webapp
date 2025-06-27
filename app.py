@@ -34,6 +34,15 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 socketio = SocketIO(app, async_mode='threading')
 
+# 安全性增強：設定安全標頭
+@app.after_request
+def set_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    return response
+
 # --- Global Definitions ---
 BASE_DIR = Path(__file__).parent.resolve()
 DOWNLOAD_FOLDER = BASE_DIR / "downloads"
@@ -953,7 +962,8 @@ def handle_start_processing(data):
         return log_and_emit(f"🔒 您的 IP 已被暫時封鎖，請等待 {minutes} 分 {seconds} 秒後再試。", 'error', sid)
 
     # 驗證通行碼
-    if os.getenv("ACCESS_CODE") and data.get('access_code') != os.getenv("ACCESS_CODE"):
+    access_code = get_config("ACCESS_CODE")
+    if access_code and data.get('access_code') != access_code:
         # 記錄失敗嘗試
         record_failed_attempt(client_ip)
         remaining_attempts = get_remaining_attempts(client_ip)
@@ -1010,6 +1020,16 @@ def list_summaries():
 def show_summary(filename):
     safe_filename = sanitize_filename(filename)
     safe_path = SUMMARY_FOLDER / safe_filename
+
+    # 額外安全檢查：確保路徑不會逃出指定目錄
+    try:
+        safe_path = safe_path.resolve()
+        SUMMARY_FOLDER_RESOLVED = SUMMARY_FOLDER.resolve()
+        if not str(safe_path).startswith(str(SUMMARY_FOLDER_RESOLVED)):
+            return "檔案路徑無效", 400
+    except Exception:
+        return "檔案路徑無效", 400
+
     if not safe_path.exists(): return "檔案不存在", 404
     content = safe_path.read_text(encoding='utf-8')
     return render_template('summary_detail.html', title=safe_path.stem, content=content)
@@ -1214,11 +1234,20 @@ def api_process_youtube():
                 'message': '缺少 youtube_url 參數'
             }), 400
 
-        # 檢查 URL 格式
-        if 'youtube.com' not in youtube_url and 'youtu.be' not in youtube_url:
+        # 加強 URL 驗證
+        import re
+        youtube_pattern = r'^https?://(www\.)?(youtube\.com|youtu\.be)/.+'
+        if not re.match(youtube_pattern, youtube_url, re.IGNORECASE):
             return jsonify({
                 'status': 'error',
-                'message': '請輸入有效的 YouTube 網址'
+                'message': '請輸入有效的 YouTube 網址 (必須包含 https:// 或 http://)'
+            }), 400
+
+        # 限制 URL 長度防止過長攻擊
+        if len(youtube_url) > 500:
+            return jsonify({
+                'status': 'error',
+                'message': 'URL 長度超過限制'
             }), 400
 
         # 檢查伺服器狀態
