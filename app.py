@@ -61,7 +61,7 @@ def save_log_entry(sid, message, level='info'):
         log_file = LOG_FOLDER / f"session_{sid}.log"
         timestamp = datetime.now().strftime('%m/%d %H:%M:%S')
         log_entry = f"[{timestamp}] {message}\n"
-        
+
         with open(log_file, 'a', encoding='utf-8') as f:
             f.write(log_entry)
     except Exception as e:
@@ -109,27 +109,27 @@ def is_ip_blocked(ip):
     with attempts_lock:
         if ip not in LOGIN_ATTEMPTS:
             return False
-        
+
         attempt_data = LOGIN_ATTEMPTS[ip]
         current_time = time.time()
-        
+
         # 檢查是否在封鎖期內
         if 'blocked_until' in attempt_data and current_time < attempt_data['blocked_until']:
             return True
-        
+
         # 檢查是否超過重置時間（1小時）
         if current_time - attempt_data['first_attempt'] > 3600:
             # 重置嘗試次數
             del LOGIN_ATTEMPTS[ip]
             return False
-        
+
         return False
 
 def record_failed_attempt(ip):
     """記錄失敗的登入嘗試"""
     with attempts_lock:
         current_time = time.time()
-        
+
         if ip not in LOGIN_ATTEMPTS:
             LOGIN_ATTEMPTS[ip] = {
                 'count': 1,
@@ -137,7 +137,7 @@ def record_failed_attempt(ip):
             }
         else:
             LOGIN_ATTEMPTS[ip]['count'] += 1
-            
+
             # 如果達到最大嘗試次數，設定封鎖時間
             if LOGIN_ATTEMPTS[ip]['count'] >= MAX_ATTEMPTS:
                 LOGIN_ATTEMPTS[ip]['blocked_until'] = current_time + BLOCK_DURATION
@@ -190,31 +190,31 @@ gpu_status_lock = threading.Lock()
 def get_gpu_status():
     """獲取 GPU 狀態資訊"""
     global gpu_status, torch
-    
+
     with gpu_status_lock:
         try:
             # 延遲導入 torch
             if not torch:
                 import torch as t
                 torch = t
-            
+
             current_time = datetime.now()
-            
+
             # 基本設備資訊
             device = "cpu"
             device_name = "CPU"
             cuda_available = torch.cuda.is_available()
-            
+
             if cuda_available:
                 try:
                     # 測試 CUDA 是否真的可用
                     test_tensor = torch.zeros(1, device="cuda")
                     del test_tensor
                     device = "cuda"
-                    
+
                     # 獲取 GPU 資訊
                     device_name = torch.cuda.get_device_name(0)
-                    
+
                 except Exception as e:
                     print(f"CUDA 測試失敗: {e}")
                     device = "cpu"
@@ -223,7 +223,7 @@ def get_gpu_status():
             else:
                 memory_total = memory_reserved = memory_allocated = memory_free = 0
                 gpu_utilization = 0
-            
+
             # 更新狀態
             gpu_status.update({
                 'device': device,
@@ -231,9 +231,9 @@ def get_gpu_status():
                 'cuda_available': cuda_available,
                 'last_updated': current_time.strftime('%Y-%m-%d %H:%M:%S')
             })
-            
+
             return gpu_status.copy()
-            
+
         except Exception as e:
             print(f"獲取 GPU 狀態時發生錯誤: {e}")
             return gpu_status.copy()
@@ -250,11 +250,11 @@ def update_gpu_status():
 def log_and_emit(message, level='info', sid=None):
     """Helper function to print to console and emit to client."""
     print(f"[{level.upper()}] {message}")
-    
+
     # 儲存日誌到檔案
     if sid:
         save_log_entry(sid, message, level)
-    
+
     socketio.emit('update_log', {'log': message, 'type': level}, to=sid)
 
 def update_server_state(is_busy, task_description):
@@ -269,52 +269,52 @@ def sanitize_filename(filename, max_length=80):
     """清理字符串以成為有效的檔案名稱，處理中文和特殊字元"""
     if not filename:
         return "unknown"
-    
+
     # 保存原始檔名用於 debug
     original = filename
-    
+
     # 1. 移除 Windows 禁用字元
     filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename)
-    
+
     # 2. 移除常見特殊符號（但保留中文、數字、字母）
     filename = re.sub(r'[\[\]{}()!@#$%^&+=~`]', '_', filename)
-    
+
     # 3. 移除表情符號和其他 Unicode 符號（保留中文字元）
     # 保留：中文字元(CJK)、字母、數字、空格、連字符、底線、點
     filename = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\w\s\-_.]', '_', filename, flags=re.UNICODE)
-    
+
     # 4. 處理多重空格
     filename = re.sub(r'\s+', '_', filename)
-    
+
     # 5. 處理多重底線
     filename = re.sub(r'_+', '_', filename)
-    
+
     # 6. 移除開頭和結尾的特殊字元
     filename = filename.strip('._')
-    
+
     # 7. 長度處理（考慮中文字元）
     if len(filename.encode('utf-8')) > max_length * 2:  # 中文字元約佔 2-3 bytes
         if max_length > 20:
             # 智能截斷：保留前 60% 和後面部分
             keep_start = int(max_length * 0.6)
             keep_end = max_length - keep_start - 3
-            
+
             # 確保不會在中文字元中間截斷
             safe_start = filename[:keep_start].encode('utf-8')[:keep_start*2].decode('utf-8', errors='ignore')
             safe_end = filename[-keep_end:].encode('utf-8')[-keep_end*2:].decode('utf-8', errors='ignore') if keep_end > 0 else ""
-            
+
             filename = safe_start + "..." + safe_end
         else:
             # 簡單截斷
             filename = filename.encode('utf-8')[:max_length].decode('utf-8', errors='ignore')
-    
+
     # 8. 最終檢查
     result = filename if filename else "unknown"
-    
+
     # Debug 輸出（僅在有變化時）
     if result != original:
         print(f"[SANITIZE] '{original}' -> '{result}'")
-    
+
     return result
 
 def whisper_segments_to_srt(segments):
@@ -340,11 +340,11 @@ def queue_listener(res_queue):
         try:
             message = res_queue.get()
             if message == 'STOP': break
-            
+
             event = message.get('event')
             data = message.get('data')
             sid = message.get('sid')
-            
+
             if event == 'update_server_state':
                 update_server_state(data.get('is_busy'), data.get('current_task'))
             elif event == 'gpu_status_update':
@@ -377,7 +377,7 @@ def do_summarize(subtitle_content, summary_save_path, sid):
         log_and_emit("▶️ 開始進行 AI 摘要...", 'info', sid)
         client = openai.OpenAI(api_key=api_key)
         prompt = "請將以下字幕提到的每一個重點，做條列式的摘要整理：\n" + subtitle_content
-        
+
         max_tokens = int(get_config("OPENAI_MAX_TOKENS", 10000))
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
@@ -390,7 +390,7 @@ def do_summarize(subtitle_content, summary_save_path, sid):
         )
         summary_content = response.choices[0].message.content
         summary = summary_content.strip() if summary_content else ""
-        
+
         if summary:
             log_and_emit(f"✅ AI 摘要完成。", 'success', sid)
             with open(summary_save_path, 'w', encoding='utf-8') as f:
@@ -439,34 +439,34 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
 
     DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER = Path(download_p), Path(summary_p), Path(subtitle_p)
     client = openai.OpenAI(api_key=openai_key) if openai_key else None
-    
+
     def worker_emit(event, data, sid): result_q.put({'event': event, 'data': data, 'sid': sid})
     def worker_update_state(is_busy, task_desc): result_q.put({'event': 'update_server_state', 'data': {'is_busy': is_busy, 'current_task': task_desc}})
     def sanitize_filename(f, ml=80):
         """Worker 中的檔案名稱清理函數（與主程式保持一致）"""
         if not f: return "unknown"
-        
+
         # 使用與主程式相同的清理邏輯
         # 1. 移除 Windows 禁用字元
         f = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', f)
-        
+
         # 2. 移除常見特殊符號
         f = re.sub(r'[\[\]{}()!@#$%^&+=~`]', '_', f)
-        
+
         # 3. 移除表情符號和其他 Unicode 符號（保留中文字元）
         f = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\w\s\-_.]', '_', f, flags=re.UNICODE)
-        
+
         # 4. 處理多重空格和底線
         f = re.sub(r'\s+', '_', f)
         f = re.sub(r'_+', '_', f)
-        
+
         # 5. 移除開頭和結尾的特殊字元
         f = f.strip('._')
-        
+
         # 6. 長度限制（簡化版）
         if len(f.encode('utf-8')) > ml * 2:
             f = f.encode('utf-8')[:ml].decode('utf-8', errors='ignore')
-        
+
         return f if f else "unknown"
     def segments_to_srt(segs):
         def fmt_ts(s):
@@ -480,7 +480,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
         # 嘗試使用 CUDA，如果失敗則降級到 CPU
         device = "cpu"
         compute = "int8"
-        
+
         # 檢查 CUDA 是否真的可用
         if torch.cuda.is_available():
             try:
@@ -494,11 +494,11 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                 print(f"[WORKER] CUDA test failed: {cuda_error}, falling back to CPU")
                 device = "cpu"
                 compute = "int8"
-        
+
         print(f"[WORKER] Loading model with device={device}, compute={compute}")
         model = faster_whisper.WhisperModel("asadfgglie/faster-whisper-large-v3-zh-TW", device=device, compute_type=compute)
         print("[WORKER] Model loaded successfully.")
-        
+
         # 更新模型載入狀態並發送給主程序
         worker_gpu_status = {
             'device': device,
@@ -506,10 +506,10 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
             'cuda_available': device == 'cuda',
             'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         }
-        
+
         # 廣播 GPU 狀態更新
         result_q.put({'event': 'gpu_status_update', 'data': worker_gpu_status})
-        
+
     except Exception as e:
         print(f"[WORKER] FATAL: Could not load model: {e}")
         print(f"[WORKER] Error details: {traceback.format_exc()}")
@@ -520,13 +520,13 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
         try:
             task = task_q.get(timeout=1)
             if not task: continue
-            
+
             print(f"[WORKER] DEBUG: 收到任務: {task}")
-            
+
             # 檢查任務類型
             task_type = task.get('task_type', 'url')
             print(f"[WORKER] DEBUG: 任務類型: {task_type}")
-            
+
             if task_type == 'audio_file':
                 print("[WORKER] DEBUG: 處理 audio_file 任務")
                 # 處理音訊檔案任務
@@ -534,54 +534,54 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                 audio_file = task.get('audio_file')
                 subtitle_path = task.get('subtitle_path')
                 summary_path = task.get('summary_path')
-                
+
                 print(f"[WORKER] DEBUG: sid={sid}, audio_file={audio_file}, subtitle_path={subtitle_path}, summary_path={summary_path}")
-                
+
                 if not (sid and audio_file and subtitle_path and summary_path):
                     print("[WORKER] DEBUG: 任務資料不完整，跳過")
                     continue
-                
+
                 # 設定目前任務
                 with task_lock:
                     current_task_sid = sid
-                
+
                 worker_emit('update_log', {'log': "工作程序已接收音訊檔案任務...", 'type': 'info'}, sid)
                 worker_update_state(True, f"處理音訊檔案: {Path(audio_file).name[:40]}...")
-                
+
                 try:
                     # 檢查是否被取消
                     with task_lock:
                         if current_task_sid != sid:
                             worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                             continue
-                    
+
                     # 檢查音檔是否存在
                     if not Path(audio_file).exists():
                         worker_emit('update_log', {'log': f"❌ 音檔不存在: {audio_file}", 'type': 'error'}, sid)
                         continue
-                    
+
                     # 檢查音檔大小
                     file_size = Path(audio_file).stat().st_size
                     worker_emit('update_log', {'log': f"📊 音檔大小: {file_size / (1024*1024):.1f} MB", 'type': 'info'}, sid)
-                    
+
                     # 檢查是否被取消
                     with task_lock:
                         if current_task_sid != sid:
                             worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                             continue
-                    
+
                     worker_emit('update_log', {'log': "🎤 語音辨識中...", 'type': 'info'}, sid)
-                    
+
                     # 增加進度回報
                     worker_emit('update_log', {'log': "🔄 載入 Whisper 模型...", 'type': 'info'}, sid)
                     if not model:
                         worker_emit('update_log', {'log': "❌ Whisper 模型未載入", 'type': 'error'}, sid)
                         continue
-                    
+
                     worker_emit('update_log', {'log': "🎯 開始轉錄音檔...", 'type': 'info'}, sid)
                     try:
                         worker_emit('update_log', {'log': "🔄 正在初始化轉錄...", 'type': 'info'}, sid)
-                        
+
                         # 使用更簡單的參數進行轉錄
                         segments, _ = model.transcribe(
                             str(audio_file),
@@ -589,9 +589,9 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                             language="zh",  # 指定語言
                             vad_filter=True  # 啟用語音活動檢測
                         )
-                        
+
                         worker_emit('update_log', {'log': "🔄 轉錄進行中，正在處理片段...", 'type': 'info'}, sid)
-                        
+
                         # 將生成器轉換為列表以便計算長度
                         segments_list = list(segments)
                         worker_emit('update_log', {'log': f"✅ 轉錄完成，共 {len(segments_list)} 個片段", 'type': 'success'}, sid)
@@ -602,7 +602,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 # 重新載入 CPU 模型
                                 worker_emit('update_log', {'log': "🔄 重新載入 CPU 模型...", 'type': 'info'}, sid)
                                 model = faster_whisper.WhisperModel("asadfgglie/faster-whisper-large-v3-zh-TW", device="cpu", compute_type="int8")
-                                
+
                                 # 重新嘗試轉錄
                                 segments, _ = model.transcribe(
                                     str(audio_file),
@@ -610,7 +610,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                     language="zh",
                                     vad_filter=True
                                 )
-                                
+
                                 worker_emit('update_log', {'log': "🔄 CPU 轉錄進行中...", 'type': 'info'}, sid)
                                 segments_list = list(segments)
                                 worker_emit('update_log', {'log': f"✅ CPU 轉錄完成，共 {len(segments_list)} 個片段", 'type': 'success'}, sid)
@@ -625,24 +625,24 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         worker_emit('update_log', {'log': f"❌ 轉錄失敗: {e}", 'type': 'error'}, sid)
                         worker_emit('update_log', {'log': f"🔍 錯誤詳情: {traceback.format_exc()}", 'type': 'error'}, sid)
                         continue
-                    
+
                     worker_emit('update_log', {'log': "📝 生成字幕檔案...", 'type': 'info'}, sid)
                     srt_content = segments_to_srt(segments_list)
                     Path(subtitle_path).write_text(srt_content, encoding='utf-8')
                     worker_emit('update_log', {'log': "📝 字幕已儲存", 'type': 'info'}, sid)
-                    
+
                     if client and srt_content:
                         # 檢查是否被取消
                         with task_lock:
                             if current_task_sid != sid:
                                 worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                                 continue
-                        
+
                         worker_emit('update_log', {'log': "▶️ AI 摘要中...", 'type': 'info'}, sid)
                         prompt = "請將以下字幕內容的每一個細節都做條列式的摘要整理：\n" + srt_content
                         resp = client.chat.completions.create(model="gpt-4.1-mini", messages=[{"role": "user", "content": prompt}])
                         summary = resp.choices[0].message.content if resp.choices else "AI未回傳摘要"
-                        
+
                         # 在摘要前面加上檔案資訊
                         file_info_header = (
                             f"檔案：{Path(audio_file).name}\n"
@@ -650,7 +650,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                             f"{'='*50}\n\n"
                         )
                         full_summary = file_info_header + summary
-                        
+
                         Path(summary_path).write_text(full_summary, encoding='utf-8')
                         worker_emit('update_log', {'log': "✅ AI 摘要完成", 'type': 'success'}, sid)
                         worker_emit('update_log', {'log': f"---\n{full_summary}", 'type': 'info'}, sid)
@@ -663,7 +663,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         )
                         send_telegram_notification(tg_message)
                         # ---------------------------------------------
-                    
+
                     # 刪除音檔以節省空間
                     if Path(audio_file).exists():
                         try:
@@ -672,7 +672,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                             worker_emit('update_log', {'log': f"🗑️ 已刪除音檔 ({file_size_mb:.1f} MB) 以節省空間", 'type': 'info'}, sid)
                         except Exception as e:
                             worker_emit('update_log', {'log': f"⚠️ 刪除音檔時發生錯誤: {e}", 'type': 'warning'}, sid)
-                
+
                 except Exception as e:
                     worker_emit('update_log', {'log': f"❌ 處理音訊檔案時發生錯誤: {e}", 'type': 'error'}, sid)
                     traceback.print_exc()
@@ -681,10 +681,10 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     with task_lock:
                         if current_task_sid == sid:
                             current_task_sid = None
-                    
+
                     worker_update_state(False, "空閒")
                     worker_emit('processing_finished', {}, sid)
-                
+
             else:
                 # 處理 URL 任務（原有邏輯）
                 sid, url = task.get('sid'), task.get('audio_url')
@@ -709,7 +709,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     if url_type == 'youtube':
                         # 使用現有的 YouTube 處理邏輯
                         with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl: info = ydl.extract_info(url, download=False)
-                        
+
                         # --- Send Telegram Notification ---
                         tg_message = (
                             f"*Whisper WebApp 開始處理*\n\n"
@@ -724,7 +724,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         upload_date = info.get('upload_date')
                         if upload_date:
                             upload_date = f"{upload_date[:4]}/{upload_date[4:6]}/{upload_date[6:]}"
-                        
+
                         video_info = {
                             'title': info.get('title', '未知標題'),
                             'uploader': info.get('uploader', '未知上傳者'),
@@ -753,35 +753,35 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 if current_task_sid != sid:
                                     worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                                     continue
-                            
+
                             worker_emit('update_log', {'log': "📥 下載音檔中...", 'type': 'info'}, sid)
                             ydl_opts = {'format': 'bestaudio/best', 'outtmpl': str(DOWNLOAD_FOLDER / f"{base_fn}.%(ext)s"), 'postprocessors': [{'key': 'FFmpegExtractAudio', 'preferredcodec': 'mp3'}], 'quiet':True}
                             with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
                             audio_file = DOWNLOAD_FOLDER / f"{base_fn}.mp3"
                             if not audio_file.exists(): raise FileNotFoundError("下載的音檔不存在")
-                            
+
                             # 檢查音檔大小
                             file_size = audio_file.stat().st_size
                             worker_emit('update_log', {'log': f"📊 音檔大小: {file_size / (1024*1024):.1f} MB", 'type': 'info'}, sid)
-                            
+
                             # 檢查是否被取消
                             with task_lock:
                                 if current_task_sid != sid:
                                     worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                                     continue
-                            
+
                             worker_emit('update_log', {'log': "🎤 語音辨識中...", 'type': 'info'}, sid)
-                            
+
                             # 增加進度回報
                             worker_emit('update_log', {'log': "🔄 載入 Whisper 模型...", 'type': 'info'}, sid)
                             if not model:
                                 worker_emit('update_log', {'log': "❌ Whisper 模型未載入", 'type': 'error'}, sid)
                                 continue
-                            
+
                             worker_emit('update_log', {'log': "🎯 開始轉錄音檔...", 'type': 'info'}, sid)
                             try:
                                 worker_emit('update_log', {'log': "🔄 正在初始化轉錄...", 'type': 'info'}, sid)
-                                
+
                                 # 使用更簡單的參數進行轉錄
                                 segments, _ = model.transcribe(
                                     str(audio_file),
@@ -789,9 +789,9 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                     language="zh",  # 指定語言
                                     vad_filter=True  # 啟用語音活動檢測
                                 )
-                                
+
                                 worker_emit('update_log', {'log': "🔄 轉錄進行中，正在處理片段...", 'type': 'info'}, sid)
-                                
+
                                 # 將生成器轉換為列表以便計算長度
                                 segments_list = list(segments)
                                 worker_emit('update_log', {'log': f"✅ 轉錄完成，共 {len(segments_list)} 個片段", 'type': 'success'}, sid)
@@ -802,7 +802,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                         # 重新載入 CPU 模型
                                         worker_emit('update_log', {'log': "🔄 重新載入 CPU 模型...", 'type': 'info'}, sid)
                                         model = faster_whisper.WhisperModel("asadfgglie/faster-whisper-large-v3-zh-TW", device="cpu", compute_type="int8")
-                                        
+
                                         # 重新嘗試轉錄
                                         segments, _ = model.transcribe(
                                             str(audio_file),
@@ -810,7 +810,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                             language="zh",
                                             vad_filter=True
                                         )
-                                        
+
                                         worker_emit('update_log', {'log': "🔄 CPU 轉錄進行中...", 'type': 'info'}, sid)
                                         segments_list = list(segments)
                                         worker_emit('update_log', {'log': f"✅ CPU 轉錄完成，共 {len(segments_list)} 個片段", 'type': 'success'}, sid)
@@ -825,24 +825,24 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 worker_emit('update_log', {'log': f"❌ 轉錄失敗: {e}", 'type': 'error'}, sid)
                                 worker_emit('update_log', {'log': f"🔍 錯誤詳情: {traceback.format_exc()}", 'type': 'error'}, sid)
                                 continue
-                            
+
                             worker_emit('update_log', {'log': "📝 生成字幕檔案...", 'type': 'info'}, sid)
                             srt_content = segments_to_srt(segments_list)
                             subtitle_path.write_text(srt_content, encoding='utf-8')
                             worker_emit('update_log', {'log': "📝 字幕已儲存", 'type': 'info'}, sid)
-                        
+
                         if client and srt_content:
                             # 檢查是否被取消
                             with task_lock:
                                 if current_task_sid != sid:
                                     worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                                     continue
-                            
+
                             worker_emit('update_log', {'log': "▶️ AI 摘要中...", 'type': 'info'}, sid)
                             prompt = "請將以下字幕內容的每一個細節都做條列式的摘要整理：\n" + srt_content
                             resp = client.chat.completions.create(model="gpt-4.1-mini", messages=[{"role": "user", "content": prompt}])
                             summary = resp.choices[0].message.content if resp.choices else "AI未回傳摘要"
-                            
+
                             # 在摘要前面加上影片資訊
                             video_info_header = (
                                 f"頻道：{info.get('uploader', '未知頻道')}\n"
@@ -851,7 +851,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 f"{'='*50}\n\n"
                             )
                             full_summary = video_info_header + summary
-                            
+
                             summary_path.write_text(full_summary, encoding='utf-8')
                             worker_emit('update_log', {'log': "✅ AI 摘要完成", 'type': 'success'}, sid)
                             worker_emit('update_log', {'log': f"---\n{full_summary}", 'type': 'info'}, sid)
@@ -865,7 +865,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                             )
                             send_telegram_notification(tg_message)
                             # ---------------------------------------------
-                        
+
                         # 刪除音檔以節省空間
                         if 'audio_file' in locals() and audio_file.exists():
                             try:
@@ -877,7 +877,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     else:
                         # 檢測 URL 類型並處理其他平台
                         import re
-                        
+
                         worker_emit('update_log', {'log': f"❌ 不支援的 URL 類型，目前只支援 YouTube", 'type': 'error'}, sid)
                 except Exception as e:
                     worker_emit('update_log', {'log': f"❌ 處理時發生錯誤: {e}", 'type': 'error'}, sid)
@@ -887,7 +887,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     with task_lock:
                         if current_task_sid == sid:
                             current_task_sid = None
-                    
+
                     worker_update_state(False, "空閒")
                     worker_emit('processing_finished', {}, sid)
         except QueueEmpty: continue
@@ -900,7 +900,7 @@ def index(): return render_template('index.html')
 @socketio.on('connect')
 def handle_connect():
     sid = request.sid; print(f"Client connected: {sid}")
-    
+
     # 載入之前的日誌記錄
     previous_logs = get_session_logs(sid)
     if previous_logs.strip():
@@ -908,25 +908,25 @@ def handle_connect():
         for line in previous_logs.strip().split('\n'):
             if line.strip():
                 socketio.emit('update_log', {'log': line.strip(), 'type': 'info'}, to=sid)
-    
+
     with state_lock: emit('server_status_update', SERVER_STATE)
-    
+
     # 發送 GPU 狀態
     gpu_status = get_gpu_status()
     socketio.emit('gpu_status_update', gpu_status, to=sid)
-    
+
     log_and_emit('成功連接至後端伺服器。', 'success', sid)
 
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
     print(f"Client disconnected: {sid}")
-    
+
     # 延遲清理日誌檔案（給使用者時間重新連線）
     def delayed_cleanup():
         time.sleep(30)  # 等待 30 秒
         clear_session_logs(sid)
-    
+
     # 在背景執行清理
     threading.Thread(target=delayed_cleanup, daemon=True).start()
 
@@ -941,47 +941,47 @@ def handle_clear_logs():
 def handle_start_processing(data):
     sid = request.sid
     client_ip = get_client_ip()
-    
+
     if not (isinstance(data, dict) and data.get('audio_url') and data.get('access_code') is not None):
         return log_and_emit("🔴 錯誤：請求格式不正確。", 'error', sid)
-    
+
     # 檢查 IP 是否被封鎖
     if is_ip_blocked(client_ip):
         remaining_time = get_block_remaining_time(client_ip)
         minutes = remaining_time // 60
         seconds = remaining_time % 60
         return log_and_emit(f"🔒 您的 IP 已被暫時封鎖，請等待 {minutes} 分 {seconds} 秒後再試。", 'error', sid)
-    
+
     # 驗證通行碼
     if os.getenv("ACCESS_CODE") and data.get('access_code') != os.getenv("ACCESS_CODE"):
         # 記錄失敗嘗試
         record_failed_attempt(client_ip)
         remaining_attempts = get_remaining_attempts(client_ip)
-        
+
         if remaining_attempts > 0:
             log_and_emit(f"🔴 錯誤：通行碼不正確。剩餘嘗試次數：{remaining_attempts}", 'error', sid)
         else:
             # 已達到最大嘗試次數，IP 被封鎖
             log_and_emit(f"🔒 錯誤：通行碼不正確。您的 IP 已被封鎖 {BLOCK_DURATION//60} 分鐘。", 'error', sid)
-        
+
         # 發送通行碼錯誤事件，讓前端重新啟用輸入框
         socketio.emit('access_code_error', {'message': '通行碼錯誤'}, to=sid)
         return
-    
+
     # 通行碼正確，記錄成功並重置計數器
     record_successful_attempt(client_ip)
 
     with state_lock:
         if SERVER_STATE['is_busy']: log_and_emit("⏳ 伺服器忙碌中，您的任務已加入佇列。", 'warning', sid)
         else: log_and_emit('✅ 請求已接收，準備處理...', 'success', sid)
-    
+
     task_queue.put({'sid': sid, 'audio_url': data.get('audio_url')})
 
 @socketio.on('cancel_processing')
 def handle_cancel_processing():
     sid = request.sid
     global current_task_sid
-    
+
     with task_lock:
         if current_task_sid == sid:
             current_task_sid = None
@@ -995,7 +995,7 @@ def handle_cancel_processing():
 def list_summaries():
     if not SUMMARY_FOLDER.exists(): return "摘要資料夾不存在。", 500
     files = sorted(SUMMARY_FOLDER.glob('*.txt'), key=os.path.getmtime, reverse=True)
-    
+
     # 為每個摘要加入書籤狀態資訊
     summaries_with_bookmark_status = []
     for f in files:
@@ -1003,7 +1003,7 @@ def list_summaries():
             'filename': f.name,
             'is_bookmarked': is_bookmarked(f.name)
         })
-    
+
     return render_template('summaries.html', summaries=summaries_with_bookmark_status)
 
 @app.route('/summary/<filename>')
@@ -1027,23 +1027,23 @@ def api_move_to_trash():
         data = request.get_json()
         if not data or 'files' not in data:
             return jsonify({'success': False, 'message': '缺少檔案列表'}), 400
-        
+
         results = []
         for file_info in data['files']:
             file_path = file_info.get('path')
             file_type = file_info.get('type', 'summary')
-            
+
             if not file_path:
                 results.append({'success': False, 'message': '缺少檔案路徑'})
                 continue
-            
+
             success, message = move_file_to_trash(file_path, file_type)
             results.append({
                 'success': success,
                 'message': message,
                 'file_path': file_path
             })
-        
+
         return jsonify({
             'success': True,
             'results': results
@@ -1058,10 +1058,10 @@ def api_restore_from_trash():
         data = request.get_json()
         if not data or 'trash_id' not in data:
             return jsonify({'success': False, 'message': '缺少回收桶項目ID'}), 400
-        
+
         trash_id = data['trash_id']
         success, message = restore_file_from_trash(trash_id)
-        
+
         return jsonify({
             'success': success,
             'message': message
@@ -1076,10 +1076,10 @@ def api_delete_from_trash():
         data = request.get_json()
         if not data or 'trash_id' not in data:
             return jsonify({'success': False, 'message': '缺少回收桶項目ID'}), 400
-        
+
         trash_id = data['trash_id']
         success, message = delete_file_from_trash(trash_id)
-        
+
         return jsonify({
             'success': success,
             'message': message
@@ -1116,13 +1116,13 @@ def api_add_bookmark():
         data = request.get_json()
         filename = data.get('filename')
         title = data.get('title')
-        
+
         if not filename:
             return jsonify({'success': False, 'message': '檔案名稱不能為空'})
-        
+
         success, message = add_bookmark(filename, title)
         return jsonify({'success': success, 'message': message})
-        
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -1132,13 +1132,13 @@ def api_remove_bookmark():
     try:
         data = request.get_json()
         filename = data.get('filename')
-        
+
         if not filename:
             return jsonify({'success': False, 'message': '檔案名稱不能為空'})
-        
+
         success, message = remove_bookmark(filename)
         return jsonify({'success': success, 'message': message})
-        
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
@@ -1173,16 +1173,16 @@ def admin_login_attempts():
     admin_code = os.getenv("ADMIN_CODE")
     if not admin_code or request.args.get('code') != admin_code:
         return "未授權訪問", 401
-    
+
     with attempts_lock:
         current_time = time.time()
         attempts_info = []
-        
+
         for ip, data in LOGIN_ATTEMPTS.items():
             remaining_attempts = MAX_ATTEMPTS - data['count']
             is_blocked = 'blocked_until' in data and current_time < data['blocked_until']
             block_remaining = get_block_remaining_time(ip) if is_blocked else 0
-            
+
             attempts_info.append({
                 'ip': ip,
                 'attempts': data['count'],
@@ -1191,7 +1191,7 @@ def admin_login_attempts():
                 'is_blocked': is_blocked,
                 'block_remaining': f"{block_remaining//60}分{block_remaining%60}秒" if block_remaining > 0 else "無"
             })
-    
+
     return render_template('admin_login_attempts.html', attempts=attempts_info, max_attempts=MAX_ATTEMPTS, block_duration=BLOCK_DURATION//60)
 
 @app.route('/api/process', methods=['POST'])
@@ -1204,54 +1204,54 @@ def api_process_youtube():
                 'status': 'error',
                 'message': '請求格式錯誤，需要 JSON 格式'
             }), 400
-        
+
         data = request.get_json()
         youtube_url = data.get('youtube_url', '').strip()
-        
+
         if not youtube_url:
             return jsonify({
                 'status': 'error',
                 'message': '缺少 youtube_url 參數'
             }), 400
-        
+
         # 檢查 URL 格式
         if 'youtube.com' not in youtube_url and 'youtu.be' not in youtube_url:
             return jsonify({
                 'status': 'error',
                 'message': '請輸入有效的 YouTube 網址'
             }), 400
-        
+
         # 檢查伺服器狀態
         with state_lock:
             is_busy = SERVER_STATE['is_busy']
             current_task = SERVER_STATE['current_task']
-        
+
         if is_busy:
             return jsonify({
                 'status': 'busy',
                 'message': f'伺服器忙碌中：{current_task}',
                 'current_task': current_task
             }), 200
-        
+
         # 伺服器空閒，開始處理
         # 生成唯一的任務 ID
         import uuid
         task_id = str(uuid.uuid4())
-        
+
         # 將任務加入佇列（使用特殊的 API session ID）
         api_sid = f"api_{task_id}"
         task_queue.put({
             'sid': api_sid,
             'audio_url': youtube_url
         })
-        
+
         return jsonify({
             'status': 'processing',
             'message': '任務已加入佇列，開始處理',
             'task_id': task_id,
             'youtube_url': youtube_url
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'status': 'error',
@@ -1269,7 +1269,7 @@ def handle_request_gpu_status():
 def detect_url_type(url):
     """檢測 URL 類型並返回相應的處理器"""
     url_lower = url.lower()
-    
+
     if 'youtube.com' in url_lower or 'youtu.be' in url_lower:
         return 'youtube'
     else:
@@ -1324,21 +1324,21 @@ def move_file_to_trash(file_path, file_type):
         file_path = Path(file_path)
         if not file_path.exists():
             return False, "檔案不存在"
-        
+
         # 建立回收桶子資料夾
         trash_subfolder = TRASH_FOLDER / file_type
         trash_subfolder.mkdir(parents=True, exist_ok=True)
-        
+
         # 生成唯一檔名
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         unique_id = str(uuid.uuid4())[:8]
         safe_name = sanitize_filename(file_path.name)
         new_filename = f"{timestamp}_{unique_id}_{safe_name}"
         trash_path = trash_subfolder / new_filename
-        
+
         # 移動檔案
         shutil.move(str(file_path), str(trash_path))
-        
+
         # 記錄到回收桶
         metadata = load_trash_metadata()
         trash_record = {
@@ -1352,7 +1352,7 @@ def move_file_to_trash(file_path, file_type):
         }
         metadata.append(trash_record)
         save_trash_metadata(metadata)
-        
+
         return True, "檔案已移動到回收桶"
     except Exception as e:
         return False, f"移動檔案失敗: {e}"
@@ -1363,20 +1363,20 @@ def restore_file_from_trash(trash_id):
         metadata = load_trash_metadata()
         record = None
         record_index = None
-        
+
         for i, item in enumerate(metadata):
             if item['id'] == trash_id:
                 record = item
                 record_index = i
                 break
-        
+
         if not record or record_index is None:
             return False, "找不到回收桶記錄"
-        
+
         trash_path = Path(record['trash_path'])
         if not trash_path.exists():
             return False, "回收桶中的檔案不存在"
-        
+
         # 決定還原位置
         if record['file_type'] == 'summary':
             restore_path = SUMMARY_FOLDER / sanitize_filename(record['original_name'])
@@ -1384,21 +1384,21 @@ def restore_file_from_trash(trash_id):
             restore_path = SUBTITLE_FOLDER / sanitize_filename(record['original_name'])
         else:
             return False, "不支援的檔案類型"
-        
+
         # 檢查目標位置是否已有檔案
         if restore_path.exists():
             # 如果檔案已存在，添加時間戳
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
             name_parts = restore_path.stem, restore_path.suffix
             restore_path = restore_path.parent / f"{name_parts[0]}_{timestamp}{name_parts[1]}"
-        
+
         # 移動檔案回原位置
         shutil.move(str(trash_path), str(restore_path))
-        
+
         # 從回收桶記錄中移除
         metadata.pop(record_index)
         save_trash_metadata(metadata)
-        
+
         return True, "檔案已還原"
     except Exception as e:
         return False, f"還原檔案失敗: {e}"
@@ -1409,24 +1409,24 @@ def delete_file_from_trash(trash_id):
         metadata = load_trash_metadata()
         record = None
         record_index = None
-        
+
         for i, item in enumerate(metadata):
             if item['id'] == trash_id:
                 record = item
                 record_index = i
                 break
-        
+
         if not record or record_index is None:
             return False, "找不到回收桶記錄"
-        
+
         trash_path = Path(record['trash_path'])
         if trash_path.exists():
             trash_path.unlink()  # 刪除檔案
-        
+
         # 從回收桶記錄中移除
         metadata.pop(record_index)
         save_trash_metadata(metadata)
-        
+
         return True, "檔案已永久刪除"
     except Exception as e:
         return False, f"刪除檔案失敗: {e}"
@@ -1506,18 +1506,18 @@ def remove_bookmark(filename):
     try:
         bookmarks_data = load_bookmarks()
         original_length = len(bookmarks_data['bookmarks'])
-        
+
         bookmarks_data['bookmarks'] = [
             bookmark for bookmark in bookmarks_data['bookmarks']
             if bookmark['filename'] != filename
         ]
-        
+
         if len(bookmarks_data['bookmarks']) < original_length:
             save_bookmarks(bookmarks_data)
             return True, "書籤已移除"
         else:
             return False, "書籤不存在"
-            
+
     except Exception as e:
         print(f"Error removing bookmark: {e}")
         return False, f"移除書籤失敗: {e}"
@@ -1543,15 +1543,53 @@ def get_bookmarks():
         print(f"Error getting bookmarks: {e}")
         return []
 
+@app.route('/api/system/config-status')
+def api_get_config_status():
+    """API: 獲取系統配置狀態"""
+    try:
+        access_code = get_config("ACCESS_CODE")
+        openai_key = get_config("OPENAI_API_KEY")
+
+        return jsonify({
+            'success': True,
+            'has_access_code': bool(access_code),
+            'has_openai_key': bool(openai_key)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'獲取配置狀態失敗: {str(e)}'
+        }), 500
+
 # --- Main Execution ---
 if __name__ == '__main__':
+    # 檢查系統配置並顯示警告
+    access_code = get_config("ACCESS_CODE")
+    openai_key = get_config("OPENAI_API_KEY")
+
+    print("🔍 檢查系統配置...")
+
+    if not access_code:
+        print("⚠️  警告：未設定 ACCESS_CODE 環境變數")
+        print("   系統將允許無通行碼存取，建議設定 ACCESS_CODE 以提升安全性")
+    else:
+        print("✅ ACCESS_CODE 已設定")
+
+    if not openai_key:
+        print("⚠️  警告：未設定 OPENAI_API_KEY")
+        print("   AI 摘要功能將無法使用，請設定 OPENAI_API_KEY 啟用此功能")
+    else:
+        print("✅ OPENAI_API_KEY 已設定")
+
+    print("🚀 繼續啟動系統...")
+
     for folder in [DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER, LOG_FOLDER, TRASH_FOLDER]:
         folder.mkdir(exist_ok=True)
-    
+
     # 建立回收桶子資料夾
     (TRASH_FOLDER / "summaries").mkdir(exist_ok=True)
     (TRASH_FOLDER / "subtitles").mkdir(exist_ok=True)
-    
+
     socketio.start_background_task(target=queue_listener, res_queue=results_queue)
 
     worker_args = (
@@ -1561,9 +1599,9 @@ if __name__ == '__main__':
     )
     worker_process = Process(target=background_worker, args=worker_args)
     worker_process.start()
-    
+
     print("主伺服器啟動，請在瀏覽器中開啟 http://127.0.0.1:5000")
-    
+
     try:
         socketio.run(app, host='0.0.0.0', port=5000, use_reloader=False)
     finally:
