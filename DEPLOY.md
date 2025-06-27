@@ -9,8 +9,8 @@
 **Windows 用戶：**
 ```bash
 # 1. 下載專案
-git clone https://github.com/your-repo/whisper-webapp.git
-cd whisper-webapp
+git clone https://github.com/zzzaaa12/whisper_webapp.git
+cd whisper_webapp
 
 # 2. 雙擊執行
 deploy.bat
@@ -19,8 +19,8 @@ deploy.bat
 **Linux/Mac 用戶：**
 ```bash
 # 1. 下載專案
-git clone https://github.com/your-repo/whisper-webapp.git
-cd whisper-webapp
+git clone https://github.com/zzzaaa12/whisper_webapp.git
+cd whisper_webapp
 
 # 2. 執行部署腳本
 chmod +x deploy.sh
@@ -175,9 +175,9 @@ sudo systemctl restart docker
 
 ## 📞 支援
 
-- 🐛 **問題回報**: [GitHub Issues](https://github.com/your-repo/issues)
-- 💬 **討論**: [GitHub Discussions](https://github.com/your-repo/discussions)
-- 📧 **聯絡**: your-email@example.com
+- 🐛 **問題回報**: [GitHub Issues](https://github.com/zzzaaa12/whisper_webapp/issues)
+- 💬 **討論**: [GitHub Discussions](https://github.com/zzzaaa12/whisper_webapp/discussions)
+- 📧 **聯絡**: zzzaaa12@gmail.com
 
 ---
 
