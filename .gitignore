@@ -1,3 +1,7 @@
-# ... existing code ...
 config.json
-# ... existing code ... 
+bookmarks.json
+summaries
+subtitles
+logs
+trash
+__pycache__
