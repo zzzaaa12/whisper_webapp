@@ -110,6 +110,41 @@
                 border-bottom: none;
             }
         }
+
+        /* 自定義按鈕樣式 - 統一三個導航按鈕 */
+        .btn-outline-primary {
+            background-color: #0d6efd; /* 藍色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #0d6efd;
+        }
+
+        .btn-outline-warning {
+            background-color: #ffc107; /* 黃色背景 */
+            color: #000000 !important; /* 黑色文字 */
+            border-color: #ffc107;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* 灰色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #6c757d;
+        }
+
+        /* hover 效果 */
+        .btn-outline-primary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        .btn-outline-warning:hover {
+            opacity: 0.8;
+            color: #000000 !important;
+        }
+
+        .btn-secondary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
     </style>
 </head>
 <body>
@@ -119,11 +154,11 @@
                 <i class="bi bi-bookmark-fill bookmark-icon"></i> 我的書籤
             </h1>
             <div class="btn-group">
-                <a href="/summary" class="btn btn-outline-primary">
-                    <i class="bi bi-file-text"></i> 所有摘要
-                </a>
                 <a href="/trash" class="btn btn-outline-warning">
                     <i class="bi bi-trash"></i> 回收桶
+                </a>
+                <a href="/summary" class="btn btn-outline-primary">
+                    <i class="bi bi-file-text"></i> 所有摘要
                 </a>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
             </div>

@@ -53,6 +53,41 @@
             margin-bottom: 1rem;
             opacity: 0.5;
         }
+
+        /* 自定義按鈕樣式 - 反轉顏色 */
+        .btn-outline-secondary.nav-bookmark-solid {
+            background-color: #8B4513; /* 咖啡色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #8B4513;
+        }
+
+        .btn-warning {
+            background-color: #ffc107; /* 原本的黃色背景保持 */
+            color: #000000 !important; /* 改成黑色文字 */
+            border-color: #ffc107;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* 原本的灰色背景保持 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #6c757d;
+        }
+
+        /* hover 效果 */
+        .btn-outline-secondary.nav-bookmark-solid:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        .btn-warning:hover {
+            opacity: 0.8;
+            color: #000000 !important;
+        }
+
+        .btn-secondary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
     </style>
 </head>
 <body>
@@ -60,11 +95,11 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3">所有摘要紀錄</h1>
             <div class="btn-group">
-                <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark-solid">
-                    <i class="bi bi-bookmark-fill"></i> 書籤
-                </a>
                 <a href="/trash" class="btn btn-warning">
                     <i class="bi bi-trash"></i> 回收桶
+                </a>
+                <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark-solid">
+                    <i class="bi bi-bookmark-fill"></i> 書籤
                 </a>
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
             </div>

@@ -39,6 +39,41 @@
             margin-bottom: 1rem;
             opacity: 0.5;
         }
+
+        /* 自定義按鈕樣式 - 統一三個導航按鈕 */
+        .btn-outline-primary {
+            background-color: #0d6efd; /* 藍色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #0d6efd;
+        }
+
+        .btn-outline-secondary.nav-bookmark {
+            background-color: #8B4513; /* 咖啡色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #8B4513;
+        }
+
+        .btn-secondary {
+            background-color: #6c757d; /* 灰色背景 */
+            color: #ffffff !important; /* 白色文字 */
+            border-color: #6c757d;
+        }
+
+        /* hover 效果 */
+        .btn-outline-primary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        .btn-outline-secondary.nav-bookmark:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
+
+        .btn-secondary:hover {
+            opacity: 0.8;
+            color: #ffffff !important;
+        }
     </style>
 </head>
 <body>
@@ -54,11 +89,12 @@
                     </div>
                     <div class="btn-group">
                         <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark">
-                            <i class="bi bi-bookmark-fill bookmark-icon"></i> 書籤
+                            <i class="bi bi-bookmark-fill"></i> 書籤
                         </a>
-                        <a href="/summary" class="btn btn-outline-secondary">
-                            <i class="bi bi-arrow-left"></i> 返回摘要列表
+                        <a href="/summary" class="btn btn-outline-primary">
+                            <i class="bi bi-file-text"></i> 摘要列表
                         </a>
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
                     </div>
                 </div>
 
