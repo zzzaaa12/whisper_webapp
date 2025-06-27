@@ -1018,19 +1018,32 @@ def list_summaries():
 
 @app.route('/summary/<filename>')
 def show_summary(filename):
-    safe_filename = sanitize_filename(filename)
-    safe_path = SUMMARY_FOLDER / safe_filename
+    # 對於摘要檔案，我們需要先檢查原始檔名，因為它們來自可信的摘要列表
+    # URL解碼檔案名稱以處理特殊字符
+    from urllib.parse import unquote
+    decoded_filename = unquote(filename)
+    safe_path = SUMMARY_FOLDER / decoded_filename
 
-    # 額外安全檢查：確保路徑不會逃出指定目錄
+    # 安全檢查：確保路徑不會逃出指定目錄且檔案存在
     try:
         safe_path = safe_path.resolve()
         SUMMARY_FOLDER_RESOLVED = SUMMARY_FOLDER.resolve()
+
+        # 檢查路徑是否在摘要資料夾內
         if not str(safe_path).startswith(str(SUMMARY_FOLDER_RESOLVED)):
             return "檔案路徑無效", 400
+
+        # 檢查檔案是否存在
+        if not safe_path.exists():
+            return "檔案不存在", 404
+
+        # 檢查是否為 .txt 檔案
+        if safe_path.suffix.lower() != '.txt':
+            return "檔案類型不支援", 400
+
     except Exception:
         return "檔案路徑無效", 400
 
-    if not safe_path.exists(): return "檔案不存在", 404
     content = safe_path.read_text(encoding='utf-8')
     return render_template('summary_detail.html', title=safe_path.stem, content=content)
 
@@ -1497,16 +1510,16 @@ def add_bookmark(filename, title=None):
     """新增書籤"""
     try:
         bookmarks_data = load_bookmarks()
-        safe_filename = sanitize_filename(filename)
+        # 直接使用原始檔名，不要過度清理
         # 檢查是否已經是書籤
         for bookmark in bookmarks_data['bookmarks']:
-            if bookmark['filename'] == safe_filename:
+            if bookmark['filename'] == filename:
                 return False, "此摘要已在書籤中"
         # 如果沒有提供標題，從檔名提取
         if not title:
-            title = safe_filename.replace('.txt', '').replace('_', ' ')
+            title = filename.replace('.txt', '').replace('_', ' ')
         bookmark = {
-            'filename': safe_filename,
+            'filename': filename,
             'title': title,
             'added_date': datetime.now().isoformat(),
             'file_size': 0,
@@ -1514,7 +1527,7 @@ def add_bookmark(filename, title=None):
         }
         # 嘗試獲取檔案資訊
         try:
-            summary_path = SUMMARY_FOLDER / safe_filename
+            summary_path = SUMMARY_FOLDER / filename
             if summary_path.exists():
                 bookmark['file_size'] = summary_path.stat().st_size
                 with open(summary_path, 'r', encoding='utf-8') as f:

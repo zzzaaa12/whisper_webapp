@@ -277,7 +277,9 @@
         }
 
         function viewSummary(filename) {
-            window.location.href = `/summary/${filename}`;
+            // URL編碼檔案名稱以處理特殊字符
+            const encodedFilename = encodeURIComponent(filename);
+            window.location.href = `/summary/${encodedFilename}`;
         }
 
         function removeBookmark(filename, buttonElement) {
