@@ -69,21 +69,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // 取消處理功能
+    // 取消處理功能 - 現在主要用於取消當前處理中的任務
     cancelBtn.addEventListener('click', () => {
         if (confirm('確定要取消目前的處理任務嗎？')) {
             appendLog('🛑 使用者取消處理任務', 'info');
             socket.emit('cancel_processing');
-
-            // 重置按鈕狀態
-            submitBtn.disabled = false;
-            submitBtn.textContent = '開始處理';
-            urlInput.disabled = false;
-            accessCodeInput.disabled = false;
-            cancelBtn.style.display = 'none';
-
-            // 隱藏影片資訊
-            videoInfoCard.style.display = 'none';
         }
     });
 
@@ -109,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBar.classList.add('text-danger');
         appendLog('🔌 與後端伺服器斷線。', 'error');
         submitBtn.disabled = true;
-        submitBtn.textContent = '伺服器忙碌中';
+        submitBtn.textContent = '連線中斷';
         accessCodeInput.disabled = true;
         cancelBtn.style.display = 'none';
 
@@ -148,8 +138,9 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('server_status_update', (data) => {
         if (data.is_busy) {
             statusBar.textContent = `狀態：伺服器忙碌中 (${data.current_task})`;
-            submitBtn.disabled = true;
-            submitBtn.textContent = '伺服器忙碌中';
+            // 不再禁用按鈕，而是改變文字提示會加入佇列
+            submitBtn.disabled = false;
+            submitBtn.textContent = '加入佇列';
         } else {
             statusBar.textContent = '狀態：伺服器空閒';
             submitBtn.disabled = false;
@@ -162,22 +153,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     socket.on('processing_finished', () => {
-        submitBtn.disabled = false;
-        submitBtn.textContent = '開始處理';
-        urlInput.disabled = false;
-        accessCodeInput.disabled = false;
+        // 隱藏取消按鈕，其他狀態由 server_status_update 事件管理
         cancelBtn.style.display = 'none';
+        videoInfoCard.style.display = 'none';
     });
 
     // 新增處理通行碼錯誤的事件
     socket.on('access_code_error', (data) => {
-        // 重新啟用輸入框，讓使用者可以重新輸入通行碼
-        submitBtn.disabled = false;
-        submitBtn.textContent = '開始處理';
-        urlInput.disabled = false;
-        // accessCodeInput.disabled = true; // 移除這行，保持通行碼輸入框可輸入
-        cancelBtn.style.display = 'none';
-
         // 清空通行碼輸入框，讓使用者重新輸入
         accessCodeInput.value = '';
         accessCodeInput.focus();
@@ -220,20 +202,17 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 只禁用提交按鈕和 URL 輸入框，保持通行碼輸入框可輸入
-        submitBtn.disabled = true;
-        urlInput.disabled = true;
-        // accessCodeInput.disabled = true; // 移除這行，保持通行碼輸入框可輸入
-        cancelBtn.style.display = 'inline-block';
-
         videoInfoCard.style.display = 'none';
-
         appendLog(`收到請求，準備處理網址: ${url}`);
 
         socket.emit('start_processing', {
             'audio_url': url,
             'access_code': accessCode
         });
+
+        // 清空表單，讓用戶可以繼續添加新任務
+        urlInput.value = '';
+        accessCodeInput.value = '';
     });
 
     // 檔案上傳功能
@@ -393,14 +372,26 @@ document.addEventListener('DOMContentLoaded', () => {
                     appendLog(`📝 標題：${response.title}`, 'info');
                     appendLog(`📊 檔案大小：${(response.file_size / (1024*1024)).toFixed(1)}MB`, 'info');
                     appendLog(`🎯 任務ID：${response.task_id}`, 'info');
-                    appendLog('🚀 開始語音轉錄和摘要處理...', 'info');
+                    if (response.queue_position > 1) {
+                        appendLog(`📍 佇列位置：第${response.queue_position}位`, 'warning');
+                        appendLog('📋 已加入處理佇列，請等待系統處理...', 'info');
+                    } else {
+                        appendLog('✅ 任務已接收並開始處理', 'success');
+                    }
 
                     currentUploadTaskId = response.task_id;
 
-                    // 上傳成功後隱藏進度條但保持按鈕禁用狀態
+                    // 上傳成功後隱藏進度條並重置UI
                     uploadProgressContainer.style.display = 'none';
-                    uploadBtnText.textContent = '處理中...';
+                    uploadBtnText.textContent = '上傳處理';
+                    uploadBtn.disabled = false;
+                    uploadSpinner.style.display = 'none';
                     uploadCancelBtn.style.display = 'none';
+                    mediaFileInput.disabled = false;
+                    uploadAccessCodeInput.disabled = false;
+
+                    // 建議用戶查看佇列頁面
+                    appendLog('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info');
 
                 } else {
                     appendLog(`❌ 上傳失敗：${response.message || '未知錯誤'}`, 'error');
@@ -434,12 +425,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 監聽處理完成事件（包含上傳任務）
     socket.on('processing_finished', () => {
-        // 重置YouTube表單
-        submitBtn.disabled = false;
-        submitBtn.textContent = '開始處理';
-        urlInput.disabled = false;
-        accessCodeInput.disabled = false;
+        // 隱藏取消按鈕，其他狀態由 server_status_update 事件管理
         cancelBtn.style.display = 'none';
+        videoInfoCard.style.display = 'none';
 
         // 重置上傳表單
         if (currentUploadTaskId) {

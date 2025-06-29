@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任務佇列管理 - Whisper 語音轉文字工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
+    <style>
+        .queue-status {
+            background: white;
+            color: #333;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .task-card {
+            border-left: 4px solid #007bff;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+        .task-card:hover {
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .task-status-queued { border-left-color: #ffc107; }
+        .task-status-processing { border-left-color: #17a2b8; }
+        .task-status-completed { border-left-color: #28a745; }
+        .task-status-failed { border-left-color: #dc3545; }
+        .task-status-cancelled { border-left-color: #6c757d; }
+        .progress-mini {
+            height: 4px;
+            margin-top: 5px;
+        }
+        .task-priority {
+            font-size: 0.8em;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+        .priority-high { background-color: #dc3545; color: white; }
+        .priority-medium { background-color: #ffc107; color: black; }
+        .priority-low { background-color: #28a745; color: white; }
+
+    </style>
+</head>
+<body>
+    <!-- 配置狀態警告區域 -->
+    <div id="config-warnings"></div>
+
+    <div class="container py-2">
+        <div class="container mt-4">
+            <!-- 導航按鈕 (手機版) -->
+            <div class="d-md-none d-flex justify-content-start mb-2">
+                <a href="/" class="btn btn-outline-primary btn-sm me-2">返回首頁</a>
+                <a href="{{ url_for('list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
+                <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
+            </div>
+
+            <!-- 主標題卡片 -->
+            <div class="card">
+                <!-- 桌面版標題 -->
+                <div class="card-header text-center d-none d-md-block" style="position: relative;">
+                    <div style="position: absolute; top: 50%; left: 1rem; transform: translateY(-50%);">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRefreshSwitch" checked>
+                            <label class="form-check-label" for="autoRefreshSwitch">
+                                <small>自動更新</small>
+                            </label>
+                        </div>
+                    </div>
+                    <h3><i class="bi bi-list-task"></i> 任務佇列管理</h3>
+                    <div style="position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);">
+                        <a href="/" class="btn btn-outline-primary btn-sm">返回首頁</a>
+                    </div>
+                </div>
+                <!-- 手機版標題 -->
+                <div class="card-header text-center d-md-none">
+                    <h3><i class="bi bi-list-task"></i> 任務佇列管理</h3>
+                    <div class="d-flex justify-content-center mt-2">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRefreshSwitchMobile" checked>
+                            <label class="form-check-label" for="autoRefreshSwitchMobile">
+                                <small>自動更新</small>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- 佇列狀態總覽 -->
+                    <div class="queue-status mb-4" id="queue-status">
+                        <div class="row">
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="total-tasks">0</h4>
+                                <small>總任務數</small>
+                            </div>
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="queued-tasks">0</h4>
+                                <small>排隊中</small>
+                            </div>
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="processing-tasks">0</h4>
+                                <small>處理中</small>
+                            </div>
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="completed-tasks">0</h4>
+                                <small>已完成</small>
+                            </div>
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="failed-tasks">0</h4>
+                                <small>失敗</small>
+                            </div>
+                            <div class="col-md-2 col-sm-6 text-center">
+                                <h4 id="cancelled-tasks">0</h4>
+                                <small>已取消</small>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div id="current-task-info">
+                                    <strong>目前處理：</strong> <span id="current-task">無</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            <!-- 控制面板 -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-funnel"></i> 篩選選項</h5>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <label for="statusFilter" class="form-label">狀態篩選</label>
+                                <select class="form-select" id="statusFilter">
+                                    <option value="">全部狀態</option>
+                                    <option value="queued">排隊中</option>
+                                    <option value="processing">處理中</option>
+                                    <option value="completed">已完成</option>
+                                    <option value="failed">失敗</option>
+                                    <option value="cancelled">已取消</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="limitSelect" class="form-label">顯示數量</label>
+                                <select class="form-select" id="limitSelect">
+                                    <option value="20">20</option>
+                                    <option value="50" selected>50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">&nbsp;</label>
+                                <div class="d-grid">
+                                    <button type="button" class="btn btn-primary" onclick="loadTasks()">
+                                        <i class="bi bi-arrow-clockwise"></i> 更新列表
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-tools"></i> 管理操作</h5>
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-warning" onclick="showCleanupModal()">
+                                <i class="bi bi-trash"></i> 清理已完成任務
+                            </button>
+                            <button type="button" class="btn btn-info" onclick="showAddTaskModal()">
+                                <i class="bi bi-plus-circle"></i> 手動新增任務
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 任務列表 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-list-ul"></i> 任務列表</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="tasks-loading" class="text-center py-3">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">載入中...</span>
+                            </div>
+                        </div>
+                        <div id="tasks-container">
+                            <!-- 任務將透過 JavaScript 動態載入 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 清理任務模態框 -->
+    <div class="modal fade" id="cleanupModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">清理已完成任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="olderThanDays" class="form-label">清理超過幾天的任務</label>
+                        <input type="number" class="form-control" id="olderThanDays" value="7" min="1" max="365">
+                        <div class="form-text">將刪除指定天數前完成的任務記錄</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="cleanupAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="cleanupAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-warning" onclick="cleanupTasks()">確認清理</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增任務模態框 -->
+    <div class="modal fade" id="addTaskModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">手動新增任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="taskType" class="form-label">任務類型</label>
+                        <select class="form-select" id="taskType" onchange="updateTaskForm()">
+                            <option value="youtube">YouTube 影片處理</option>
+                            <option value="upload_media">上傳音訊處理</option>
+                            <option value="upload_subtitle">上傳字幕檔案</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="taskPriority" class="form-label">優先級 (1-10)</label>
+                        <input type="number" class="form-control" id="taskPriority" value="5" min="1" max="10">
+                        <div class="form-text">數字越大優先級越高</div>
+                    </div>
+                    <div id="task-form-container">
+                        <!-- 動態表單內容 -->
+                    </div>
+                    <div class="mb-3">
+                        <label for="addTaskAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="addTaskAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addTask()">新增任務</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 任務詳情模態框 -->
+    <div class="modal fade" id="taskDetailModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">任務詳情</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="task-detail-content">
+                        <!-- 詳情內容將透過 JavaScript 動態載入 -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">關閉</button>
+                    <button type="button" class="btn btn-danger" id="cancelTaskBtn" onclick="cancelTask()" style="display: none;">
+                        取消任務
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentAccessCode = '';
+        let autoRefreshInterval;
+        let currentTaskId = null;
+
+        // 檢查配置狀態並顯示警告
+        async function checkConfigStatus() {
+            try {
+                const response = await fetch('/api/system/config-status');
+                const result = await response.json();
+
+                if (result.success) {
+                    let warnings = '';
+
+                    if (!result.config.access_code_set) {
+                        warnings += `
+                            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>安全警告：</strong> 未設定通行碼，建議設定 ACCESS_CODE 環境變數以提升安全性
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>`;
+                    }
+
+                    if (!result.config.openai_key_set) {
+                        warnings += `
+                            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>功能提示：</strong> 未設定 OpenAI API Key，AI 摘要功能將無法使用
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>`;
+                    }
+
+                    document.getElementById('config-warnings').innerHTML = warnings;
+                }
+            } catch (error) {
+                console.error('檢查配置狀態失敗:', error);
+            }
+        }
+
+        // 載入佇列狀態
+        async function loadQueueStatus() {
+            try {
+                const response = await fetch('/api/queue/status');
+                const result = await response.json();
+
+                if (result.success) {
+                    const status = result.status;
+                    document.getElementById('total-tasks').textContent = status.total_tasks;
+                    document.getElementById('queued-tasks').textContent = status.queued;
+                    document.getElementById('processing-tasks').textContent = status.processing;
+                    document.getElementById('completed-tasks').textContent = status.completed;
+                    document.getElementById('failed-tasks').textContent = status.failed;
+                    document.getElementById('cancelled-tasks').textContent = status.cancelled;
+
+                    const currentTaskSpan = document.getElementById('current-task');
+                    if (status.current_task) {
+                        const taskInfo = `${status.current_task.task_type} - ${status.current_task.task_id.substring(0, 8)}`;
+                        currentTaskSpan.textContent = taskInfo;
+                    } else {
+                        currentTaskSpan.textContent = '無';
+                    }
+                }
+            } catch (error) {
+                console.error('載入佇列狀態失敗:', error);
+            }
+        }
+
+        // 載入任務列表
+        async function loadTasks() {
+            const loadingEl = document.getElementById('tasks-loading');
+            const containerEl = document.getElementById('tasks-container');
+
+            loadingEl.style.display = 'block';
+            containerEl.innerHTML = '';
+
+            try {
+                const statusFilter = document.getElementById('statusFilter').value;
+                const limit = document.getElementById('limitSelect').value;
+
+                let url = `/api/queue/list?limit=${limit}`;
+                if (statusFilter) {
+                    url += `&status=${statusFilter}`;
+                }
+                if (currentAccessCode) {
+                    url += `&access_code=${encodeURIComponent(currentAccessCode)}`;
+                }
+
+                const response = await fetch(url);
+                const result = await response.json();
+
+                loadingEl.style.display = 'none';
+
+                if (result.success) {
+                    displayTasks(result.tasks, result.is_admin);
+                } else {
+                    containerEl.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle"></i> ${result.message}
+                        </div>`;
+                }
+            } catch (error) {
+                loadingEl.style.display = 'none';
+                containerEl.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-exclamation-triangle"></i> 載入任務列表失敗: ${error.message}
+                    </div>`;
+            }
+        }
+
+        // 顯示任務列表
+        function displayTasks(tasks, isAdmin) {
+            const container = document.getElementById('tasks-container');
+
+            if (tasks.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-2">沒有找到任務</p>
+                    </div>`;
+                return;
+            }
+
+            let html = '';
+            tasks.forEach(task => {
+                const statusClass = `task-status-${task.status}`;
+                const priorityClass = task.priority >= 8 ? 'priority-high' :
+                                    task.priority >= 5 ? 'priority-medium' : 'priority-low';
+
+                const createdAt = new Date(task.created_at).toLocaleString('zh-TW');
+                const startedAt = task.started_at ? new Date(task.started_at).toLocaleString('zh-TW') : '-';
+                const completedAt = task.completed_at ? new Date(task.completed_at).toLocaleString('zh-TW') : '-';
+
+                html += `
+                    <div class="card task-card ${statusClass}">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h6 class="card-title">
+                                        <span class="badge bg-primary">${task.task_type}</span>
+                                        <span class="task-priority ${priorityClass}">${task.priority}</span>
+                                        <small class="text-muted">${task.task_id.substring(0, 8)}</small>
+                                    </h6>
+                                    ${getTaskDisplayName(task) ? `<p class="card-text"><strong><i class="bi bi-file-earmark-text"></i> ${getTaskDisplayName(task)}</strong></p>` : ''}
+                                    <p class="card-text">
+                                        <strong>狀態：</strong>
+                                        <span class="badge bg-${getStatusColor(task.status)}">${getStatusText(task.status)}</span>
+                                        ${task.progress > 0 ? `<span class="text-muted">(${task.progress}%)</span>` : ''}
+                                    </p>
+                                    ${task.error_message ? `<p class="text-danger"><small><i class="bi bi-exclamation-triangle"></i> ${task.error_message}</small></p>` : ''}
+                                    <small class="text-muted">
+                                        <i class="bi bi-clock"></i> 建立：${createdAt}
+                                        ${task.started_at ? ` | 開始：${startedAt}` : ''}
+                                        ${task.completed_at ? ` | 完成：${completedAt}` : ''}
+                                    </small>
+                                </div>
+                                <div class="col-md-4 text-end">
+                                    <button class="btn btn-sm btn-outline-info" onclick="showTaskDetail('${task.task_id}')">
+                                        <i class="bi bi-eye"></i> 詳情
+                                    </button>
+                                    ${task.status === 'queued' ? `
+                                        <button class="btn btn-sm btn-outline-warning" onclick="showCancelTaskDialog('${task.task_id}')">
+                                            <i class="bi bi-x-circle"></i> 取消
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                            ${task.progress > 0 ? `
+                                <div class="progress progress-mini mt-2">
+                                    <div class="progress-bar" style="width: ${task.progress}%"></div>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>`;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // 取得狀態顏色
+        function getStatusColor(status) {
+            const colors = {
+                'queued': 'warning',
+                'processing': 'info',
+                'completed': 'success',
+                'failed': 'danger',
+                'cancelled': 'secondary'
+            };
+            return colors[status] || 'secondary';
+        }
+
+        // 取得狀態文字
+        function getStatusText(status) {
+            const texts = {
+                'queued': '排隊中',
+                'processing': '處理中',
+                'completed': '已完成',
+                'failed': '失敗',
+                'cancelled': '已取消'
+            };
+            return texts[status] || status;
+        }
+
+        // 取得任務顯示名稱
+        function getTaskDisplayName(task) {
+            // 優先顯示結果中的影片標題或檔案名稱
+            if (task.result && task.result.video_title) {
+                return task.result.video_title;
+            }
+
+            // 其次顯示任務資料中的標題或檔案名稱
+            if (task.data) {
+                if (task.data.title && task.data.title.trim()) {
+                    return task.data.title;
+                }
+
+                // 對於YouTube任務，從URL提取簡化顯示
+                if (task.task_type === 'youtube' && task.data.url) {
+                    try {
+                        const url = new URL(task.data.url);
+                        if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
+                            return 'YouTube 影片';
+                        }
+                        return url.hostname;
+                    } catch (e) {
+                        return task.data.url.substring(0, 50) + '...';
+                    }
+                }
+
+                // 對於檔案上傳任務，顯示檔案名稱
+                if (task.data.filename) {
+                    return task.data.filename;
+                }
+
+                // 如果有檔案路徑，提取檔案名稱
+                if (task.data.audio_file) {
+                    const filename = task.data.audio_file.split(/[\\\/]/).pop();
+                    return filename;
+                }
+            }
+
+            return null;
+        }
+
+        // 顯示任務詳情
+        async function showTaskDetail(taskId) {
+            currentTaskId = taskId;
+            try {
+                let url = `/api/queue/task/${taskId}`;
+                if (currentAccessCode) {
+                    url += `?access_code=${encodeURIComponent(currentAccessCode)}`;
+                }
+
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (result.success) {
+                    const task = result.task;
+                    const taskDisplayName = getTaskDisplayName(task);
+                    const content = `
+                        <table class="table table-striped">
+                            <tr><td><strong>任務ID</strong></td><td>${task.task_id}</td></tr>
+                            <tr><td><strong>類型</strong></td><td>${task.task_type}</td></tr>
+                            ${taskDisplayName ? `<tr><td><strong>標題/檔案名稱</strong></td><td><i class="bi bi-file-earmark-text text-primary"></i> ${taskDisplayName}</td></tr>` : ''}
+                            <tr><td><strong>狀態</strong></td><td><span class="badge bg-${getStatusColor(task.status)}">${getStatusText(task.status)}</span></td></tr>
+                            <tr><td><strong>優先級</strong></td><td>${task.priority}</td></tr>
+                            <tr><td><strong>進度</strong></td><td>${task.progress}%</td></tr>
+                            <tr><td><strong>用戶IP</strong></td><td>${task.user_ip}</td></tr>
+                            <tr><td><strong>建立時間</strong></td><td>${new Date(task.created_at).toLocaleString('zh-TW')}</td></tr>
+                            <tr><td><strong>開始時間</strong></td><td>${task.started_at ? new Date(task.started_at).toLocaleString('zh-TW') : '-'}</td></tr>
+                            <tr><td><strong>完成時間</strong></td><td>${task.completed_at ? new Date(task.completed_at).toLocaleString('zh-TW') : '-'}</td></tr>
+                            ${task.queue_position ? `<tr><td><strong>佇列位置</strong></td><td>${task.queue_position}</td></tr>` : ''}
+                            ${task.error_message ? `<tr><td><strong>錯誤訊息</strong></td><td class="text-danger">${task.error_message}</td></tr>` : ''}
+                        </table>
+                        <h6>任務資料：</h6>
+                        <pre class="bg-light p-3 rounded">${JSON.stringify(task.data, null, 2)}</pre>
+                        ${Object.keys(task.result).length > 0 ? `
+                            <h6>執行結果：</h6>
+                            <pre class="bg-light p-3 rounded">${JSON.stringify(task.result, null, 2)}</pre>
+                        ` : ''}
+                    `;
+
+                    document.getElementById('task-detail-content').innerHTML = content;
+
+                    // 顯示取消按鈕（如果任務在佇列中）
+                    const cancelBtn = document.getElementById('cancelTaskBtn');
+                    if (task.status === 'queued') {
+                        cancelBtn.style.display = 'inline-block';
+                    } else {
+                        cancelBtn.style.display = 'none';
+                    }
+
+                    new bootstrap.Modal(document.getElementById('taskDetailModal')).show();
+                } else {
+                    alert('載入任務詳情失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('載入任務詳情失敗: ' + error.message);
+            }
+        }
+
+        // 顯示取消任務對話框
+        function showCancelTaskDialog(taskId) {
+            if (confirm('確定要取消這個任務嗎？')) {
+                cancelTaskById(taskId);
+            }
+        }
+
+        // 取消任務
+        async function cancelTask() {
+            if (!currentTaskId) return;
+            await cancelTaskById(currentTaskId);
+            bootstrap.Modal.getInstance(document.getElementById('taskDetailModal')).hide();
+        }
+
+        // 根據ID取消任務
+        async function cancelTaskById(taskId) {
+            const accessCode = prompt('請輸入通行碼：');
+            if (!accessCode) return;
+
+            try {
+                const response = await fetch('/api/queue/cancel', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_id: taskId,
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadTasks();
+                    loadQueueStatus();
+                } else {
+                    alert('取消任務失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('取消任務失敗: ' + error.message);
+            }
+        }
+
+        // 顯示清理模態框
+        function showCleanupModal() {
+            new bootstrap.Modal(document.getElementById('cleanupModal')).show();
+        }
+
+        // 清理任務
+        async function cleanupTasks() {
+            const olderThanDays = document.getElementById('olderThanDays').value;
+            const accessCode = document.getElementById('cleanupAccessCode').value;
+
+            if (!accessCode) {
+                alert('請輸入通行碼');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/queue/cleanup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        older_than_days: parseInt(olderThanDays),
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    bootstrap.Modal.getInstance(document.getElementById('cleanupModal')).hide();
+                    loadTasks();
+                    loadQueueStatus();
+                } else {
+                    alert('清理任務失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('清理任務失敗: ' + error.message);
+            }
+        }
+
+        // 顯示新增任務模態框
+        function showAddTaskModal() {
+            updateTaskForm();
+            new bootstrap.Modal(document.getElementById('addTaskModal')).show();
+        }
+
+        // 更新任務表單
+        function updateTaskForm() {
+            const taskType = document.getElementById('taskType').value;
+            const container = document.getElementById('task-form-container');
+
+            let formHtml = '';
+            switch (taskType) {
+                case 'youtube':
+                    formHtml = `
+                        <div class="mb-3">
+                            <label for="youtubeUrl" class="form-label">YouTube URL</label>
+                            <input type="url" class="form-control" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=...">
+                        </div>
+                        <div class="mb-3">
+                            <label for="youtubeTitle" class="form-label">標題（選填）</label>
+                            <input type="text" class="form-control" id="youtubeTitle" placeholder="影片標題">
+                        </div>
+                    `;
+                    break;
+                case 'upload_media':
+                    formHtml = `
+                        <div class="mb-3">
+                            <label for="mediaFile" class="form-label">音訊檔案</label>
+                            <input type="file" class="form-control" id="mediaFile" accept="audio/*,video/*">
+                        </div>
+                        <div class="mb-3">
+                            <label for="mediaTitle" class="form-label">標題（選填）</label>
+                            <input type="text" class="form-control" id="mediaTitle" placeholder="檔案標題">
+                        </div>
+                    `;
+                    break;
+                case 'upload_subtitle':
+                    formHtml = `
+                        <div class="mb-3">
+                            <label for="subtitleFile" class="form-label">字幕檔案</label>
+                            <input type="file" class="form-control" id="subtitleFile" accept=".txt,.srt,.vtt">
+                        </div>
+                        <div class="mb-3">
+                            <label for="subtitleTitle" class="form-label">檔案名稱</label>
+                            <input type="text" class="form-control" id="subtitleTitle" placeholder="檔案名稱">
+                        </div>
+                    `;
+                    break;
+            }
+
+            container.innerHTML = formHtml;
+        }
+
+        // 新增任務
+        async function addTask() {
+            const taskType = document.getElementById('taskType').value;
+            const priority = parseInt(document.getElementById('taskPriority').value);
+            const accessCode = document.getElementById('addTaskAccessCode').value;
+
+            if (!accessCode) {
+                alert('請輸入通行碼');
+                return;
+            }
+
+            let taskData = {};
+
+            // 根據任務類型收集資料
+            switch (taskType) {
+                case 'youtube':
+                    const youtubeUrl = document.getElementById('youtubeUrl').value;
+                    const youtubeTitle = document.getElementById('youtubeTitle').value;
+                    if (!youtubeUrl) {
+                        alert('請輸入 YouTube URL');
+                        return;
+                    }
+                    taskData = { url: youtubeUrl, title: youtubeTitle };
+                    break;
+                case 'upload_media':
+                    alert('上傳媒體檔案功能暫時無法通過此界面操作，請使用主頁面的上傳功能');
+                    return;
+                case 'upload_subtitle':
+                    alert('上傳字幕檔案功能暫時無法通過此界面操作，請使用 API 直接上傳');
+                    return;
+            }
+
+            try {
+                const response = await fetch('/api/queue/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_type: taskType,
+                        data: taskData,
+                        priority: priority,
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`任務已新增，ID: ${result.task_id}，佇列位置: ${result.queue_position}`);
+                    bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
+                    loadTasks();
+                    loadQueueStatus();
+                } else {
+                    alert('新增任務失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('新增任務失敗: ' + error.message);
+            }
+        }
+
+        // 設定自動更新
+        function setupAutoRefresh() {
+            const desktopCheckbox = document.getElementById('autoRefreshSwitch');
+            const mobileCheckbox = document.getElementById('autoRefreshSwitchMobile');
+
+            function toggleAutoRefresh() {
+                const isChecked = desktopCheckbox.checked || mobileCheckbox.checked;
+                if (isChecked) {
+                    autoRefreshInterval = setInterval(() => {
+                        loadQueueStatus();
+                        loadTasks();
+                    }, 5000); // 每5秒更新一次
+                } else {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                    }
+                }
+            }
+
+            function syncCheckboxes(changedCheckbox, otherCheckbox) {
+                otherCheckbox.checked = changedCheckbox.checked;
+                toggleAutoRefresh();
+            }
+
+            desktopCheckbox.addEventListener('change', () => syncCheckboxes(desktopCheckbox, mobileCheckbox));
+            mobileCheckbox.addEventListener('change', () => syncCheckboxes(mobileCheckbox, desktopCheckbox));
+
+            toggleAutoRefresh(); // 初始設定
+        }
+
+        // 頁面載入完成後執行
+        document.addEventListener('DOMContentLoaded', function() {
+            checkConfigStatus();
+            loadQueueStatus();
+            loadTasks();
+            setupAutoRefresh();
+
+            // 設定篩選事件
+            document.getElementById('statusFilter').addEventListener('change', loadTasks);
+            document.getElementById('limitSelect').addEventListener('change', loadTasks);
+        });
+    </script>
+        </div>
+    </div>
+</body>
+</html>

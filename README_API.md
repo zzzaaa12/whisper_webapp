@@ -14,6 +14,14 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
 - `POST /api/upload_subtitle` - 上傳字幕檔案
 - `POST /api/upload_media` - 上傳媒體檔案
 
+### 任務佇列管理 API
+- `GET /api/queue/status` - 獲取佇列狀態概覽
+- `GET /api/queue/list` - 獲取任務列表
+- `GET /api/queue/task/<task_id>` - 獲取任務詳情
+- `POST /api/queue/cancel` - 取消佇列任務
+- `POST /api/queue/cleanup` - 清理已完成任務
+- `POST /api/queue/add` - 新增任務到佇列（管理員）
+
 ### 書籤管理 API
 - `POST /api/bookmarks/add` - 新增書籤
 - `POST /api/bookmarks/remove` - 移除書籤
@@ -49,22 +57,22 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
 
 **回應格式：**
 
-成功 - 伺服器空閒：
+成功：
 ```json
 {
     "status": "processing",
-    "message": "任務已加入佇列，開始處理",
+    "message": "YouTube任務已加入佇列，目前排隊位置: 1",
     "task_id": "550e8400-e29b-41d4-a716-446655440000",
+    "queue_position": 1,
     "youtube_url": "https://www.youtube.com/watch?v=example"
 }
 ```
 
-伺服器忙碌：
+錯誤：
 ```json
 {
-    "status": "busy",
-    "message": "伺服器忙碌中：處理中: https://www.youtube.com/watch?v=...",
-    "current_task": "處理描述"
+    "status": "error",
+    "message": "錯誤描述"
 }
 ```
 
@@ -87,7 +95,105 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
 }
 ```
 
-### 2. 檔案上傳 API
+### 2. 任務佇列管理 API
+
+#### GET /api/queue/status
+
+獲取佇列狀態概覽。
+
+**回應格式：**
+```json
+{
+    "success": true,
+    "status": {
+        "total_tasks": 10,
+        "queued": 2,
+        "processing": 1,
+        "completed": 6,
+        "failed": 1,
+        "cancelled": 0,
+        "current_task": {
+            "task_id": "current-task-id",
+            "task_type": "youtube",
+            "progress": 50
+        },
+        "queue_length": 2
+    }
+}
+```
+
+#### GET /api/queue/list
+
+獲取任務列表。
+
+**查詢參數：**
+- `status`: 篩選狀態 (queued, processing, completed, failed, cancelled)
+- `limit`: 限制數量 (預設 50)
+
+**回應格式：**
+```json
+{
+    "success": true,
+    "tasks": [
+        {
+            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+            "task_type": "youtube",
+            "status": "queued",
+            "created_at": "2024-01-01T00:00:00",
+            "progress": 0,
+            "data": {
+                "url": "https://www.youtube.com/watch?v=example"
+            }
+        }
+    ]
+}
+```
+
+#### GET /api/queue/task/<task_id>
+
+獲取特定任務的詳細資訊。
+
+**回應格式：**
+```json
+{
+    "success": true,
+    "task": {
+        "task_id": "550e8400-e29b-41d4-a716-446655440000",
+        "task_type": "youtube",
+        "status": "processing",
+        "created_at": "2024-01-01T00:00:00",
+        "started_at": "2024-01-01T00:01:00",
+        "progress": 75,
+        "queue_position": null,
+        "data": {
+            "url": "https://www.youtube.com/watch?v=example"
+        },
+        "result": {}
+    }
+}
+```
+
+#### POST /api/queue/cancel
+
+取消佇列中的任務。
+
+**請求格式：**
+```json
+{
+    "task_id": "550e8400-e29b-41d4-a716-446655440000",
+    "access_code": "your_access_code"
+}
+```
+
+**回應格式：**
+```json
+{
+    "success": true,
+    "message": "任務已取消"
+}
+```
+
+### 3. 檔案上傳 API
 
 #### POST /api/upload_subtitle
 
@@ -106,7 +212,8 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
     "filename": "processed_filename.txt",
     "title": "檔案標題",
     "file_size": 1024,
-    "task_id": "unique_task_id"
+    "task_id": "unique_task_id",
+    "queue_position": 1
 }
 ```
 
@@ -122,13 +229,14 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
 ```json
 {
     "success": true,
-    "message": "檔案上傳成功，開始處理",
+    "message": "檔案上傳成功，已加入處理佇列",
     "filename": "processed_filename.mp3",
-    "task_id": "unique_task_id"
+    "task_id": "unique_task_id",
+    "queue_position": 2
 }
 ```
 
-### 3. 書籤管理 API
+### 4. 書籤管理 API
 
 #### POST /api/bookmarks/add
 
@@ -185,7 +293,7 @@ Whisper WebApp 提供完整的 REST API，支援 YouTube 影片處理、檔案�
 }
 ```
 
-### 4. 回收桶管理 API
+### 5. 回收桶管理 API
 
 #### POST /api/trash/move
 

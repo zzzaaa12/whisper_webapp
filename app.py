@@ -17,6 +17,9 @@ from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import requests
 
+# 導入任務佇列系統
+from task_queue import get_task_queue, TaskStatus
+
 # --- Initialization ---
 # 讀取 config.json 設定檔
 CONFIG = {}
@@ -379,41 +382,28 @@ def queue_listener(res_queue):
 def do_summarize(subtitle_content, summary_save_path, sid):
     """Performs summarization using OpenAI API."""
     try:
-        global openai
-        if not openai:
-            import openai as o
-            openai = o
+        from ai_summary_service import get_summary_service
 
-        api_key = get_config("OPENAI_API_KEY")
-        if not api_key:
-            log_and_emit("❌ 錯誤：找不到 OPENAI_API_KEY 環境變數。", 'error', sid)
-            return
+        # 創建日誌回調函數
+        def log_callback(message, level='info'):
+            log_and_emit(message, level, sid)
 
-        log_and_emit("▶️ 開始進行 AI 摘要...", 'info', sid)
-        client = openai.OpenAI(api_key=api_key)
-        prompt = "請將以下字幕提到的每一個重點，做條列式的摘要整理：\n" + subtitle_content
-
-        max_tokens = int(get_config("OPENAI_MAX_TOKENS", 10000))
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "你是一個專業的摘要助手。"},
-                {"role": "user", "content": prompt}
-            ],
-            max_tokens=max_tokens,
-            temperature=0.5
+        # 獲取摘要服務
+        summary_service = get_summary_service(
+            openai_api_key=get_config("OPENAI_API_KEY"),
+            config_getter=get_config
         )
-        summary_content = response.choices[0].message.content
-        summary = summary_content.strip() if summary_content else ""
 
-        if summary:
-            log_and_emit(f"✅ AI 摘要完成。", 'success', sid)
-            with open(summary_save_path, 'w', encoding='utf-8') as f:
-                f.write(summary)
-            log_and_emit(f"摘要已儲存至: {summary_save_path}", 'info', sid)
-            log_and_emit(f"---摘要內容---\n{summary}", 'info', sid)
-        else:
-            log_and_emit("⚠️ AI 未回傳有效摘要。", 'warning', sid)
+        # 生成並儲存摘要
+        success, result = summary_service.generate_and_save_summary(
+            subtitle_content=subtitle_content,
+            save_path=Path(summary_save_path),
+            prompt_type="simple",  # 保持原有的簡單模式
+            log_callback=log_callback
+        )
+
+        if not success:
+            log_and_emit(f"❌ AI 摘要失敗: {result}", 'error', sid)
 
     except Exception as e:
         log_and_emit(f"❌ AI 摘要失敗: {e}", 'error', sid)
@@ -453,7 +443,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
             print(f"[WORKER] Exception while sending Telegram message: {e}")
 
     DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER = Path(download_p), Path(summary_p), Path(subtitle_p)
-    client = openai.OpenAI(api_key=openai_key) if openai_key else None
+                    # OpenAI 客戶端已移除，改用統一的 ai_summary_service
 
     def worker_emit(event, data, sid): result_q.put({'event': event, 'data': data, 'sid': sid})
     def worker_update_state(is_busy, task_desc): result_q.put({'event': 'update_server_state', 'data': {'is_busy': is_busy, 'current_task': task_desc}})
@@ -638,34 +628,47 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     Path(subtitle_path).write_text(srt_content, encoding='utf-8')
                     worker_emit('update_log', {'log': "📝 字幕已儲存", 'type': 'info'}, sid)
 
-                    if client and srt_content:
+                    if srt_content:
                         # 上傳檔案任務不檢查取消狀態
 
-                        worker_emit('update_log', {'log': "▶️ AI 摘要中...", 'type': 'info'}, sid)
-                        prompt = "請將以下字幕內容的每一個細節都做條列式的摘要整理：\n" + srt_content
-                        resp = client.chat.completions.create(model="gpt-4.1-mini", messages=[{"role": "user", "content": prompt}])
-                        summary = resp.choices[0].message.content if resp.choices else "AI未回傳摘要"
+                        try:
+                            from ai_summary_service import get_summary_service
 
-                        # 在摘要前面加上檔案資訊
-                        file_info_header = (
-                            f"檔案：{Path(audio_file).name}\n"
-                            f"處理時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-                            f"{'='*50}\n\n"
-                        )
-                        full_summary = file_info_header + summary
+                            # 創建回調函數
+                            def log_callback(message, level='info'):
+                                worker_emit('update_log', {'log': message, 'type': level}, sid)
 
-                        Path(summary_path).write_text(full_summary, encoding='utf-8')
-                        worker_emit('update_log', {'log': "✅ AI 摘要完成", 'type': 'success'}, sid)
-                        worker_emit('update_log', {'log': f"---\n{full_summary}", 'type': 'info'}, sid)
+                            def telegram_callback(message):
+                                send_telegram_notification(message)
 
-                        # --- Send summary notification to Telegram ---
-                        tg_message = (
-                            f"✅ *摘要完成:*\n\n"
-                            f"📄 *檔案:* `{Path(audio_file).name}`\n\n"
-                            f"📝 *完整摘要:*\n`{summary}`"
-                        )
-                        send_telegram_notification(tg_message)
-                        # ---------------------------------------------
+                            # 獲取摘要服務
+                            summary_service = get_summary_service(
+                                openai_api_key=openai_key,
+                                config_getter=lambda key, default=None: os.getenv(key, default)
+                            )
+
+                            # 準備header資訊
+                            header_info = {
+                                'filename': Path(audio_file).name
+                            }
+
+                            # 生成並儲存摘要
+                            success, result = summary_service.generate_and_save_summary(
+                                subtitle_content=srt_content,
+                                save_path=Path(summary_path),
+                                prompt_type="detailed",  # 使用詳細模式
+                                header_info=header_info,
+                                log_callback=log_callback,
+                                telegram_callback=telegram_callback
+                            )
+
+                            if not success:
+                                worker_emit('update_log', {'log': f"❌ 摘要生成失敗: {result}", 'type': 'error'}, sid)
+
+                        except ImportError:
+                            # 統一摘要服務不可用，直接報錯
+                            error_msg = "❌ AI摘要服務模組不可用，請檢查 ai_summary_service.py"
+                            worker_emit('update_log', {'log': error_msg, 'type': 'error'}, sid)
 
                     # 刪除音檔以節省空間
                     if Path(audio_file).exists():
@@ -836,40 +839,49 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                             subtitle_path.write_text(srt_content, encoding='utf-8')
                             worker_emit('update_log', {'log': "📝 字幕已儲存", 'type': 'info'}, sid)
 
-                        if client and srt_content:
+                        if srt_content:
                             # 檢查是否被取消
                             with task_lock:
                                 if current_task_sid != sid:
                                     worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
                                     continue
 
-                            worker_emit('update_log', {'log': "▶️ AI 摘要中...", 'type': 'info'}, sid)
-                            prompt = "請將以下字幕內容的每一個細節都做條列式的摘要整理：\n" + srt_content
-                            resp = client.chat.completions.create(model="gpt-4.1-mini", messages=[{"role": "user", "content": prompt}])
-                            summary = resp.choices[0].message.content if resp.choices else "AI未回傳摘要"
+                            # 使用統一摘要服務
+                            try:
+                                from ai_summary_service import get_summary_service
 
-                            # 在摘要前面加上影片資訊
-                            video_info_header = (
-                                f"頻道：{info.get('uploader', '未知頻道')}\n"
-                                f"主題：{info.get('title', '未知標題')}\n"
-                                f"網址：{info.get('webpage_url', url)}\n"
-                                f"{'='*50}\n\n"
-                            )
-                            full_summary = video_info_header + summary
+                                # 設定回調函數
+                                def log_callback(message, level='info'):
+                                    worker_emit('update_log', {'log': message, 'type': level}, sid)
 
-                            summary_path.write_text(full_summary, encoding='utf-8')
-                            worker_emit('update_log', {'log': "✅ AI 摘要完成", 'type': 'success'}, sid)
-                            worker_emit('update_log', {'log': f"---\n{full_summary}", 'type': 'info'}, sid)
+                                def telegram_callback(message):
+                                    send_telegram_notification(message)
 
-                            # --- Send summary notification to Telegram ---
-                            # 發送完整摘要而不是只發送預覽
-                            tg_message = (
-                                f"✅ *摘要完成:*\n\n"
-                                f"📄 *標題:* `{info.get('title', 'N/A')}`\n\n"
-                                f"📝 *完整摘要:*\n`{summary}`"
-                            )
-                            send_telegram_notification(tg_message)
-                            # ---------------------------------------------
+                                # 準備 header 資訊
+                                header_info = {
+                                    'title': info.get('title', '未知標題'),
+                                    'uploader': info.get('uploader', '未知頻道'),
+                                    'url': info.get('webpage_url', url)
+                                }
+
+                                # 獲取摘要服務並生成摘要
+                                summary_service = get_summary_service(openai_key, get_config)
+                                success, result = summary_service.generate_and_save_summary(
+                                    subtitle_content=srt_content,
+                                    save_path=summary_path,
+                                    prompt_type="structured",
+                                    header_info=header_info,
+                                    log_callback=log_callback,
+                                    telegram_callback=telegram_callback
+                                )
+
+                                if not success:
+                                    worker_emit('update_log', {'log': f"❌ 摘要生成失敗: {result}", 'type': 'error'}, sid)
+
+                            except ImportError:
+                                # 統一摘要服務不可用，直接報錯
+                                error_msg = "❌ AI摘要服務模組不可用，請檢查 ai_summary_service.py"
+                                worker_emit('update_log', {'log': error_msg, 'type': 'error'}, sid)
 
                         # 刪除音檔以節省空間
                         if 'audio_file' in locals() and audio_file.exists():
@@ -977,11 +989,32 @@ def handle_start_processing(data):
     # 通行碼正確，記錄成功並重置計數器
     record_successful_attempt(client_ip)
 
-    with state_lock:
-        if SERVER_STATE['is_busy']: log_and_emit("⏳ 伺服器忙碌中，您的任務已加入佇列。", 'warning', sid)
-        else: log_and_emit('✅ 請求已接收，準備處理...', 'success', sid)
+    # 使用新的任務佇列系統
+    from task_queue import get_task_queue
 
-    task_queue.put({'sid': sid, 'audio_url': data.get('audio_url')})
+    task_queue_manager = get_task_queue()
+
+    try:
+        # 添加任務到佇列 (使用字符串而不是枚舉)
+        task_id = task_queue_manager.add_task(
+            task_type='youtube',
+            data={'url': data.get('audio_url')},
+            user_ip=client_ip,
+            priority=5  # 默認優先級
+        )
+
+        # 獲取佇列位置
+        queue_position = task_queue_manager.get_user_queue_position(task_id)
+
+        if queue_position > 1:
+            log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}", 'warning', sid)
+            log_and_emit('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info', sid)
+        else:
+            log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}', 'success', sid)
+            log_and_emit('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info', sid)
+
+    except Exception as e:
+        log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
 
 @socketio.on('cancel_processing')
 def handle_cancel_processing():
@@ -1336,34 +1369,28 @@ def api_process_youtube():
                 'message': 'URL 長度超過限制'
             }), 400
 
-        # 檢查伺服器狀態
-        with state_lock:
-            is_busy = SERVER_STATE['is_busy']
-            current_task = SERVER_STATE['current_task']
+        # 伺服器忙碌時也可以接受任務，將加入佇列等待處理
 
-        if is_busy:
-            return jsonify({
-                'status': 'busy',
-                'message': f'伺服器忙碌中：{current_task}',
-                'current_task': current_task
-            }), 200
+        # 使用新的任務佇列系統
+        user_ip = get_client_ip()
+        queue_manager = get_task_queue()
 
-        # 伺服器空閒，開始處理
-        # 生成唯一的任務 ID
-        import uuid
-        task_id = str(uuid.uuid4())
+        # 準備任務資料
+        task_data = {
+            'url': youtube_url
+        }
 
-        # 將任務加入佇列（使用特殊的 API session ID）
-        api_sid = f"api_{task_id}"
-        task_queue.put({
-            'sid': api_sid,
-            'audio_url': youtube_url
-        })
+        # 將任務加入佇列
+        queue_task_id = queue_manager.add_task('youtube', task_data, priority=5, user_ip=user_ip)
+
+        # 獲取佇列位置
+        queue_position = queue_manager.get_user_queue_position(queue_task_id)
 
         return jsonify({
             'status': 'processing',
-            'message': '任務已加入佇列，開始處理',
-            'task_id': task_id,
+            'message': f'YouTube任務已加入佇列，目前排隊位置: {queue_position}',
+            'task_id': queue_task_id,
+            'queue_position': queue_position,
             'youtube_url': youtube_url
         }), 200
 
@@ -1852,16 +1879,7 @@ def api_upload_media():
                 'message': f'不支援的檔案格式：{file_ext}。支援格式：{", ".join(sorted(allowed_extensions))}'
             }), 400
 
-        # 檢查伺服器狀態
-        with state_lock:
-            is_busy = SERVER_STATE['is_busy']
-            current_task = SERVER_STATE['current_task']
-
-        if is_busy:
-            return jsonify({
-                'success': False,
-                'message': f'伺服器忙碌中：{current_task}'
-            }), 409
+        # 伺服器忙碌時也可以接受任務，將加入佇列等待處理
 
         # 生成安全的檔案名稱
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -1884,33 +1902,255 @@ def api_upload_media():
         subtitle_path = SUBTITLE_FOLDER / f"{base_name}.srt"
         summary_path = SUMMARY_FOLDER / f"{base_name}.txt"
 
-        # 使用廣播模式，讓所有客戶端都能收到事件
-        sid = None  # None 表示廣播到所有客戶端
+        # 使用新的任務佇列系統
+        user_ip = get_client_ip()
+        queue_manager = get_task_queue()
 
-        # 將任務加入佇列
-        task_queue.put({
-            'task_type': 'audio_file',
-            'sid': sid,
+        # 準備任務資料
+        task_data = {
             'audio_file': str(file_path),
             'subtitle_path': str(subtitle_path),
             'summary_path': str(summary_path),
-            'title': title or safe_title
-        })
+            'title': title or safe_title,
+            'filename': safe_filename
+        }
+
+        # 將任務加入佇列
+        queue_task_id = queue_manager.add_task('upload_media', task_data, priority=5, user_ip=user_ip)
+
+        # 獲取佇列位置
+        queue_position = queue_manager.get_user_queue_position(queue_task_id)
 
         return jsonify({
             'success': True,
-            'message': '檔案上傳成功，開始處理',
-            'task_id': task_id,
+            'message': '檔案上傳成功，已加入處理佇列',
+            'task_id': queue_task_id,
+            'queue_position': queue_position,
             'filename': safe_filename,
             'title': title or safe_title,
             'file_size': file_size,
-            'session_id': sid
+            'original_task_id': task_id  # 保留原始任務ID作為參考
         })
 
     except Exception as e:
         return jsonify({
             'success': False,
             'message': f'上傳檔案時發生錯誤：{str(e)}'
+        }), 500
+
+# --- Task Queue API Routes ---
+@app.route('/queue')
+def queue_page():
+    """任務佇列管理頁面"""
+    return render_template('queue.html')
+
+@app.route('/api/queue/status')
+def api_get_queue_status():
+    """API: 獲取佇列狀態概覽"""
+    try:
+        queue_manager = get_task_queue()
+        status = queue_manager.get_queue_status()
+        return jsonify({
+            'success': True,
+            'status': status
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'獲取佇列狀態失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/queue/list')
+def api_get_queue_list():
+    """API: 獲取任務列表"""
+    try:
+        queue_manager = get_task_queue()
+        status = request.args.get('status')
+        limit = int(request.args.get('limit', 50))
+        user_ip = get_client_ip()
+
+        # 管理員可以查看所有任務，普通用戶只能查看自己的
+        access_code = request.args.get('access_code')
+        system_access_code = get_config("ACCESS_CODE")
+        is_admin = system_access_code and access_code == system_access_code
+
+        tasks = queue_manager.get_task_list(
+            status=status,
+            limit=limit,
+            user_ip=None if is_admin else user_ip
+        )
+
+        return jsonify({
+            'success': True,
+            'tasks': tasks,
+            'is_admin': is_admin
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'獲取任務列表失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/queue/task/<task_id>')
+def api_get_task_detail(task_id):
+    """API: 獲取任務詳情"""
+    try:
+        queue_manager = get_task_queue()
+        task = queue_manager.get_task(task_id)
+
+        if not task:
+            return jsonify({
+                'success': False,
+                'message': '任務不存在'
+            }), 404
+
+        # 檢查權限：只能查看自己的任務或管理員可查看所有
+        user_ip = get_client_ip()
+        access_code = request.args.get('access_code')
+        system_access_code = get_config("ACCESS_CODE")
+        is_admin = system_access_code and access_code == system_access_code
+
+        if not is_admin and task['user_ip'] != user_ip:
+            return jsonify({
+                'success': False,
+                'message': '無權限查看此任務'
+            }), 403
+
+        # 新增佇列位置資訊
+        if task['status'] == 'queued':
+            task['queue_position'] = queue_manager.get_user_queue_position(task_id)
+
+        return jsonify({
+            'success': True,
+            'task': task
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'獲取任務詳情失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/queue/cancel', methods=['POST'])
+def api_cancel_queue_task():
+    """API: 取消佇列中的任務"""
+    try:
+        data = request.get_json()
+        if not data or 'task_id' not in data:
+            return jsonify({
+                'success': False,
+                'message': '缺少任務ID'
+            }), 400
+
+        task_id = data['task_id']
+        access_code = data.get('access_code', '').strip()
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        queue_manager = get_task_queue()
+        success, message = queue_manager.cancel_task(task_id, access_code)
+
+        return jsonify({
+            'success': success,
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'取消任務失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/queue/cleanup', methods=['POST'])
+def api_cleanup_queue():
+    """API: 清理已完成的任務"""
+    try:
+        data = request.get_json()
+        access_code = data.get('access_code', '').strip() if data else ''
+        older_than_days = data.get('older_than_days', 7) if data else 7
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        queue_manager = get_task_queue()
+        deleted_count = queue_manager.cleanup_completed_tasks(older_than_days)
+
+        return jsonify({
+            'success': True,
+            'message': f'已清理 {deleted_count} 個已完成的任務',
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'清理任務失敗: {str(e)}'
+        }), 500
+
+@app.route('/api/queue/add', methods=['POST'])
+def api_add_queue_task():
+    """API: 新增任務到佇列"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'success': False,
+                'message': '缺少請求資料'
+            }), 400
+
+        task_type = data.get('task_type')
+        task_data = data.get('data', {})
+        priority = data.get('priority', 5)
+        access_code = data.get('access_code', '').strip()
+
+        # 檢查必要參數
+        if not task_type:
+            return jsonify({
+                'success': False,
+                'message': '缺少任務類型'
+            }), 400
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        # 驗證任務類型
+        valid_types = ['youtube', 'upload_media', 'upload_subtitle']
+        if task_type not in valid_types:
+            return jsonify({
+                'success': False,
+                'message': f'無效的任務類型。支援類型: {", ".join(valid_types)}'
+            }), 400
+
+        user_ip = get_client_ip()
+        queue_manager = get_task_queue()
+        task_id = queue_manager.add_task(task_type, task_data, priority, user_ip)
+
+        # 獲取佇列位置
+        queue_position = queue_manager.get_user_queue_position(task_id)
+
+        return jsonify({
+            'success': True,
+            'message': '任務已加入佇列',
+            'task_id': task_id,
+            'queue_position': queue_position
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'新增任務失敗: {str(e)}'
         }), 500
 
 # --- Main Execution ---
@@ -1944,6 +2184,18 @@ if __name__ == '__main__':
 
     socketio.start_background_task(target=queue_listener, res_queue=results_queue)
 
+    # 啟動新的佇列工作程式（與舊系統並行）
+    try:
+        from queue_worker import start_queue_worker
+        queue_worker = start_queue_worker(
+            data_dir=Path(__file__).parent,
+            openai_key=get_config("OPENAI_API_KEY")
+        )
+        print("✅ 新任務佇列工作程式已啟動")
+    except Exception as e:
+        print(f"⚠️  新任務佇列工作程式啟動失敗: {e}")
+
+    # 保持舊的工作程式以向後兼容
     worker_args = (
         task_queue, results_queue, stop_event,
         str(DOWNLOAD_FOLDER), str(SUMMARY_FOLDER), str(SUBTITLE_FOLDER),
