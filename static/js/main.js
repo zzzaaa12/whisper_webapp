@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         logContainer.appendChild(logEntry);
 
-        // 智能滾動：如果使用者沒有手動滾動，則自動滾動到底部
+        // 智能滾動: 如果使用者沒有手動滾動，則自動滾動到底部
         const isAtBottom = logContainer.scrollTop + logContainer.clientHeight >= logContainer.scrollHeight - 10;
         if (isAtBottom) {
             logContainer.scrollTop = logContainer.scrollHeight;
@@ -234,6 +234,221 @@ document.addEventListener('DOMContentLoaded', () => {
             'audio_url': url,
             'access_code': accessCode
         });
+    });
+
+    // 檔案上傳功能
+    const uploadForm = document.getElementById('upload-form');
+    const mediaFileInput = document.getElementById('media_file');
+    const uploadAccessCodeInput = document.getElementById('upload_access_code');
+    const uploadBtn = document.getElementById('upload-btn');
+    const uploadBtnText = document.getElementById('upload-btn-text');
+    const uploadSpinner = document.getElementById('upload-spinner');
+    const uploadCancelBtn = document.getElementById('upload-cancel-btn');
+    const uploadProgressContainer = document.getElementById('upload-progress-container');
+    const uploadProgressBar = document.getElementById('upload-progress-bar');
+    const uploadProgressText = document.getElementById('upload-progress-text');
+    const uploadStatus = document.getElementById('upload-status');
+
+    let currentUploadXHR = null;
+    let currentUploadTaskId = null;
+
+    // 檔案選擇事件
+    mediaFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            // 檢查檔案大小
+            const fileSizeMB = file.size / (1024 * 1024);
+            if (fileSizeMB > 500) {
+                appendLog(`⚠️ 檔案過大：${fileSizeMB.toFixed(1)}MB，建議不超過 500MB`, 'error');
+            } else {
+                appendLog(`📁 已選擇檔案：${file.name} (${fileSizeMB.toFixed(1)}MB)`, 'info');
+            }
+        }
+    });
+
+    // 上傳取消功能
+    uploadCancelBtn.addEventListener('click', () => {
+        if (currentUploadXHR) {
+            currentUploadXHR.abort();
+            appendLog('🛑 檔案上傳已取消', 'info');
+            resetUploadUI();
+        }
+    });
+
+    // 重置上傳介面
+    function resetUploadUI() {
+        uploadBtn.disabled = false;
+        uploadBtnText.textContent = '上傳處理';
+        uploadSpinner.style.display = 'none';
+        uploadCancelBtn.style.display = 'none';
+        uploadProgressContainer.style.display = 'none';
+        mediaFileInput.disabled = false;
+        uploadAccessCodeInput.disabled = false;
+        currentUploadXHR = null;
+        currentUploadTaskId = null;
+    }
+
+    // 檔案上傳表單提交
+    uploadForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const file = mediaFileInput.files[0];
+        const accessCode = uploadAccessCodeInput.value.trim();
+
+        // 驗證輸入
+        if (!file) {
+            appendLog('請選擇要上傳的影音檔案', 'error');
+            return;
+        }
+
+        // 檢查檔案大小
+        const fileSizeMB = file.size / (1024 * 1024);
+        if (fileSizeMB > 500) {
+            appendLog(`檔案過大：${fileSizeMB.toFixed(1)}MB，最大限制 500MB`, 'error');
+            return;
+        }
+
+        // 先檢查通行碼再開始上傳
+        checkAccessCodeBeforeUpload(file, accessCode);
+    });
+
+    function checkAccessCodeBeforeUpload(file, accessCode) {
+        appendLog('🔍 檢查通行碼...', 'info');
+
+        // 發送一個輕量級的請求來檢查通行碼
+        const xhr = new XMLHttpRequest();
+
+        xhr.addEventListener('load', () => {
+            try {
+                const response = JSON.parse(xhr.responseText);
+
+                if (xhr.status === 200 && response.success) {
+                    appendLog('✅ 通行碼驗證成功', 'success');
+                    // 通行碼正確，開始上傳
+                    startFileUpload(file, accessCode);
+                } else {
+                    appendLog(`❌ 通行碼驗證失敗：${response.message || '未知錯誤'}`, 'error');
+                }
+            } catch (e) {
+                appendLog(`❌ 驗證請求解析失敗：${e.message}`, 'error');
+            }
+        });
+
+        xhr.addEventListener('error', () => {
+            appendLog('❌ 網路錯誤，無法驗證通行碼', 'error');
+        });
+
+        // 發送驗證請求到系統配置狀態API（這個API也會檢查通行碼）
+        const formData = new FormData();
+        formData.append('access_code', accessCode);
+
+        xhr.open('POST', '/api/verify_access_code');
+        xhr.send(formData);
+    }
+
+    function startFileUpload(file, accessCode) {
+        // 準備上傳界面
+        uploadBtn.disabled = true;
+        uploadBtnText.textContent = '上傳中...';
+        uploadSpinner.style.display = 'inline-block';
+        uploadCancelBtn.style.display = 'inline-block';
+        uploadProgressContainer.style.display = 'block';
+        mediaFileInput.disabled = true;
+        uploadAccessCodeInput.disabled = true;
+
+        // 重置進度條
+        uploadProgressBar.style.width = '0%';
+        uploadProgressText.textContent = '0%';
+        uploadStatus.textContent = '準備上傳...';
+
+        // 準備表單資料
+        const formData = new FormData();
+        formData.append('media_file', file);
+        formData.append('access_code', accessCode);
+
+        // 創建XHR請求
+        const xhr = new XMLHttpRequest();
+        currentUploadXHR = xhr;
+
+        // 上傳進度監聽
+        xhr.upload.addEventListener('progress', (e) => {
+            if (e.lengthComputable) {
+                const percentComplete = (e.loaded / e.total) * 100;
+                uploadProgressBar.style.width = percentComplete + '%';
+                uploadProgressText.textContent = Math.round(percentComplete) + '%';
+
+                const uploadedMB = (e.loaded / (1024 * 1024)).toFixed(1);
+                const totalMB = (e.total / (1024 * 1024)).toFixed(1);
+                uploadStatus.textContent = `已上傳 ${uploadedMB}MB / ${totalMB}MB`;
+            }
+        });
+
+        // 上傳完成處理
+        xhr.addEventListener('load', () => {
+            try {
+                const response = JSON.parse(xhr.responseText);
+
+                if (xhr.status === 200 && response.success) {
+                    appendLog(`✅ 檔案上傳成功：${response.filename}`, 'success');
+                    appendLog(`📝 標題：${response.title}`, 'info');
+                    appendLog(`📊 檔案大小：${(response.file_size / (1024*1024)).toFixed(1)}MB`, 'info');
+                    appendLog(`🎯 任務ID：${response.task_id}`, 'info');
+                    appendLog('🚀 開始語音轉錄和摘要處理...', 'info');
+
+                    currentUploadTaskId = response.task_id;
+
+                    // 上傳成功後隱藏進度條但保持按鈕禁用狀態
+                    uploadProgressContainer.style.display = 'none';
+                    uploadBtnText.textContent = '處理中...';
+                    uploadCancelBtn.style.display = 'none';
+
+                } else {
+                    appendLog(`❌ 上傳失敗：${response.message || '未知錯誤'}`, 'error');
+                    resetUploadUI();
+                }
+            } catch (e) {
+                appendLog(`❌ 解析回應失敗：${e.message}`, 'error');
+                resetUploadUI();
+            }
+        });
+
+        // 上傳錯誤處理
+        xhr.addEventListener('error', () => {
+            appendLog('❌ 網路錯誤，上傳失敗', 'error');
+            resetUploadUI();
+        });
+
+        // 上傳中止處理
+        xhr.addEventListener('abort', () => {
+            appendLog('🛑 上傳已取消', 'info');
+            resetUploadUI();
+        });
+
+        // 發送請求
+        uploadStatus.textContent = '連線中...';
+        xhr.open('POST', '/api/upload_media');
+        xhr.send(formData);
+
+        appendLog(`📤 開始上傳檔案：${file.name}`, 'info');
+    }
+
+    // 監聽處理完成事件（包含上傳任務）
+    socket.on('processing_finished', () => {
+        // 重置YouTube表單
+        submitBtn.disabled = false;
+        submitBtn.textContent = '開始處理';
+        urlInput.disabled = false;
+        accessCodeInput.disabled = false;
+        cancelBtn.style.display = 'none';
+
+        // 重置上傳表單
+        if (currentUploadTaskId) {
+            appendLog('✅ 上傳檔案處理完成', 'success');
+            resetUploadUI();
+
+            // 清空表單
+            uploadForm.reset();
+        }
     });
 
 });

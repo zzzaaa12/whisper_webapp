@@ -76,6 +76,21 @@
             .button-container {
                 align-self: flex-end;
             }
+
+            /* 下載區域響應式 */
+            .alert.d-flex {
+                flex-direction: column !important;
+                align-items: flex-start !important;
+                gap: 1rem;
+            }
+
+            .alert .btn-group {
+                align-self: stretch;
+            }
+
+            .alert .btn-group .btn {
+                flex: 1;
+            }
         }
 
         /* 超長標題處理 */
@@ -114,9 +129,41 @@
             </div>
         </div>
 
+        <!-- 下載區域 -->
+        <div class="alert alert-info d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <i class="bi bi-info-circle"></i>
+                <strong>檔案下載</strong> - 您可以下載摘要和字幕檔案
+            </div>
+            <div class="btn-group">
+                <a href="{{ url_for('download_summary', filename=filename) }}" class="btn btn-success btn-sm">
+                    <i class="bi bi-file-text"></i> 下載摘要 (.txt)
+                </a>
+                {% if has_subtitle %}
+                <a href="{{ url_for('download_subtitle', filename=filename) }}" class="btn btn-info btn-sm">
+                    <i class="bi bi-file-earmark-text"></i> 下載字幕 (.srt)
+                </a>
+                {% else %}
+                <button class="btn btn-outline-secondary btn-sm" disabled>
+                    <i class="bi bi-file-earmark-text"></i> 字幕不可用
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card">
-            <div class="card-header">
-                摘要內容
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>摘要內容</span>
+                <div class="btn-group">
+                    <a href="{{ url_for('download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-download"></i> 下載摘要
+                    </a>
+                    {% if has_subtitle %}
+                    <a href="{{ url_for('download_subtitle', filename=filename) }}" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-download"></i> 下載字幕
+                    </a>
+                    {% endif %}
+                </div>
             </div>
             <div class="card-body">
                 <pre class="summary-content">{{ content }}</pre>

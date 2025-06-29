@@ -225,6 +225,7 @@
                     <h3>Whisper 語音轉文字工具</h3>
                 </div>
                 <div class="card-body">
+                    <!-- YouTube 網址處理表單 -->
                     <form id="process-form">
                         <div class="row align-items-end mb-3">
                             <div class="col-md-6">
@@ -240,6 +241,51 @@
                                     <button type="submit" id="submit-btn" class="btn btn-primary" style="flex: 1; min-width: 0;">開始處理</button>
                                     <button type="button" id="cancel-btn" class="btn btn-danger" style="display: none; flex-shrink: 0;">取消</button>
                                 </div>
+                            </div>
+                        </div>
+                    </form>
+
+                    <!-- 分隔線 -->
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <hr class="my-3">
+                        </div>
+                    </div>
+
+                    <!-- 影音檔案上傳表單 -->
+                    <form id="upload-form" enctype="multipart/form-data">
+                        <div class="row align-items-end mb-3">
+                            <div class="col-md-6">
+                                <label for="media_file" class="form-label">上傳影音檔案</label>
+                                <input type="file" class="form-control" id="media_file" name="media_file"
+                                       accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg"
+                                       placeholder="選擇影音檔案...">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="upload_access_code" class="form-label">通行碼</label>
+                                <input type="password" class="form-control" id="upload_access_code" name="upload_access_code" placeholder="請輸入通行碼...">
+                            </div>
+                            <div class="col-md-3">
+                                <div class="btn-container">
+                                    <button type="submit" id="upload-btn" class="btn btn-success" style="flex: 1; min-width: 0;">
+                                        <span id="upload-btn-text">上傳處理</span>
+                                        <span id="upload-spinner" class="spinner-border spinner-border-sm ms-2" style="display: none;"></span>
+                                    </button>
+                                    <button type="button" id="upload-cancel-btn" class="btn btn-danger" style="display: none; flex-shrink: 0;">取消上傳</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 上傳進度條 -->
+                        <div class="row mb-3" id="upload-progress-container" style="display: none;">
+                            <div class="col-12">
+                                <div class="progress">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                         id="upload-progress-bar" role="progressbar" style="width: 0%">
+                                        <span id="upload-progress-text">0%</span>
+                                    </div>
+                                </div>
+                                <small class="text-muted" id="upload-status">準備上傳...</small>
                             </div>
                         </div>
                     </form>

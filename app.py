@@ -12,7 +12,7 @@ from queue import Empty as QueueEmpty
 import json
 import uuid
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 from flask_socketio import SocketIO, emit
 from dotenv import load_dotenv
 import requests
@@ -50,6 +50,7 @@ SUMMARY_FOLDER = BASE_DIR / "summaries"
 SUBTITLE_FOLDER = BASE_DIR / "subtitles"
 LOG_FOLDER = BASE_DIR / "logs"  # 新增日誌資料夾
 TRASH_FOLDER = BASE_DIR / "trash"  # 新增回收桶資料夾
+UPLOAD_FOLDER = BASE_DIR / "uploads"  # 新增上傳檔案資料夾
 TRASH_METADATA_FILE = TRASH_FOLDER / "metadata.json"  # 回收桶記錄檔案
 
 task_queue = Queue()
@@ -363,7 +364,12 @@ def queue_listener(res_queue):
                 # 廣播給所有客戶端
                 socketio.emit(event, data)
             elif event:
-                socketio.emit(event, data, to=sid)
+                if sid is None:
+                    # 廣播到所有客戶端
+                    socketio.emit(event, data)
+                else:
+                    # 發送到特定會話
+                    socketio.emit(event, data, to=sid)
         except Exception as e:
             print(f"[LISTENER] Error: {e}")
 
@@ -546,23 +552,19 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
 
                 print(f"[WORKER] DEBUG: sid={sid}, audio_file={audio_file}, subtitle_path={subtitle_path}, summary_path={summary_path}")
 
-                if not (sid and audio_file and subtitle_path and summary_path):
+                if not (audio_file and subtitle_path and summary_path):
                     print("[WORKER] DEBUG: 任務資料不完整，跳過")
                     continue
 
                 # 設定目前任務
                 with task_lock:
-                    current_task_sid = sid
+                    current_task_sid = sid or "broadcast_task"
 
-                worker_emit('update_log', {'log': "工作程序已接收音訊檔案任務...", 'type': 'info'}, sid)
+                worker_emit('update_log', {'log': "🔄 工作程序已接收音訊檔案任務...", 'type': 'info'}, sid)
                 worker_update_state(True, f"處理音訊檔案: {Path(audio_file).name[:40]}...")
 
                 try:
-                    # 檢查是否被取消
-                    with task_lock:
-                        if current_task_sid != sid:
-                            worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
-                            continue
+                    # 對於上傳檔案任務，不檢查取消狀態（因為是獨立進程）
 
                     # 檢查音檔是否存在
                     if not Path(audio_file).exists():
@@ -573,11 +575,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     file_size = Path(audio_file).stat().st_size
                     worker_emit('update_log', {'log': f"📊 音檔大小: {file_size / (1024*1024):.1f} MB", 'type': 'info'}, sid)
 
-                    # 檢查是否被取消
-                    with task_lock:
-                        if current_task_sid != sid:
-                            worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
-                            continue
+                    # 上傳檔案任務不檢查取消狀態
 
                     worker_emit('update_log', {'log': "🎤 語音辨識中...", 'type': 'info'}, sid)
 
@@ -641,11 +639,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     worker_emit('update_log', {'log': "📝 字幕已儲存", 'type': 'info'}, sid)
 
                     if client and srt_content:
-                        # 檢查是否被取消
-                        with task_lock:
-                            if current_task_sid != sid:
-                                worker_emit('update_log', {'log': "🛑 任務已被取消", 'type': 'info'}, sid)
-                                continue
+                        # 上傳檔案任務不檢查取消狀態
 
                         worker_emit('update_log', {'log': "▶️ AI 摘要中...", 'type': 'info'}, sid)
                         prompt = "請將以下字幕內容的每一個細節都做條列式的摘要整理：\n" + srt_content
@@ -688,7 +682,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                 finally:
                     # 清除目前任務
                     with task_lock:
-                        if current_task_sid == sid:
+                        if current_task_sid == (sid or "broadcast_task"):
                             current_task_sid = None
 
                     worker_update_state(False, "空閒")
@@ -745,8 +739,10 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         worker_emit('update_video_info', video_info, sid)
                         # ------------------------------------
 
-                        today_str = datetime.now().strftime('%Y.%m.%d')
-                        base_fn = f"{today_str} - {sanitize_filename(info.get('uploader'),30)}-{sanitize_filename(info.get('title'),50)}"
+                        date_str = datetime.now().strftime('%Y.%m.%d')
+                        uploader = sanitize_filename(info.get('uploader', '未知頻道'), 30)
+                        title = sanitize_filename(info.get('title', '未知標題'), 50)
+                        base_fn = f"{date_str} - {uploader}-{title}"
                         subtitle_path = SUBTITLE_FOLDER / f"{base_fn}.srt"; summary_path = SUMMARY_FOLDER / f"{base_fn}.txt"
 
                         if summary_path.exists():
@@ -1045,7 +1041,75 @@ def show_summary(filename):
         return "檔案路徑無效", 400
 
     content = safe_path.read_text(encoding='utf-8')
-    return render_template('summary_detail.html', title=safe_path.stem, content=content)
+
+    # 檢查對應的字幕檔案是否存在
+    subtitle_filename = safe_path.stem + '.srt'
+    subtitle_path = SUBTITLE_FOLDER / subtitle_filename
+    has_subtitle = subtitle_path.exists()
+
+    return render_template('summary_detail.html',
+                         title=safe_path.stem,
+                         content=content,
+                         filename=safe_path.name,
+                         has_subtitle=has_subtitle)
+
+@app.route('/download/summary/<filename>')
+def download_summary(filename):
+    """下載摘要檔案"""
+    try:
+        # URL解碼檔案名稱
+        from urllib.parse import unquote
+        filename = unquote(filename)
+
+        # 安全路徑檢查
+        safe_path = (SUMMARY_FOLDER / filename).resolve()
+        SUMMARY_FOLDER_RESOLVED = SUMMARY_FOLDER.resolve()
+
+        if not str(safe_path).startswith(str(SUMMARY_FOLDER_RESOLVED)):
+            return "檔案路徑無效", 400
+
+        if not safe_path.exists():
+            return "檔案不存在", 404
+
+        if safe_path.suffix.lower() != '.txt':
+            return "檔案類型不支援", 400
+
+        return send_file(safe_path, as_attachment=True, download_name=filename)
+
+    except Exception as e:
+        return f"下載失敗: {str(e)}", 500
+
+@app.route('/download/subtitle/<filename>')
+def download_subtitle(filename):
+    """下載字幕檔案"""
+    try:
+        # URL解碼檔案名稱
+        from urllib.parse import unquote
+        filename = unquote(filename)
+
+        # 將 .txt 副檔名改為 .srt
+        if filename.endswith('.txt'):
+            filename = filename[:-4] + '.srt'
+        elif not filename.endswith('.srt'):
+            filename += '.srt'
+
+        # 安全路徑檢查
+        safe_path = (SUBTITLE_FOLDER / filename).resolve()
+        SUBTITLE_FOLDER_RESOLVED = SUBTITLE_FOLDER.resolve()
+
+        if not str(safe_path).startswith(str(SUBTITLE_FOLDER_RESOLVED)):
+            return "檔案路徑無效", 400
+
+        if not safe_path.exists():
+            return "字幕檔案不存在", 404
+
+        if safe_path.suffix.lower() != '.srt':
+            return "檔案類型不支援", 400
+
+        return send_file(safe_path, as_attachment=True, download_name=filename)
+
+    except Exception as e:
+        return f"下載失敗: {str(e)}", 500
 
 @app.route('/trash')
 def trash_page():
@@ -1612,6 +1676,40 @@ def api_get_config_status():
             'message': f'獲取配置狀態失敗: {str(e)}'
         }), 500
 
+@app.route('/api/verify_access_code', methods=['POST'])
+def api_verify_access_code():
+    """API: 驗證通行碼"""
+    try:
+        # 獲取通行碼參數
+        access_code = request.form.get('access_code', '').strip()
+
+        # 檢查系統是否設定了通行碼
+        system_access_code = get_config("ACCESS_CODE")
+
+        if not system_access_code:
+            # 系統沒有設定通行碼，直接通過
+            return jsonify({
+                'success': True,
+                'message': '系統未設定通行碼，無需驗證'
+            })
+
+        if access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        return jsonify({
+            'success': True,
+            'message': '通行碼驗證成功'
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'驗證通行碼時發生錯誤：{str(e)}'
+        }), 500
+
 @app.route('/api/upload_subtitle', methods=['POST'])
 def api_upload_subtitle():
     """API: 上傳字幕檔案到 summaries 目錄"""
@@ -1697,6 +1795,124 @@ def api_upload_subtitle():
             'message': f'上傳檔案時發生錯誤：{str(e)}'
         }), 500
 
+@app.route('/api/upload_media', methods=['POST'])
+def api_upload_media():
+    """API: 上傳影音檔案並開始處理"""
+    try:
+        # 檢查是否有檔案上傳
+        if 'media_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'message': '沒有選擇檔案'
+            }), 400
+
+        file = request.files['media_file']
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'message': '沒有選擇檔案'
+            }), 400
+
+        # 獲取通行碼參數
+        access_code = request.form.get('access_code', '').strip()
+
+        # 從檔案名稱自動提取標題
+        title = os.path.splitext(file.filename)[0] if file.filename else ""
+
+        # 檢查通行碼
+        system_access_code = get_config("ACCESS_CODE")
+        if system_access_code and access_code != system_access_code:
+            return jsonify({
+                'success': False,
+                'message': '通行碼錯誤'
+            }), 401
+
+        # 檢查檔案大小 (500MB 限制)
+        file.seek(0, 2)  # 移動到檔案末尾
+        file_size = file.tell()
+        file.seek(0)  # 回到檔案開頭
+
+        max_size = 500 * 1024 * 1024  # 500MB
+        if file_size > max_size:
+            return jsonify({
+                'success': False,
+                'message': f'檔案過大，最大限制 500MB，目前檔案 {file_size / (1024*1024):.1f}MB'
+            }), 413
+
+        # 檢查檔案格式
+        allowed_extensions = {
+            '.mp3', '.mp4', '.wav', '.m4a', '.flv', '.avi', '.mov',
+            '.mkv', '.webm', '.ogg', '.aac', '.wma', '.wmv', '.3gp'
+        }
+
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in allowed_extensions:
+            return jsonify({
+                'success': False,
+                'message': f'不支援的檔案格式：{file_ext}。支援格式：{", ".join(sorted(allowed_extensions))}'
+            }), 400
+
+        # 檢查伺服器狀態
+        with state_lock:
+            is_busy = SERVER_STATE['is_busy']
+            current_task = SERVER_STATE['current_task']
+
+        if is_busy:
+            return jsonify({
+                'success': False,
+                'message': f'伺服器忙碌中：{current_task}'
+            }), 409
+
+        # 生成安全的檔案名稱
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        safe_title = sanitize_filename(title) if title else "未命名"
+        task_id = str(uuid.uuid4())[:8]
+
+        # 保持原始副檔名
+        safe_filename = f"{timestamp}_{task_id}_{safe_title}{file_ext}"
+
+        # 確保上傳目錄存在
+        UPLOAD_FOLDER.mkdir(exist_ok=True)
+
+        # 儲存檔案
+        file_path = UPLOAD_FOLDER / safe_filename
+        file.save(str(file_path))
+
+        # 生成字幕和摘要檔案路徑（使用點號格式）
+        date_str = datetime.now().strftime('%Y.%m.%d')
+        base_name = f"{date_str} - {safe_title}"
+        subtitle_path = SUBTITLE_FOLDER / f"{base_name}.srt"
+        summary_path = SUMMARY_FOLDER / f"{base_name}.txt"
+
+        # 使用廣播模式，讓所有客戶端都能收到事件
+        sid = None  # None 表示廣播到所有客戶端
+
+        # 將任務加入佇列
+        task_queue.put({
+            'task_type': 'audio_file',
+            'sid': sid,
+            'audio_file': str(file_path),
+            'subtitle_path': str(subtitle_path),
+            'summary_path': str(summary_path),
+            'title': title or safe_title
+        })
+
+        return jsonify({
+            'success': True,
+            'message': '檔案上傳成功，開始處理',
+            'task_id': task_id,
+            'filename': safe_filename,
+            'title': title or safe_title,
+            'file_size': file_size,
+            'session_id': sid
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': f'上傳檔案時發生錯誤：{str(e)}'
+        }), 500
+
 # --- Main Execution ---
 if __name__ == '__main__':
     # 檢查系統配置並顯示警告
@@ -1719,7 +1935,7 @@ if __name__ == '__main__':
 
     print("🚀 繼續啟動系統...")
 
-    for folder in [DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER, LOG_FOLDER, TRASH_FOLDER]:
+    for folder in [DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER, LOG_FOLDER, TRASH_FOLDER, UPLOAD_FOLDER]:
         folder.mkdir(exist_ok=True)
 
     # 建立回收桶子資料夾
