@@ -185,7 +185,8 @@ class TaskQueue:
             return None
 
     def update_task_status(self, task_id: str, status: TaskStatus, progress: Optional[int] = None,
-                          result: Optional[dict] = None, error_message: Optional[str] = None):
+                          result: Optional[dict] = None, error_message: Optional[str] = None,
+                          log_message: Optional[str] = None, data_update: Optional[dict] = None):
         """更新任務狀態"""
         with self._lock:
             task = self._tasks.get(task_id)
@@ -199,22 +200,52 @@ class TaskQueue:
                 task.result.update(result)
             if error_message is not None:
                 task.error_message = error_message
+            if data_update is not None:
+                task.data.update(data_update)
 
             if status in [TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED]:
                 task.completed_at = datetime.now()
+
+            # 如果有日誌訊息，嘗試發送到前端
+            if log_message:
+                self._emit_log_message(task_id, log_message)
 
             # 儲存更新
             self._save_task(task)
 
             return True
 
+    def _emit_log_message(self, task_id: str, message: str):
+        """發送日誌訊息到前端"""
+        try:
+            # 嘗試多種方式發送到前端
+            from utils import get_timestamp
+            timestamp = get_timestamp("time")
+            formatted_message = f"[{timestamp}] {message}"
+
+            # 使用統一的 SocketIO 實例發送日誌
+            try:
+                from socketio_instance import emit_log
+                emit_log(message, 'info', task_id)
+                print(f"[TASK-{task_id[:8]}] 日誌已發送到前端: {message}")
+                return
+            except Exception as e:
+                print(f"[TASK-{task_id[:8]}] 發送日誌失敗: {e}")
+
+            # 所有方法都失敗，至少在終端輸出
+            print(f"[TASK-{task_id[:8]}] {message}")
+
+        except Exception as e:
+            # 確保至少在終端輸出
+            print(f"[TASK-{task_id[:8]}] {message}")
+            print(f"Error emitting log message: {e}")
+
     def cancel_task(self, task_id: str, access_code: Optional[str] = None) -> tuple[bool, str]:
         """取消任務"""
         # 這裡可以加入通行碼驗證邏輯
         if access_code:
-            from app import get_config  # 動態導入避免循環依賴
-            system_access_code = get_config("ACCESS_CODE")
-            if system_access_code and access_code != system_access_code:
+            from utils import validate_access_code
+            if not validate_access_code(access_code):
                 return False, "通行碼錯誤"
 
         with self._lock:

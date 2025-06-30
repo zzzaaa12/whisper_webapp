@@ -13,12 +13,26 @@ import json
 import uuid
 
 from flask import Flask, render_template, request, jsonify, send_file
-from flask_socketio import SocketIO, emit
+from flask_socketio import emit
 from dotenv import load_dotenv
 import requests
 
+# 導入 SocketIO 實例管理
+from socketio_instance import init_socketio
+
 # 導入任務佇列系統
 from task_queue import get_task_queue, TaskStatus
+
+# 統一工具函數導入
+from utils import (
+    sanitize_filename as utils_sanitize_filename,
+    segments_to_srt as utils_segments_to_srt,
+    get_timestamp as utils_get_timestamp,
+    send_telegram_notification as utils_send_telegram_notification,
+    validate_access_code as utils_validate_access_code,
+    file_ops
+)
+from whisper_manager import get_whisper_manager, transcribe_audio
 
 # --- Initialization ---
 # 讀取 config.json 設定檔
@@ -35,7 +49,9 @@ def get_config(key, default=None):
 load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
-socketio = SocketIO(app, async_mode='threading')
+
+# 初始化 SocketIO 實例
+socketio = init_socketio(app)
 
 # 安全性增強：設定安全標頭
 @app.after_request
@@ -72,7 +88,7 @@ def save_log_entry(sid, message, level='info'):
     """將日誌條目儲存到檔案"""
     try:
         log_file = LOG_FOLDER / f"session_{sid}.log"
-        timestamp = datetime.now().strftime('%m/%d %H:%M:%S')
+        timestamp = utils_get_timestamp("log")
         log_entry = f"[{timestamp}] {message}\n"
 
         with open(log_file, 'a', encoding='utf-8') as f:
@@ -242,7 +258,7 @@ def get_gpu_status():
                 'device': device,
                 'device_name': device_name,
                 'cuda_available': cuda_available,
-                'last_updated': current_time.strftime('%Y-%m-%d %H:%M:%S')
+                'last_updated': utils_get_timestamp("default")
             })
 
             return gpu_status.copy()
@@ -278,73 +294,9 @@ def update_server_state(is_busy, task_description):
         socketio.emit('server_status_update', SERVER_STATE)
     print(f"Server state updated: {SERVER_STATE}")
 
-def sanitize_filename(filename, max_length=80):
-    """清理字符串以成為有效的檔案名稱，處理中文和特殊字元"""
-    if not filename:
-        return "unknown"
+# sanitize_filename 函數已移至 utils.py
 
-    # 保存原始檔名用於 debug
-    original = filename
-
-    # 1. 移除 Windows 禁用字元
-    filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename)
-
-    # 2. 移除常見特殊符號（但保留中文、數字、字母）
-    filename = re.sub(r'[\[\]{}()!@#$%^&+=~`]', '_', filename)
-
-    # 3. 移除表情符號和其他 Unicode 符號（保留中文字元）
-    # 保留：中文字元(CJK)、字母、數字、空格、連字符、底線、點
-    filename = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\w\s\-_.]', '_', filename, flags=re.UNICODE)
-
-    # 4. 處理多重空格
-    filename = re.sub(r'\s+', '_', filename)
-
-    # 5. 處理多重底線
-    filename = re.sub(r'_+', '_', filename)
-
-    # 6. 移除開頭和結尾的特殊字元
-    filename = filename.strip('._')
-
-    # 7. 長度處理（考慮中文字元）
-    if len(filename.encode('utf-8')) > max_length * 2:  # 中文字元約佔 2-3 bytes
-        if max_length > 20:
-            # 智能截斷：保留前 60% 和後面部分
-            keep_start = int(max_length * 0.6)
-            keep_end = max_length - keep_start - 3
-
-            # 確保不會在中文字元中間截斷
-            safe_start = filename[:keep_start].encode('utf-8')[:keep_start*2].decode('utf-8', errors='ignore')
-            safe_end = filename[-keep_end:].encode('utf-8')[-keep_end*2:].decode('utf-8', errors='ignore') if keep_end > 0 else ""
-
-            filename = safe_start + "..." + safe_end
-        else:
-            # 簡單截斷
-            filename = filename.encode('utf-8')[:max_length].decode('utf-8', errors='ignore')
-
-    # 8. 最終檢查
-    result = filename if filename else "unknown"
-
-    # Debug 輸出（僅在有變化時）
-    if result != original:
-        print(f"[SANITIZE] '{original}' -> '{result}'")
-
-    return result
-
-def whisper_segments_to_srt(segments):
-    """Converts whisper segments to an SRT formatted string."""
-    def format_timestamp(seconds):
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
-        millis = int((seconds - int(seconds)) * 1000)
-        return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
-    srt_lines = []
-    for idx, segment in enumerate(segments, 1):
-        start = format_timestamp(segment.start)
-        end = format_timestamp(segment.end)
-        text = segment.text.strip()
-        srt_lines.append(f"{idx}\n{start} --> {end}\n{text}\n")
-    return "\n".join(srt_lines)
+# whisper_segments_to_srt 函數已移至 utils.py (統一為 segments_to_srt)
 
 def queue_listener(res_queue):
     """Listens for messages from worker and emits them via SocketIO."""
@@ -422,63 +374,22 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
     import faster_whisper, torch, yt_dlp, openai, re
     from pathlib import Path
 
+    # send_telegram_notification 已移至 utils.py
     def send_telegram_notification(message):
-        bot_token = get_config('TELEGRAM_BOT_TOKEN')
-        chat_id = get_config('TELEGRAM_CHAT_ID')
-        if not bot_token or not chat_id:
-            print("[WORKER] Telegram credentials not set. Skipping notification.")
-            return
-
-        api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
-            'chat_id': chat_id,
-            'text': message,
-            'parse_mode': 'Markdown'
-        }
-        try:
-            response = requests.post(api_url, data=payload, timeout=5)
-            if response.status_code != 200:
-                print(f"[WORKER] Error sending Telegram message: {response.text}")
-        except Exception as e:
-            print(f"[WORKER] Exception while sending Telegram message: {e}")
+        return utils_send_telegram_notification(message)
 
     DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER = Path(download_p), Path(summary_p), Path(subtitle_p)
                     # OpenAI 客戶端已移除，改用統一的 ai_summary_service
 
     def worker_emit(event, data, sid): result_q.put({'event': event, 'data': data, 'sid': sid})
     def worker_update_state(is_busy, task_desc): result_q.put({'event': 'update_server_state', 'data': {'is_busy': is_busy, 'current_task': task_desc}})
+
+    # 使用統一的工具函數
     def sanitize_filename(f, ml=80):
-        """Worker 中的檔案名稱清理函數（與主程式保持一致）"""
-        if not f: return "unknown"
+        return utils_sanitize_filename(f, ml)
 
-        # 使用與主程式相同的清理邏輯
-        # 1. 移除 Windows 禁用字元
-        f = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', f)
-
-        # 2. 移除常見特殊符號
-        f = re.sub(r'[\[\]{}()!@#$%^&+=~`]', '_', f)
-
-        # 3. 移除表情符號和其他 Unicode 符號（保留中文字元）
-        f = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\w\s\-_.]', '_', f, flags=re.UNICODE)
-
-        # 4. 處理多重空格和底線
-        f = re.sub(r'\s+', '_', f)
-        f = re.sub(r'_+', '_', f)
-
-        # 5. 移除開頭和結尾的特殊字元
-        f = f.strip('._')
-
-        # 6. 長度限制（簡化版）
-        if len(f.encode('utf-8')) > ml * 2:
-            f = f.encode('utf-8')[:ml].decode('utf-8', errors='ignore')
-
-        return f if f else "unknown"
     def segments_to_srt(segs):
-        def fmt_ts(s):
-            h, r = divmod(s, 3600)
-            m, s = divmod(r, 60)
-            return f"{int(h):02}:{int(m):02}:{int(s):02},{int((s-int(s))*1000):03}"
-        return "\n".join(f"{i}\n{fmt_ts(s.start)} --> {fmt_ts(s.end)}\n{s.text.strip()}\n" for i, s in enumerate(segs, 1))
+        return utils_segments_to_srt(segs)
 
     model = None
     try:
@@ -509,7 +420,7 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
             'device': device,
             'device_name': torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU',
             'cuda_available': device == 'cuda',
-            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'last_updated': utils_get_timestamp("default")
         }
 
         # 廣播 GPU 狀態更新
@@ -714,7 +625,12 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                     url_type = detect_url_type(url)
                     if url_type == 'youtube':
                         # 使用現有的 YouTube 處理邏輯
-                        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl: info = ydl.extract_info(url, download=False)
+                        with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                            info = ydl.extract_info(url, download=False)
+
+                        if not info:
+                            worker_emit('update_log', {'log': "❌ 無法獲取影片資訊", 'type': 'error'}, sid)
+                            continue
 
                         # --- Send Telegram Notification ---
                         tg_message = (
@@ -742,9 +658,9 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                         worker_emit('update_video_info', video_info, sid)
                         # ------------------------------------
 
-                        date_str = datetime.now().strftime('%Y.%m.%d')
-                        uploader = sanitize_filename(info.get('uploader', '未知頻道'), 30)
-                        title = sanitize_filename(info.get('title', '未知標題'), 50)
+                        date_str = utils_get_timestamp("date")
+                        uploader = utils_sanitize_filename(info.get('uploader', '未知頻道'), 30)
+                        title = utils_sanitize_filename(info.get('title', '未知標題'), 50)
                         base_fn = f"{date_str} - {uploader}-{title}"
                         subtitle_path = SUBTITLE_FOLDER / f"{base_fn}.srt"; summary_path = SUMMARY_FOLDER / f"{base_fn}.txt"
 
@@ -893,8 +809,6 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
                                 worker_emit('update_log', {'log': f"⚠️ 刪除音檔時發生錯誤: {e}", 'type': 'warning'}, sid)
                     else:
                         # 檢測 URL 類型並處理其他平台
-                        import re
-
                         worker_emit('update_log', {'log': f"❌ 不支援的 URL 類型，目前只支援 YouTube", 'type': 'error'}, sid)
                 except Exception as e:
                     worker_emit('update_log', {'log': f"❌ 處理時發生錯誤: {e}", 'type': 'error'}, sid)
@@ -995,10 +909,14 @@ def handle_start_processing(data):
     task_queue_manager = get_task_queue()
 
     try:
+        # 記錄收到的請求
+        url = data.get('audio_url')
+        log_and_emit(f"收到請求，準備處理網址: {url}", 'info', sid)
+
         # 添加任務到佇列 (使用字符串而不是枚舉)
         task_id = task_queue_manager.add_task(
             task_type='youtube',
-            data={'url': data.get('audio_url')},
+            data={'url': url},
             user_ip=client_ip,
             priority=5  # 默認優先級
         )
@@ -1008,10 +926,8 @@ def handle_start_processing(data):
 
         if queue_position > 1:
             log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}", 'warning', sid)
-            log_and_emit('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info', sid)
         else:
             log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}', 'success', sid)
-            log_and_emit('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info', sid)
 
     except Exception as e:
         log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
@@ -1354,7 +1270,6 @@ def api_process_youtube():
             }), 401
 
         # 加強 URL 驗證
-        import re
         youtube_pattern = r'^https?://(www\.)?(youtube\.com|youtu\.be)/.+'
         if not re.match(youtube_pattern, youtube_url, re.IGNORECASE):
             return jsonify({
@@ -1375,10 +1290,30 @@ def api_process_youtube():
         user_ip = get_client_ip()
         queue_manager = get_task_queue()
 
-        # 準備任務資料
+        # 準備任務資料，嘗試提取影片ID以改善顯示
         task_data = {
             'url': youtube_url
         }
+
+        # 嘗試從URL提取影片ID
+        try:
+            from urllib.parse import urlparse, parse_qs
+            parsed_url = urlparse(youtube_url)
+
+            if 'youtube.com' in parsed_url.netloc:
+                video_id = parse_qs(parsed_url.query).get('v', [None])[0]
+                if video_id:
+                    task_data['video_id'] = video_id
+                    task_data['display_name'] = f"YouTube 影片 ({video_id})"
+            elif 'youtu.be' in parsed_url.netloc:
+                video_id = parsed_url.path.lstrip('/')
+                if video_id:
+                    task_data['video_id'] = video_id
+                    task_data['display_name'] = f"YouTube 影片 ({video_id})"
+        except Exception as e:
+            print(f"無法解析YouTube URL: {e}")
+            # 如果解析失敗，使用預設顯示名稱
+            task_data['display_name'] = "YouTube 影片"
 
         # 將任務加入佇列
         queue_task_id = queue_manager.add_task('youtube', task_data, priority=5, user_ip=user_ip)
@@ -1472,9 +1407,9 @@ def move_file_to_trash(file_path, file_type):
         trash_subfolder.mkdir(parents=True, exist_ok=True)
 
         # 生成唯一檔名
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = utils_get_timestamp("file")
         unique_id = str(uuid.uuid4())[:8]
-        safe_name = sanitize_filename(file_path.name)
+        safe_name = utils_sanitize_filename(file_path.name)
         new_filename = f"{timestamp}_{unique_id}_{safe_name}"
         trash_path = trash_subfolder / new_filename
 
@@ -1521,16 +1456,16 @@ def restore_file_from_trash(trash_id):
 
         # 決定還原位置
         if record['file_type'] == 'summary':
-            restore_path = SUMMARY_FOLDER / sanitize_filename(record['original_name'])
+            restore_path = SUMMARY_FOLDER / utils_sanitize_filename(record['original_name'])
         elif record['file_type'] == 'subtitle':
-            restore_path = SUBTITLE_FOLDER / sanitize_filename(record['original_name'])
+            restore_path = SUBTITLE_FOLDER / utils_sanitize_filename(record['original_name'])
         else:
             return False, "不支援的檔案類型"
 
         # 檢查目標位置是否已有檔案
         if restore_path.exists():
             # 如果檔案已存在，添加時間戳
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            timestamp = utils_get_timestamp("file")
             name_parts = restore_path.stem, restore_path.suffix
             restore_path = restore_path.parent / f"{name_parts[0]}_{timestamp}{name_parts[1]}"
 
@@ -1882,8 +1817,8 @@ def api_upload_media():
         # 伺服器忙碌時也可以接受任務，將加入佇列等待處理
 
         # 生成安全的檔案名稱
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        safe_title = sanitize_filename(title) if title else "未命名"
+        timestamp = utils_get_timestamp("file")
+        safe_title = utils_sanitize_filename(title) if title else "未命名"
         task_id = str(uuid.uuid4())[:8]
 
         # 保持原始副檔名
@@ -1897,7 +1832,7 @@ def api_upload_media():
         file.save(str(file_path))
 
         # 生成字幕和摘要檔案路徑（使用點號格式）
-        date_str = datetime.now().strftime('%Y.%m.%d')
+        date_str = utils_get_timestamp("date")
         base_name = f"{date_str} - {safe_title}"
         subtitle_path = SUBTITLE_FOLDER / f"{base_name}.srt"
         summary_path = SUMMARY_FOLDER / f"{base_name}.txt"

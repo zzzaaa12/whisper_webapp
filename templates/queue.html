@@ -497,41 +497,79 @@
         function getTaskDisplayName(task) {
             // 優先顯示結果中的影片標題或檔案名稱
             if (task.result && task.result.video_title) {
-                return task.result.video_title;
+                return `📺 ${task.result.video_title}`;
             }
 
-            // 其次顯示任務資料中的標題或檔案名稱
+            // 其次顯示任務資料中的標題（worker處理時會更新此欄位）
             if (task.data) {
                 if (task.data.title && task.data.title.trim()) {
+                    // 如果是YouTube任務，加上圖示
+                    if (task.task_type === 'youtube') {
+                        return `📺 ${task.data.title}`;
+                    }
                     return task.data.title;
                 }
 
-                // 對於YouTube任務，從URL提取簡化顯示
+                // 顯示預設的display_name（創建任務時設定）
+                if (task.data.display_name) {
+                    return `📺 ${task.data.display_name}`;
+                }
+
+                // 顯示頻道資訊（如果有的話）
+                if (task.data.uploader && task.task_type === 'youtube') {
+                    return `📺 YouTube 影片 (${task.data.uploader})`;
+                }
+
+                // 對於YouTube任務，嘗試從URL提取影片ID並顯示
                 if (task.task_type === 'youtube' && task.data.url) {
                     try {
                         const url = new URL(task.data.url);
-                        if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
-                            return 'YouTube 影片';
+                        let videoId = '';
+
+                        // 從不同的YouTube URL格式提取影片ID
+                        if (url.hostname.includes('youtube.com')) {
+                            videoId = url.searchParams.get('v');
+                        } else if (url.hostname.includes('youtu.be')) {
+                            videoId = url.pathname.substring(1);
                         }
-                        return url.hostname;
+
+                        if (videoId) {
+                            return `📺 YouTube 影片 (${videoId})`;
+                        } else {
+                            return '📺 YouTube 影片';
+                        }
                     } catch (e) {
-                        return task.data.url.substring(0, 50) + '...';
+                        return '📺 YouTube 影片';
                     }
                 }
 
                 // 對於檔案上傳任務，顯示檔案名稱
                 if (task.data.filename) {
-                    return task.data.filename;
+                    return `🎵 ${task.data.filename}`;
                 }
 
                 // 如果有檔案路徑，提取檔案名稱
                 if (task.data.audio_file) {
                     const filename = task.data.audio_file.split(/[\\\/]/).pop();
-                    return filename;
+                    return `🎵 ${filename}`;
+                }
+
+                // 顯示原始檔案名稱（上傳任務）
+                if (task.data.original_filename) {
+                    return `🎵 ${task.data.original_filename}`;
                 }
             }
 
-            return null;
+            // 根據任務類型返回預設顯示
+            if (task.task_type === 'youtube') {
+                return '📺 YouTube 影片';
+            } else if (task.task_type === 'upload_media') {
+                return '🎵 上傳音訊檔案';
+            } else if (task.task_type === 'upload_subtitle') {
+                return '📝 上傳字幕檔案';
+            }
+
+            return '📋 處理任務';
         }
 
         // 顯示任務詳情

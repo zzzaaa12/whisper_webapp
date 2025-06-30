@@ -7,6 +7,7 @@
     <title>Whisper 語音轉文字工具</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
     <link href="{{ url_for('static', filename='css/theme.css') }}" rel="stylesheet">
     <style>
         /* Default (Desktop) Styles */
@@ -164,6 +165,17 @@
             opacity: 1;
         }
 
+        /* 佇列狀態卡片樣式 */
+        @media (max-width: 767.98px) {
+            #queue-status-card .row.text-center > div {
+                margin-bottom: 1rem;
+            }
+
+            #queue-status-card .row.text-center > div:last-child {
+                margin-bottom: 0;
+            }
+        }
+
         /* 按鈕容器響應式樣式 */
         .btn-container {
             display: flex;
@@ -311,6 +323,57 @@
                 </div>
             </div>
 
+            <!-- 佇列狀態總覽 -->
+            <div class="card mt-4" id="queue-status-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>佇列狀態總覽</span>
+                    <div>
+                        <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="refreshQueueStatus()" title="重新整理佇列狀態">
+                            重新整理
+                        </button>
+                        <a href="/queue" class="btn btn-outline-secondary btn-sm" title="查看詳細佇列">
+                            詳細佇列
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row text-center">
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-total-tasks" class="mb-1 fw-bold">-</h6>
+                            <small class="text-muted">總任務</small>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-queued-tasks" class="mb-1 fw-bold text-warning">-</h6>
+                            <small class="text-muted">排隊中</small>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-processing-tasks" class="mb-1 fw-bold text-info">-</h6>
+                            <small class="text-muted">處理中</small>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-completed-tasks" class="mb-1 fw-bold text-success">-</h6>
+                            <small class="text-muted">已完成</small>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-failed-tasks" class="mb-1 fw-bold text-danger">-</h6>
+                            <small class="text-muted">失敗</small>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <h6 id="index-cancelled-tasks" class="mb-1 fw-bold text-secondary">-</h6>
+                            <small class="text-muted">已取消</small>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="d-flex align-items-center justify-content-center">
+                                <strong>目前處理：</strong>
+                                <span id="index-current-task" class="ms-2 text-muted">無</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="card mt-4 log-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>操作日誌</span>
@@ -382,9 +445,107 @@
                 });
         }
 
+        // 載入佇列狀態
+        async function loadQueueStatusForIndex() {
+            try {
+                const response = await fetch('/api/queue/status');
+                const result = await response.json();
+
+                if (result.success) {
+                    const status = result.status;
+                    document.getElementById('index-total-tasks').textContent = status.total_tasks || '0';
+                    document.getElementById('index-queued-tasks').textContent = status.queued || '0';
+                    document.getElementById('index-processing-tasks').textContent = status.processing || '0';
+                    document.getElementById('index-completed-tasks').textContent = status.completed || '0';
+                    document.getElementById('index-failed-tasks').textContent = status.failed || '0';
+                    document.getElementById('index-cancelled-tasks').textContent = status.cancelled || '0';
+
+                    const currentTaskSpan = document.getElementById('index-current-task');
+                    if (status.current_task) {
+                        let taskInfo = '';
+                        if (status.current_task.task_type === 'youtube') {
+                            taskInfo = 'YouTube 影片';
+                        } else if (status.current_task.task_type === 'upload_media') {
+                            taskInfo = '音訊檔案';
+                        } else {
+                            taskInfo = status.current_task.task_type;
+                        }
+                        taskInfo += ` (${status.current_task.task_id.substring(0, 8)})`;
+                        currentTaskSpan.textContent = taskInfo;
+                        currentTaskSpan.className = 'ms-2 text-primary';
+                    } else {
+                        currentTaskSpan.textContent = '無';
+                        currentTaskSpan.className = 'ms-2 text-muted';
+                    }
+
+                    // 更新最後更新時間
+                    updateQueueStatusTime();
+                } else {
+                    console.error('載入佇列狀態失敗:', result.message);
+                    // 顯示錯誤狀態
+                    ['index-total-tasks', 'index-queued-tasks', 'index-processing-tasks',
+                     'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
+                        document.getElementById(id).textContent = '?';
+                    });
+                    document.getElementById('index-current-task').textContent = '載入失敗';
+                }
+            } catch (error) {
+                console.error('載入佇列狀態失敗:', error);
+                // 顯示錯誤狀態
+                ['index-total-tasks', 'index-queued-tasks', 'index-processing-tasks',
+                 'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
+                    document.getElementById(id).textContent = '?';
+                });
+                document.getElementById('index-current-task').textContent = '連線錯誤';
+            }
+        }
+
+        // 手動重新整理佇列狀態
+        function refreshQueueStatus() {
+            loadQueueStatusForIndex();
+        }
+
+        // 更新最後更新時間顯示
+        function updateQueueStatusTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-TW', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+
+            // 可以在這裡添加時間顯示，目前先保持簡潔
+        }
+
+        // 設定佇列狀態自動更新
+        let queueStatusInterval = null;
+
+        function startQueueStatusAutoUpdate() {
+            // 立即載入一次
+            loadQueueStatusForIndex();
+
+            // 每10秒自動更新
+            queueStatusInterval = setInterval(loadQueueStatusForIndex, 10000);
+        }
+
+        function stopQueueStatusAutoUpdate() {
+            if (queueStatusInterval) {
+                clearInterval(queueStatusInterval);
+                queueStatusInterval = null;
+            }
+        }
+
         // 頁面載入完成時檢查配置
         document.addEventListener('DOMContentLoaded', function() {
             checkSystemConfig();
+            // 啟動佇列狀態自動更新
+            startQueueStatusAutoUpdate();
+        });
+
+        // 頁面即將關閉時停止自動更新
+        window.addEventListener('beforeunload', function() {
+            stopQueueStatusAutoUpdate();
         });
     </script>
 </body>

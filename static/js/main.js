@@ -121,6 +121,12 @@ document.addEventListener('DOMContentLoaded', () => {
         appendLog(cleanMessage, data.type);
     });
 
+    // 監聽任務日誌事件（從worker傳來的日誌）
+    socket.on('task_log', (data) => {
+        const cleanMessage = data.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        appendLog(cleanMessage, 'info');
+    });
+
     socket.on('update_video_info', (data) => {
         videoTitle.textContent = data.title;
         videoUploader.textContent = data.uploader;
@@ -203,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         videoInfoCard.style.display = 'none';
-        appendLog(`收到請求，準備處理網址: ${url}`);
 
         socket.emit('start_processing', {
             'audio_url': url,
@@ -436,6 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // 清空表單
             uploadForm.reset();
+        }
+    });
+
+    // 監聽任務日誌事件（用於顯示YouTube影片標題等）
+    socket.on('task_log', (data) => {
+        if (data.message) {
+            appendLog(`[${data.timestamp}] ${data.message}`, 'info');
         }
     });
 

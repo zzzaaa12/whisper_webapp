@@ -18,6 +18,13 @@ from urllib.parse import unquote
 
 from task_queue import get_task_queue, TaskStatus
 
+# 統一工具函數導入
+from utils import (
+    get_config, sanitize_filename, segments_to_srt,
+    send_telegram_notification, get_timestamp
+)
+from whisper_manager import get_whisper_manager, transcribe_audio
+
 
 class QueueWorker:
     """任務佇列工作程式"""
@@ -45,71 +52,39 @@ class QueueWorker:
         self.worker_thread = None
         self.is_running = False
 
-    def _get_config(self, key, default=None):
-        """獲取配置值（與 app.py 中的 get_config 邏輯保持一致）"""
-        # 這裡可以實現配置讀取邏輯，或者直接使用環境變數
-        return os.getenv(key, default)
+    # _get_config 已移除，統一使用 utils.get_config
 
+    # _send_telegram_notification 已移除，統一使用 utils.send_telegram_notification
     def _send_telegram_notification(self, message):
-        """發送 Telegram 通知"""
-        bot_token = self._get_config('TELEGRAM_BOT_TOKEN')
-        chat_id = self._get_config('TELEGRAM_CHAT_ID')
-        if not bot_token or not chat_id:
-            print("[WORKER] Telegram credentials not set. Skipping notification.")
-            return
+        """發送 Telegram 通知 - 使用統一工具"""
+        return send_telegram_notification(message)
 
-        api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        payload = {
-            'chat_id': chat_id,
-            'text': message,
-            'parse_mode': 'Markdown'
-        }
+    def _send_log_to_frontend(self, message, task_id=None):
+        """發送日誌到前端（簡化版本）"""
         try:
-            response = requests.post(api_url, data=payload, timeout=5)
-            if response.status_code != 200:
-                print(f"[WORKER] Error sending Telegram message: {response.text}")
+            # 直接在終端輸出
+            print(f"[WORKER] {message}")
+
+            # 如果有task_id，透過task_queue發送到前端
+            if task_id and self.task_queue:
+                try:
+                    # 使用update_task_status的log_message參數
+                    task_data = self.task_queue.get_task(task_id)
+                    if task_data:
+                        from task_queue import TaskStatus
+                        current_status = TaskStatus(task_data['status'])
+                        self.task_queue.update_task_status(
+                            task_id, current_status, log_message=message
+                        )
+                except Exception as e:
+                    print(f"[WORKER] Failed to send log via task_queue: {e}")
+
         except Exception as e:
-            print(f"[WORKER] Exception while sending Telegram message: {e}")
+            print(f"[WORKER] {message}")
+            print(f"[WORKER] Log error: {e}")
+    # _sanitize_filename 已移除，統一使用 utils.sanitize_filename
 
-    def _sanitize_filename(self, filename, max_length=80):
-        """檔案名稱清理函數（與主程式保持一致）"""
-        if not filename:
-            return "unknown"
-
-        # 使用與主程式相同的清理邏輯
-        # 1. 移除 Windows 禁用字元
-        filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename)
-
-        # 2. 移除常見特殊符號
-        filename = re.sub(r'[\[\]{}()!@#$%^&+=~`]', '_', filename)
-
-        # 3. 移除表情符號和其他 Unicode 符號（保留中文字元）
-        filename = re.sub(r'[^\u4e00-\u9fff\u3400-\u4dbf\w\s\-_.]', '_', filename, flags=re.UNICODE)
-
-        # 4. 處理多重空格和底線
-        filename = re.sub(r'\s+', '_', filename)
-        filename = re.sub(r'_+', '_', filename)
-
-        # 5. 移除開頭和結尾的特殊字元
-        filename = filename.strip('._')
-
-        # 6. 長度限制
-        if len(filename.encode('utf-8')) > max_length * 2:
-            filename = filename.encode('utf-8')[:max_length].decode('utf-8', errors='ignore')
-
-        return filename if filename else "unknown"
-
-    def _segments_to_srt(self, segments):
-        """將 Whisper 片段轉換為 SRT 格式"""
-        def format_timestamp(seconds):
-            hours, remainder = divmod(seconds, 3600)
-            minutes, secs = divmod(remainder, 60)
-            return f"{int(hours):02}:{int(minutes):02}:{int(secs):02},{int((secs-int(secs))*1000):03}"
-
-        return "\n".join(
-            f"{i}\n{format_timestamp(segment.start)} --> {format_timestamp(segment.end)}\n{segment.text.strip()}\n"
-            for i, segment in enumerate(segments, 1)
-        )
+    # _segments_to_srt 已移除，統一使用 utils.segments_to_srt
 
     def _load_model(self):
         """載入 Whisper 模型"""
@@ -172,7 +147,7 @@ class QueueWorker:
             # 獲取摘要服務
             summary_service = get_summary_service(
                 openai_api_key=self.openai_key,
-                config_getter=self._get_config
+                config_getter=get_config
             )
 
             # 生成並儲存摘要
@@ -216,9 +191,53 @@ class QueueWorker:
                 self.yt_dlp = yt_dlp
 
             print(f"[WORKER] Processing YouTube URL: {url}")
+
+            # 先獲取影片資訊（不下載）
+            info_opts = {
+                'quiet': True,
+                'no_warnings': True,
+            }
+
+            try:
+                with self.yt_dlp.YoutubeDL(info_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    video_title = title or info.get('title', 'Unknown')
+                    uploader = info.get('uploader', '未知頻道')
+
+                # 更新任務data並發送到前端日誌
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=5,
+                    data_update={'title': video_title, 'uploader': uploader}
+                )
+
+                # 直接發送影片資訊到前端操作日誌
+                try:
+                    from socketio_instance import emit_log
+
+                    emit_log(f"📺 影片標題: {video_title}", 'info', task_id)
+                    emit_log(f"📡 頻道: {uploader}", 'info', task_id)
+                    print(f"[WORKER] 影片資訊已發送到前端")
+                except Exception as log_error:
+                    print(f"[WORKER] 無法發送日誌到前端: {log_error}")
+
+                # 更新任務進度
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=7
+                )
+                print(f"[WORKER] 📺 影片標題: {video_title}")
+                print(f"[WORKER] 📡 頻道: {uploader}")
+            except Exception as e:
+                print(f"[WORKER] 無法獲取影片資訊: {e}")
+                video_title = title or 'Unknown'
+                uploader = '未知頻道'
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=5,
+                    log_message=f"⚠️ 無法獲取影片資訊，將使用預設標題"
+                )
+
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
-            # 配置 yt-dlp
+            # 配置 yt-dlp 下載
             ydl_opts = {
                 'format': 'best[ext=mp4]/best',
                 'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
@@ -226,9 +245,13 @@ class QueueWorker:
             }
 
             # 下載影片
+            self.task_queue.update_task_status(
+                task_id, TaskStatus.PROCESSING, progress=15,
+                log_message="🔄 開始下載影片..."
+            )
+            print(f"[WORKER] 開始下載影片...")
             with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
-                video_title = title or info.get('title', 'Unknown')
                 filename = ydl.prepare_filename(info)
 
             print(f"[WORKER] Downloaded: {filename}")
@@ -240,8 +263,8 @@ class QueueWorker:
                 raise FileNotFoundError(f"Downloaded file not found: {filename}")
 
             # 生成輸出檔案路徑
-            safe_title = self._sanitize_filename(video_title)
-            date_str = datetime.now().strftime('%Y.%m.%d')
+            safe_title = sanitize_filename(video_title)
+            date_str = get_timestamp("date")
             base_name = f"{date_str} - {safe_title}"
 
             subtitle_path = self.subtitle_folder / f"{base_name}.srt"
@@ -267,8 +290,21 @@ class QueueWorker:
                 task_id, TaskStatus.COMPLETED, progress=100, result=result
             )
 
-            # 發送通知
-            notification_msg = f"✅ YouTube 影片處理完成\n標題: {video_title}\n檔案: {base_name}"
+            # 發送通知（包含摘要內容）
+            notification_msg = f"✅ YouTube 影片處理完成\n標題: {video_title}\n檔案: {base_name}\n🔗 網址: {url}"
+
+            # 如果摘要文件存在，添加摘要內容到通知
+            if summary_path.exists():
+                try:
+                    summary_content = summary_path.read_text(encoding='utf-8')
+                    # 限制摘要長度，避免telegram訊息過長
+                    if len(summary_content) > 3000:
+                        summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
+                    notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
+                except Exception as e:
+                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
+                    notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
+
             self._send_telegram_notification(notification_msg)
 
         except Exception as e:
@@ -316,8 +352,22 @@ class QueueWorker:
                 task_id, TaskStatus.COMPLETED, progress=100, result=result
             )
 
-            # 發送通知
-            notification_msg = f"✅ 音訊檔案處理完成\n檔案: {audio_file.name}"
+            # 發送通知（包含摘要內容）
+            original_title = title if title else audio_file.name
+            notification_msg = f"✅ 音訊檔案處理完成\n檔案: {original_title}\n💾 系統檔案: {audio_file.name}"
+
+            # 如果摘要文件存在，添加摘要內容到通知
+            if summary_path.exists():
+                try:
+                    summary_content = summary_path.read_text(encoding='utf-8')
+                    # 限制摘要長度，避免telegram訊息過長
+                    if len(summary_content) > 3000:
+                        summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
+                    notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
+                except Exception as e:
+                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
+                    notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
+
             self._send_telegram_notification(notification_msg)
 
         except Exception as e:
@@ -350,7 +400,7 @@ class QueueWorker:
             print(f"[WORKER] Transcription completed, {len(segments_list)} segments")
 
             # 生成 SRT 字幕
-            srt_content = self._segments_to_srt(segments_list)
+            srt_content = segments_to_srt(segments_list)
 
             # 確保目錄存在
             subtitle_path.parent.mkdir(exist_ok=True)
@@ -380,7 +430,7 @@ class QueueWorker:
                     vad_filter=True
                 )
                 segments_list = list(segments)
-                srt_content = self._segments_to_srt(segments_list)
+                srt_content = segments_to_srt(segments_list)
 
                 with open(subtitle_path, 'w', encoding='utf-8') as f:
                     f.write(srt_content)
