@@ -42,36 +42,12 @@ Whisper WebApp 是一套專為現代影音內容消化、知識整理與自動�
 - **完整 REST API**：支援所有功能的程式化操作
 - **Python Client**：命令列工具與批次處理
 - **Telegram 通知**（選用）
-- **Docker 容器化部署**
 
 ---
 
 ## 快速開始
 
-### 方法一：Docker 部署（推薦）
-
-1. **下載專案**：
-```bash
-git clone https://github.com/zzzaaa12/whisper_webapp.git
-cd whisper_webapp
-```
-
-2. **設定環境變數**：
-```bash
-cp env.example .env
-# 編輯 .env 檔案，填入你的 OpenAI API 金鑰和通行碼
-```
-
-3. **一鍵啟動**：
-```bash
-# Linux/Mac
-./deploy.sh
-
-# Windows
-deploy.bat
-```
-
-### 方法二：傳統安裝
+### 安裝與設定
 
 1. **Python 3.8+**（建議 3.10 以上）
 2. **安裝依賴**：
@@ -158,21 +134,9 @@ print(result)
 
 ## 部署選項
 
-### Docker 部署（推薦）
+### 本地部署
 
-支援 CPU 和 GPU 兩種模式：
-
-```bash
-# CPU 模式
-docker-compose up -d
-
-# GPU 模式（需要 NVIDIA Docker）
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-```
-
-### 傳統部署
-
-適合開發環境或需要自訂配置的情況：
+適合開發環境或個人使用：
 
 ```bash
 python app.py
@@ -198,8 +162,6 @@ gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
 ```env
 ACCESS_CODE=your_access_code
 OPENAI_API_KEY=your_openai_api_key
-TELEGRAM_BOT_TOKEN=your_telegram_token
-TELEGRAM_CHAT_ID=your_chat_id
 ```
 
 ### 2. JSON 配置檔案
@@ -231,7 +193,6 @@ TELEGRAM_CHAT_ID=your_chat_id
 - **🔒 安全可靠**：通行碼保護、IP 限制、安全標頭
 - **🔧 易於整合**：完整 API 支援自動化應用
 - **📱 響應式介面**：支援各種螢幕尺寸
-- **🐳 容器化部署**：一鍵部署，環境隔離
 
 ---
 
