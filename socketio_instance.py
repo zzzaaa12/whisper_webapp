@@ -22,11 +22,8 @@ def emit_log(message, event_type='info', task_id=None):
     """統一的日誌發送函數"""
     if socketio:
         try:
-            from utils import get_timestamp
-            timestamp = get_timestamp("time")
-
             data = {
-                'log': f"[{timestamp}] {message}",
+                'log': message,  # 移除時間戳，由前端統一添加
                 'type': event_type
             }
 
@@ -41,13 +38,9 @@ def emit_task_log(task_id, message, timestamp=None):
     """發送任務特定的日誌"""
     if socketio:
         try:
-            if not timestamp:
-                from utils import get_timestamp
-                timestamp = get_timestamp("time")
-
             socketio.emit('task_log', {
                 'task_id': task_id,
-                'message': f"[{timestamp}] {message}",
+                'message': message,  # 移除時間戳，由前端統一添加
                 'timestamp': timestamp
             })
         except Exception as e:

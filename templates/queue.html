@@ -347,7 +347,7 @@
 
                     const currentTaskSpan = document.getElementById('current-task');
                     if (status.current_task) {
-                        const taskInfo = `${status.current_task.task_type} - ${status.current_task.task_id.substring(0, 8)}`;
+                        const taskInfo = getTaskDisplayName(status.current_task);
                         currentTaskSpan.textContent = taskInfo;
                     } else {
                         currentTaskSpan.textContent = '無';

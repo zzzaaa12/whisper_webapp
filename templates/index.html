@@ -462,15 +462,7 @@
 
                     const currentTaskSpan = document.getElementById('index-current-task');
                     if (status.current_task) {
-                        let taskInfo = '';
-                        if (status.current_task.task_type === 'youtube') {
-                            taskInfo = 'YouTube 影片';
-                        } else if (status.current_task.task_type === 'upload_media') {
-                            taskInfo = '音訊檔案';
-                        } else {
-                            taskInfo = status.current_task.task_type;
-                        }
-                        taskInfo += ` (${status.current_task.task_id.substring(0, 8)})`;
+                        let taskInfo = getTaskDisplayName(status.current_task);
                         currentTaskSpan.textContent = taskInfo;
                         currentTaskSpan.className = 'ms-2 text-primary';
                     } else {
@@ -480,6 +472,9 @@
 
                     // 更新最後更新時間
                     updateQueueStatusTime();
+
+                    // 同時更新系統資訊中的任務佇列狀態
+                    updateQueueInfoInSystemStatus(status);
                 } else {
                     console.error('載入佇列狀態失敗:', result.message);
                     // 顯示錯誤狀態
@@ -516,6 +511,103 @@
             });
 
             // 可以在這裡添加時間顯示，目前先保持簡潔
+        }
+
+        // 取得任務顯示名稱
+        function getTaskDisplayName(task) {
+            // 優先顯示結果中的影片標題或檔案名稱
+            if (task.result && task.result.video_title) {
+                // 如果有頻道資訊，以 [channel] title 格式顯示
+                if (task.data && task.data.uploader) {
+                    return `[${task.data.uploader}] ${task.result.video_title}`;
+                }
+                return task.result.video_title;
+            }
+
+            // 其次顯示任務資料中的標題（worker處理時會更新此欄位）
+            if (task.data) {
+                if (task.data.title && task.data.title.trim()) {
+                    // 如果是YouTube任務且有頻道資訊，以 [channel] title 格式顯示
+                    if (task.task_type === 'youtube' && task.data.uploader) {
+                        return `[${task.data.uploader}] ${task.data.title}`;
+                    }
+                    return task.data.title;
+                }
+
+                // 顯示預設的display_name（創建任務時設定）
+                if (task.data.display_name) {
+                    return task.data.display_name;
+                }
+
+                // 顯示頻道資訊（如果有的話）
+                if (task.data.uploader && task.task_type === 'youtube') {
+                    return `[${task.data.uploader}] YouTube 影片`;
+                }
+
+                // 對於YouTube任務，嘗試從URL提取影片ID並顯示
+                if (task.task_type === 'youtube' && task.data.url) {
+                    try {
+                        const url = new URL(task.data.url);
+                        let videoId = '';
+
+                        // 從不同的YouTube URL格式提取影片ID
+                        if (url.hostname.includes('youtube.com')) {
+                            videoId = url.searchParams.get('v');
+                        } else if (url.hostname.includes('youtu.be')) {
+                            videoId = url.pathname.substring(1);
+                        }
+
+                        if (videoId) {
+                            return `YouTube 影片 (${videoId})`;
+                        } else {
+                            return 'YouTube 影片';
+                        }
+                    } catch (e) {
+                        return 'YouTube 影片';
+                    }
+                }
+
+                // 對於檔案上傳任務，顯示檔案名稱
+                if (task.data.filename) {
+                    return task.data.filename;
+                }
+
+                // 如果有檔案路徑，提取檔案名稱
+                if (task.data.audio_file) {
+                    const filename = task.data.audio_file.split(/[\\\/]/).pop();
+                    return filename;
+                }
+
+                // 顯示原始檔案名稱（上傳任務）
+                if (task.data.original_filename) {
+                    return task.data.original_filename;
+                }
+            }
+
+            // 根據任務類型返回預設顯示
+            if (task.task_type === 'youtube') {
+                return 'YouTube 影片';
+            } else if (task.task_type === 'upload_media') {
+                return '上傳音訊檔案';
+            } else if (task.task_type === 'upload_subtitle') {
+                return '上傳字幕檔案';
+            }
+
+            return '處理任務';
+        }
+
+        // 更新系統資訊中的任務佇列狀態
+        function updateQueueInfoInSystemStatus(queueStatus) {
+            const existingSystemInfo = document.getElementById('log-container').querySelector('.system-info');
+            if (existingSystemInfo) {
+                // 從現有的系統資訊中提取 GPU 資訊部分
+                const currentText = existingSystemInfo.textContent;
+                const gpuPart = currentText.split(' | 處理中:')[0]; // 提取 GPU 資訊部分
+
+                // 重新組合系統資訊，包含最新的佇列狀態
+                const newText = `${gpuPart} | 處理中: ${queueStatus.processing} | 排隊中: ${queueStatus.queued}`;
+                existingSystemInfo.textContent = newText;
+            }
         }
 
         // 設定佇列狀態自動更新

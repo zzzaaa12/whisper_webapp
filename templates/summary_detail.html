@@ -129,28 +129,6 @@
             </div>
         </div>
 
-        <!-- 下載區域 -->
-        <div class="alert alert-info d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <i class="bi bi-info-circle"></i>
-                <strong>檔案下載</strong> - 您可以下載摘要和字幕檔案
-            </div>
-            <div class="btn-group">
-                <a href="{{ url_for('download_summary', filename=filename) }}" class="btn btn-success btn-sm">
-                    <i class="bi bi-file-text"></i> 下載摘要 (.txt)
-                </a>
-                {% if has_subtitle %}
-                <a href="{{ url_for('download_subtitle', filename=filename) }}" class="btn btn-info btn-sm">
-                    <i class="bi bi-file-earmark-text"></i> 下載字幕 (.srt)
-                </a>
-                {% else %}
-                <button class="btn btn-outline-secondary btn-sm" disabled>
-                    <i class="bi bi-file-earmark-text"></i> 字幕不可用
-                </button>
-                {% endif %}
-            </div>
-        </div>
-
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>摘要內容</span>

@@ -171,26 +171,59 @@ document.addEventListener('DOMContentLoaded', () => {
         accessCodeInput.focus();
     });
 
-    // GPU 狀態更新函數（簡化版）
+    // 系統狀態更新函數（包含 GPU 和任務佇列資訊）
     const updateGPUStatus = (data) => {
         // 在操作日誌中顯示簡化的 GPU 資訊
         const deviceName = data.device_name || '未知設備';
         const deviceMode = data.device === 'cuda' ? 'GPU 模式' : 'CPU 模式';
         const cudaStatus = data.cuda_available ? '可用' : '不可用';
 
-        const gpuInfo = `🖥️ 系統資訊 - 設備: ${deviceName} | 模式: ${deviceMode} | CUDA: ${cudaStatus}`;
+        // 獲取任務佇列資訊並更新系統資訊
+        updateSystemInfo(deviceName, deviceMode, cudaStatus);
+    };
 
-        // 檢查是否已經顯示過 GPU 資訊，避免重複
-        const existingGpuInfo = logContainer.querySelector('.gpu-info');
-        if (existingGpuInfo) {
-            existingGpuInfo.textContent = gpuInfo;
-        } else {
-            const logEntry = document.createElement('div');
-            logEntry.className = 'gpu-info';
-            logEntry.style.color = '#0000FF';
+    // 更新完整的系統資訊（包含 GPU 和任務佇列狀態）
+    const updateSystemInfo = async (deviceName, deviceMode, cudaStatus) => {
+        try {
+            // 獲取任務佇列狀態
+            const response = await fetch('/api/queue/status');
+            const result = await response.json();
 
-            logEntry.textContent = gpuInfo;
-            logContainer.appendChild(logEntry);
+            let queueInfo = '';
+            if (result.success) {
+                const status = result.status;
+                queueInfo = ` | 處理中: ${status.processing} | 排隊中: ${status.queued}`;
+            }
+
+            const systemInfo = `🖥️ 系統資訊 - 設備: ${deviceName} | 模式: ${deviceMode} | CUDA: ${cudaStatus}${queueInfo}`;
+
+            // 檢查是否已經顯示過系統資訊，避免重複
+            const existingSystemInfo = document.getElementById('log-container').querySelector('.system-info');
+            if (existingSystemInfo) {
+                existingSystemInfo.textContent = systemInfo;
+            } else {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'system-info';
+                logEntry.style.color = '#0000FF';
+
+                logEntry.textContent = systemInfo;
+                document.getElementById('log-container').appendChild(logEntry);
+            }
+        } catch (error) {
+            // 如果獲取佇列狀態失敗，只顯示 GPU 資訊
+            const systemInfo = `🖥️ 系統資訊 - 設備: ${deviceName} | 模式: ${deviceMode} | CUDA: ${cudaStatus}`;
+
+            const existingSystemInfo = document.getElementById('log-container').querySelector('.system-info');
+            if (existingSystemInfo) {
+                existingSystemInfo.textContent = systemInfo;
+            } else {
+                const logEntry = document.createElement('div');
+                logEntry.className = 'system-info';
+                logEntry.style.color = '#0000FF';
+
+                logEntry.textContent = systemInfo;
+                document.getElementById('log-container').appendChild(logEntry);
+            }
         }
     };
 
@@ -396,7 +429,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     uploadAccessCodeInput.disabled = false;
 
                     // 建議用戶查看佇列頁面
-                    appendLog('💡 您可以到 <a href="/queue" target="_blank">任務佇列頁面</a> 查看處理進度', 'info');
+                    appendLog('💡 您可以到任務佇列頁面查看處理進度', 'info');
 
                 } else {
                     appendLog(`❌ 上傳失敗：${response.message || '未知錯誤'}`, 'error');

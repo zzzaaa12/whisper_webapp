@@ -83,11 +83,11 @@ def process_single_file(file_path):
         return False
 
     # 支持的文件擴展名（不區分大小寫）
-    target_extensions = {'.py', '.md', '.html', '.htm', '.c', '.h', '.txt', '.cpp', '.cc', '.cxx', '.js'}
-    if file_path.suffix.lower() not in target_extensions:
-        print(f"不支持的文件類型: {file_path.suffix}")
-        print(f"支持的類型: {', '.join(sorted(target_extensions))}")
-        return False
+    #target_extensions = {'.py', '.md', '.html', '.htm', '.c', '.h', '.txt', '.cpp', '.cc', '.cxx', '.js'}
+    #if file_path.suffix.lower() not in target_extensions:
+    #    print(f"不支持的文件類型: {file_path.suffix}")
+    #    print(f"支持的類型: {', '.join(sorted(target_extensions))}")
+    #    return False
 
     print(f"處理文件: {file_path}")
     return clean_trailing_whitespace_regex(file_path)
@@ -117,7 +117,7 @@ def process_directory(directory_path):
 
     # 遞歸處理所有子目錄
     for file_path in directory.rglob('*'):
-        if file_path.is_file() and file_path.suffix.lower() in target_extensions:
+        if file_path.is_file():# and file_path.suffix.lower() in target_extensions:
             print(f"處理文件: {file_path.relative_to(directory)}")
 
             if clean_trailing_whitespace_regex(file_path):
