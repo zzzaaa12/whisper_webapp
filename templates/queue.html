@@ -116,9 +116,14 @@
                             </div>
                         </div>
                         <div class="row mt-3">
-                            <div class="col-12">
+                            <div class="col-md-8">
                                 <div id="current-task-info">
                                     <strong>目前處理：</strong> <span id="current-task">無</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <div id="access-status">
+                                    <small class="text-muted">可查看所有任務</small>
                                 </div>
                             </div>
                         </div>
@@ -132,7 +137,7 @@
                     <div class="card-body">
                         <h5 class="card-title"><i class="bi bi-funnel"></i> 篩選選項</h5>
                         <div class="row">
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="statusFilter" class="form-label">狀態篩選</label>
                                 <select class="form-select" id="statusFilter">
                                     <option value="">全部狀態</option>
@@ -143,7 +148,7 @@
                                     <option value="cancelled">已取消</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label for="limitSelect" class="form-label">顯示數量</label>
                                 <select class="form-select" id="limitSelect">
                                     <option value="20">20</option>
@@ -151,10 +156,10 @@
                                     <option value="100">100</option>
                                 </select>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-3">
                                 <label class="form-label">&nbsp;</label>
                                 <div class="d-grid">
-                                    <button type="button" class="btn btn-primary" onclick="loadTasks()">
+                                    <button type="button" class="btn btn-primary" onclick="updateAccessCodeAndReload()">
                                         <i class="bi bi-arrow-clockwise"></i> 更新列表
                                     </button>
                                 </div>
@@ -166,7 +171,7 @@
             <div class="col-md-4">
                 <div class="card">
                     <div class="card-body">
-                        <h5 class="card-title"><i class="bi bi-tools"></i> 管理操作</h5>
+                        <h5 class="card-title"><i class="bi bi-tools"></i> 系統操作</h5>
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-warning" onclick="showCleanupModal()">
                                 <i class="bi bi-trash"></i> 清理已完成任務
@@ -305,7 +310,7 @@
                 if (result.success) {
                     let warnings = '';
 
-                    if (!result.config.access_code_set) {
+                    if (!result.has_access_code) {
                         warnings += `
                             <div class="alert alert-warning alert-dismissible fade show" role="alert">
                                 <i class="bi bi-exclamation-triangle"></i>
@@ -314,7 +319,7 @@
                             </div>`;
                     }
 
-                    if (!result.config.openai_key_set) {
+                    if (!result.has_openai_key) {
                         warnings += `
                             <div class="alert alert-info alert-dismissible fade show" role="alert">
                                 <i class="bi bi-info-circle"></i>
@@ -358,6 +363,17 @@
             }
         }
 
+        // 更新通行碼並重新載入
+        function updateAccessCodeAndReload() {
+            loadTasks();
+        }
+
+        // 更新存取狀態顯示
+        function updateAccessStatus() {
+            const statusText = document.querySelector('#access-status small');
+            statusText.textContent = '可查看所有任務';
+        }
+
         // 載入任務列表
         async function loadTasks() {
             const loadingEl = document.getElementById('tasks-loading');
@@ -374,9 +390,6 @@
                 if (statusFilter) {
                     url += `&status=${statusFilter}`;
                 }
-                if (currentAccessCode) {
-                    url += `&access_code=${encodeURIComponent(currentAccessCode)}`;
-                }
 
                 const response = await fetch(url);
                 const result = await response.json();
@@ -384,7 +397,8 @@
                 loadingEl.style.display = 'none';
 
                 if (result.success) {
-                    displayTasks(result.tasks, result.is_admin);
+                    displayTasks(result.tasks);
+                    updateAccessStatus();
                 } else {
                     containerEl.innerHTML = `
                         <div class="alert alert-danger">
@@ -401,7 +415,7 @@
         }
 
         // 顯示任務列表
-        function displayTasks(tasks, isAdmin) {
+        function displayTasks(tasks) {
             const container = document.getElementById('tasks-container');
 
             if (tasks.length === 0) {
@@ -577,9 +591,6 @@
             currentTaskId = taskId;
             try {
                 let url = `/api/queue/task/${taskId}`;
-                if (currentAccessCode) {
-                    url += `?access_code=${encodeURIComponent(currentAccessCode)}`;
-                }
 
                 const response = await fetch(url);
                 const result = await response.json();
@@ -645,9 +656,6 @@
 
         // 根據ID取消任務
         async function cancelTaskById(taskId) {
-            const accessCode = prompt('請輸入通行碼：');
-            if (!accessCode) return;
-
             try {
                 const response = await fetch('/api/queue/cancel', {
                     method: 'POST',
@@ -655,8 +663,7 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        task_id: taskId,
-                        access_code: accessCode
+                        task_id: taskId
                     })
                 });
 
@@ -681,7 +688,7 @@
         // 清理任務
         async function cleanupTasks() {
             const olderThanDays = document.getElementById('olderThanDays').value;
-            const accessCode = document.getElementById('cleanupAccessCode').value;
+            let accessCode = document.getElementById('cleanupAccessCode').value;
 
             if (!accessCode) {
                 alert('請輸入通行碼');
@@ -772,7 +779,7 @@
         async function addTask() {
             const taskType = document.getElementById('taskType').value;
             const priority = parseInt(document.getElementById('taskPriority').value);
-            const accessCode = document.getElementById('addTaskAccessCode').value;
+            let accessCode = document.getElementById('addTaskAccessCode').value;
 
             if (!accessCode) {
                 alert('請輸入通行碼');
@@ -866,8 +873,8 @@
             setupAutoRefresh();
 
             // 設定篩選事件
-            document.getElementById('statusFilter').addEventListener('change', loadTasks);
-            document.getElementById('limitSelect').addEventListener('change', loadTasks);
+            document.getElementById('statusFilter').addEventListener('change', updateAccessCodeAndReload);
+            document.getElementById('limitSelect').addEventListener('change', updateAccessCodeAndReload);
         });
     </script>
         </div>

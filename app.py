@@ -1902,23 +1902,18 @@ def api_get_queue_list():
         queue_manager = get_task_queue()
         status = request.args.get('status')
         limit = int(request.args.get('limit', 50))
-        user_ip = get_client_ip()
 
-        # 管理員可以查看所有任務，普通用戶只能查看自己的
-        access_code = request.args.get('access_code')
-        system_access_code = get_config("ACCESS_CODE")
-        is_admin = system_access_code and access_code == system_access_code
-
+        # 移除通行碼驗證，允許所有人查看所有任務
         tasks = queue_manager.get_task_list(
             status=status,
             limit=limit,
-            user_ip=None if is_admin else user_ip
+            user_ip=None  # 不再限制只能查看自己的任務
         )
 
         return jsonify({
             'success': True,
             'tasks': tasks,
-            'is_admin': is_admin
+            'has_access': True  # 永遠回傳 True，因為所有人都有查看權限
         })
     except Exception as e:
         return jsonify({
@@ -1939,18 +1934,7 @@ def api_get_task_detail(task_id):
                 'message': '任務不存在'
             }), 404
 
-        # 檢查權限：只能查看自己的任務或管理員可查看所有
-        user_ip = get_client_ip()
-        access_code = request.args.get('access_code')
-        system_access_code = get_config("ACCESS_CODE")
-        is_admin = system_access_code and access_code == system_access_code
-
-        if not is_admin and task['user_ip'] != user_ip:
-            return jsonify({
-                'success': False,
-                'message': '無權限查看此任務'
-            }), 403
-
+        # 移除權限檢查，允許所有人查看任務詳情
         # 新增佇列位置資訊
         if task['status'] == 'queued':
             task['queue_position'] = queue_manager.get_user_queue_position(task_id)
