@@ -14,6 +14,11 @@ faster-whisper>=0.9.0
 yt-dlp>=2023.10.13
 openai>=1.3.0
 
+# 多 AI 提供商支援 (可選，根據需要安裝)
+# anthropic>=0.3.0         # Claude API 支援
+# google-generativeai>=0.3.0  # Gemini API 支援 (若使用 Google SDK)
+# 注意：Gemini 可直接使用 OpenAI 兼容格式，無需額外套件
+
 # 工具套件
 requests>=2.31.0
 feedparser>=6.0.10

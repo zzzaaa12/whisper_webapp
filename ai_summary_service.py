@@ -12,27 +12,102 @@ from typing import Optional, Dict, Any, Callable
 import traceback
 
 class SummaryService:
-    """統一的摘要服務類別"""
+    """統一的摘要服務類別 - 支援多 AI 提供商"""
 
-    def __init__(self, openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None):
+    def __init__(self, openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None, ai_provider: Optional[str] = None):
         """
         初始化摘要服務
 
         Args:
-            openai_api_key: OpenAI API 金鑰
+            openai_api_key: OpenAI API 金鑰（向後兼容）
             config_getter: 配置獲取函數，用於獲取各種配置值
+            ai_provider: AI 提供商名稱 (openai, claude, ollama, groq 等)
         """
-        self.openai_api_key = openai_api_key
         self.config_getter = config_getter or (lambda key, default=None: os.getenv(key, default))
         self.openai = None
-        self._init_openai()
 
-    def _init_openai(self):
-        """初始化OpenAI客戶端"""
-        if not self.openai_api_key:
-            self.openai_api_key = self.config_getter("OPENAI_API_KEY")
+        # 決定使用的 AI 提供商
+        self.ai_provider = ai_provider or self.config_getter("AI_PROVIDER", "openai")
 
-        if self.openai_api_key and not self.openai:
+        # 向後兼容：如果直接傳入 openai_api_key，則使用 openai 提供商
+        if openai_api_key:
+            self.ai_provider = "openai"
+            self._legacy_api_key = openai_api_key
+        else:
+            self._legacy_api_key = None
+
+        # 當前提供商配置
+        self.current_provider_config = None
+        self._fallback_tried = []  # 記錄已嘗試的提供商
+
+        self._init_ai_client()
+
+    def _get_provider_config(self, provider_name: str) -> Optional[Dict[str, Any]]:
+        """獲取指定 AI 提供商的配置"""
+        try:
+            # 嘗試從新版配置中獲取
+            providers_config = self.config_getter("AI_PROVIDERS", {})
+            if isinstance(providers_config, dict) and provider_name in providers_config:
+                config = providers_config[provider_name].copy()
+
+                # 處理特殊情況：如果使用 legacy API key
+                if provider_name == "openai" and self._legacy_api_key:
+                    config["api_key"] = self._legacy_api_key
+
+                # 檢查 API key 是否包含 "金鑰" - 如果包含則表示未設置有效金鑰
+                api_key = config.get("api_key", "")
+                if "金鑰" in str(api_key):
+                    print(f"[SUMMARY] Provider {provider_name} API key contains '金鑰', skipping...")
+                    return None
+                elif api_key == "":
+                    print(f"[SUMMARY] Provider {provider_name} API key is empty, skipping...")
+                    return None
+
+                return config
+
+            # 向後兼容：從舊版配置構建 openai 配置
+            if provider_name == "openai":
+                api_key = self._legacy_api_key or self.config_getter("OPENAI_API_KEY")
+                if api_key:
+                    # 檢查舊版 API key 是否包含 "金鑰"
+                    if "金鑰" in str(api_key):
+                        print(f"[SUMMARY] Legacy OpenAI API key contains '金鑰', skipping...")
+                        return None
+
+                    return {
+                        "api_key": api_key,
+                        "base_url": "https://api.openai.com/v1",
+                        "model": self.config_getter("OPENAI_MODEL", "gpt-4o-mini"),
+                        "max_tokens": int(self.config_getter("OPENAI_MAX_TOKENS", "10000") or "10000"),
+                        "temperature": float(self.config_getter("OPENAI_TEMPERATURE", "0.7") or "0.7")
+                    }
+
+            return None
+
+        except Exception as e:
+            print(f"[SUMMARY] Error getting provider config for {provider_name}: {e}")
+            return None
+
+    def _init_ai_client(self):
+        """初始化 AI 客戶端"""
+        self.current_provider_config = self._get_provider_config(self.ai_provider or "openai")
+
+        if not self.current_provider_config:
+            print(f"[SUMMARY] Warning: No valid config found for AI provider '{self.ai_provider}' (may contain '金鑰')")
+
+            # 嘗試容錯切換到其他可用的提供商
+            if self._try_fallback_provider():
+                print(f"[SUMMARY] Successfully switched to fallback provider: {self.ai_provider}")
+            else:
+                print(f"[SUMMARY] No valid AI providers available")
+                return
+
+        # 再次檢查配置是否有效（可能已經通過容錯切換更新）
+        if not self.current_provider_config or not self.current_provider_config.get("api_key"):
+            print(f"[SUMMARY] Warning: No valid API key found for AI provider '{self.ai_provider}'")
+            return
+
+        if not self.openai:
             try:
                 import openai
                 self.openai = openai
@@ -40,15 +115,48 @@ class SummaryService:
                 print("[SUMMARY] Warning: OpenAI library not installed")
 
     def _get_model_config(self) -> Dict[str, Any]:
-        """獲取模型配置"""
-        max_tokens_str = self.config_getter("OPENAI_MAX_TOKENS", "20000")
-        temperature_str = self.config_getter("OPENAI_TEMPERATURE", "0.7")
+        """獲取當前提供商的模型配置"""
+        if not self.current_provider_config:
+            # 向後兼容的預設配置
+            return {
+                'model': self.config_getter("OPENAI_MODEL", "gpt-4o-mini"),
+                'max_tokens': int(self.config_getter("OPENAI_MAX_TOKENS", "10000") or "10000"),
+                'temperature': float(self.config_getter("OPENAI_TEMPERATURE", "0.7") or "0.7")
+            }
 
         return {
-            'model': self.config_getter("OPENAI_MODEL", "gpt-4.1-mini"),
-            'max_tokens': int(max_tokens_str) if max_tokens_str is not None else 20000,
-            'temperature': float(temperature_str) if temperature_str is not None else 0.7
+            'model': self.current_provider_config.get('model', 'gpt-4o-mini'),
+            'max_tokens': self.current_provider_config.get('max_tokens', 10000),
+            'temperature': self.current_provider_config.get('temperature', 0.7)
         }
+
+    def _try_fallback_provider(self, log_callback: Optional[Callable] = None) -> bool:
+        """嘗試容錯切換到下一個可用的提供商"""
+        fallback_enabled = self.config_getter("AI_FALLBACK_ENABLED", True)
+        if not fallback_enabled:
+            return False
+
+        fallback_order = self.config_getter("AI_FALLBACK_ORDER", ["openai", "claude", "groq", "ollama"])
+        if not isinstance(fallback_order, list):
+            return False
+
+        # 記錄當前失敗的提供商
+        if self.ai_provider not in self._fallback_tried:
+            self._fallback_tried.append(self.ai_provider)
+
+        # 找到下一個可用的提供商
+        for provider in fallback_order:
+            if provider not in self._fallback_tried:
+                provider_config = self._get_provider_config(provider)
+                if provider_config and provider_config.get("api_key"):
+                    if log_callback:
+                        log_callback(f"🔄 切換到 AI 提供商: {provider}", 'info')
+
+                    self.ai_provider = provider
+                    self.current_provider_config = provider_config
+                    return True
+
+        return False
 
     def _create_prompt(self, subtitle_content: str, prompt_type: str = "structured") -> str:
         """
@@ -58,8 +166,69 @@ class SummaryService:
             subtitle_content: 字幕內容
             prompt_type: prompt類型 ('simple', 'structured', 'detailed')
         """
-        # 統一使用新的prompt格式
-        prompt = f"請整理一下這個youtube對話紀錄，條列出每一個項目與內容，放在最前面的段落：【影片內容摘要】\n\n{subtitle_content}"
+        if prompt_type == "simple":
+            # 簡單模式 - 保持原有格式
+            prompt = f"請整理一下這個youtube對話紀錄，條列出每一個項目與內容\n\n{subtitle_content}"
+        elif prompt_type == "detailed":
+            # 詳細模式 - 更豐富的 Markdown 格式
+            prompt = f"""請將以下影片內容整理成詳細的結構化摘要，使用 Markdown 格式：
+
+## 🎯 影片內容摘要
+
+請分析以下內容並按照下列結構整理：
+
+### 📋 主要議題
+- 列出影片討論的核心主題
+
+### 💡 重點內容
+- 重要觀點和見解
+- 關鍵數據或事實
+- 值得注意的論述
+
+### 🔍 詳細分析
+根據內容深度分段說明各個重點
+
+### 📌 結論與要點
+- 總結重要結論
+- 可行動的建議或啟發
+
+---
+
+**影片原始內容：**
+{subtitle_content}"""
+
+        else:
+            # 結構化模式（預設）- 優化的 Markdown 格式
+            prompt = f"""請將以下 YouTube 影片內容整理成清晰的結構化摘要，使用 Markdown 格式輸出：
+
+# 📹 影片內容摘要
+
+請按照以下格式整理：
+
+## 🎯 核心主題
+- 影片的主要討論議題
+
+## 📝 重點整理
+1. **第一個重點**
+   - 具體說明
+   - 相關細節
+
+2. **第二個重點**
+   - 具體說明
+   - 相關細節
+
+*(依內容長度調整重點數量)*
+
+## 💬 關鍵金句
+> 引用影片中的重要話語或觀點
+
+## 🎯 總結
+簡潔總結影片的核心價值和主要收穫
+
+---
+
+**原始內容：**
+{subtitle_content}"""
 
         return prompt
 
@@ -72,6 +241,20 @@ class SummaryService:
             header_info: header資訊字典
         """
         header_lines = []
+
+        # AI 提供商資訊
+        if self.ai_provider and self.current_provider_config:
+            model_name = self.current_provider_config.get('model', 'unknown')
+            provider_display = {
+                'openai': 'OpenAI',
+                'claude': 'Anthropic Claude',
+                'gemini': 'Google Gemini',
+                'deepseek': 'DeepSeek',
+                'ollama': 'Ollama (本地)',
+                'grok': 'xAI Grok'
+            }.get(self.ai_provider, self.ai_provider.upper())
+
+            header_lines.append(f"🤖 AI 摘要：{provider_display} ({model_name})")
 
         # 檔案資訊
         if 'filename' in header_info:
@@ -114,8 +297,8 @@ class SummaryService:
         Returns:
             tuple: (成功標誌, 摘要內容或錯誤信息)
         """
-        if not self.openai_api_key:
-            error_msg = "❌ OpenAI API key 未設定，無法生成摘要"
+        if not self.current_provider_config:
+            error_msg = "❌ 當前AI提供商配置未初始化，無法生成摘要"
             if log_callback:
                 log_callback(error_msg, 'error')
             return False, error_msg
@@ -126,73 +309,126 @@ class SummaryService:
                 log_callback(error_msg, 'error')
             return False, error_msg
 
-        try:
-            if log_callback:
-                log_callback("▶️ 開始生成 AI 摘要...", 'info')
+        # 最多嘗試 3 次（包含容錯切換）
+        max_attempts = 3
+        attempt = 0
 
-            if progress_callback:
-                progress_callback(90)
+        while attempt < max_attempts:
+            try:
+                attempt += 1
 
-            # 初始化OpenAI客戶端
-            if not self.openai:
-                self._init_openai()
+                if log_callback:
+                    provider_name = (self.ai_provider or "openai").upper()
+                    log_callback(f"▶️ 開始生成 AI 摘要 ({provider_name})...", 'info')
 
-            if not self.openai:
-                error_msg = "❌ OpenAI 模組載入失敗"
+                if progress_callback:
+                    progress_callback(90)
+
+                # 初始化 AI 客戶端
+                if not self.openai:
+                    self._init_ai_client()
+
+                if not self.openai:
+                    error_msg = "❌ OpenAI 模組載入失敗"
+                    if log_callback:
+                        log_callback(error_msg, 'error')
+                    return False, error_msg
+
+                # 動態創建客戶端（支援不同的 base_url）
+                client_kwargs = {"api_key": self.current_provider_config["api_key"]}
+
+                # 如果有自定義的 base_url，則設定
+                if "base_url" in self.current_provider_config:
+                    base_url = self.current_provider_config["base_url"]
+                    if base_url != "https://api.openai.com/v1":  # 非預設的才設定
+                        client_kwargs["base_url"] = base_url
+
+                client = self.openai.OpenAI(**client_kwargs)
+
+                # 創建prompt
+                prompt = self._create_prompt(subtitle_content, prompt_type)
+
+                # 獲取模型配置
+                model_config = self._get_model_config()
+
+                if log_callback:
+                    log_callback(f"🤖 使用模型：{model_config['model']} (提供商: {self.ai_provider})", 'info')
+
+                # 調用 AI API
+                response = client.chat.completions.create(
+                    model=model_config['model'],
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    max_tokens=model_config['max_tokens'],
+                    temperature=model_config['temperature']
+                )
+
+                # 提取摘要內容
+                summary_content = response.choices[0].message.content
+                summary = summary_content.strip() if summary_content else ""
+
+                if not summary:
+                    error_msg = "⚠️ AI 未回傳有效摘要內容"
+                    if log_callback:
+                        log_callback(error_msg, 'warning')
+                    return False, error_msg
+
+                # 添加header（如果提供）或至少添加 AI 提供商信息
+                if header_info:
+                    summary = self._add_header(summary, header_info)
+                else:
+                    # 沒有完整 header 時，至少添加 AI 提供商信息
+                    if self.ai_provider and self.current_provider_config:
+                        from datetime import datetime
+
+                        model_name = self.current_provider_config.get('model', 'unknown')
+                        provider_display = {
+                            'openai': 'OpenAI',
+                            'claude': 'Anthropic Claude',
+                            'gemini': 'Google Gemini',
+                            'deepseek': 'DeepSeek',
+                            'ollama': 'Ollama (本地)',
+                            'grok': 'xAI Grok'
+                        }.get(self.ai_provider, self.ai_provider.upper())
+
+                        ai_header = (
+                            f"🤖 AI 摘要：{provider_display} ({model_name})\n"
+                            f"⏰ 處理時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                            f"{'='*50}\n\n"
+                        )
+                        summary = ai_header + summary
+
+                if progress_callback:
+                    progress_callback(100)
+
+                if log_callback:
+                    log_callback(f"✅ AI 摘要生成完成 (提供商: {self.ai_provider})", 'success')
+
+                return True, summary
+
+            except Exception as e:
+                error_msg = f"❌ AI 摘要生成失敗 (提供商: {self.ai_provider}): {str(e)}"
                 if log_callback:
                     log_callback(error_msg, 'error')
-                return False, error_msg
 
-            client = self.openai.OpenAI(api_key=self.openai_api_key)
+                # 如果還有嘗試機會，嘗試容錯切換
+                if attempt < max_attempts:
+                    if self._try_fallback_provider(log_callback):
+                        if log_callback:
+                            log_callback(f"🔄 嘗試重試，當前提供商: {self.ai_provider}", 'info')
+                        continue
+                    else:
+                        if log_callback:
+                            log_callback("❌ 沒有可用的備用 AI 提供商", 'error')
+                        break
+                else:
+                    if log_callback:
+                        log_callback(f"🔍 錯誤詳情: {traceback.format_exc()}", 'error')
+                    break
 
-            # 創建prompt
-            prompt = self._create_prompt(subtitle_content, prompt_type)
-
-            # 獲取模型配置
-            model_config = self._get_model_config()
-
-            if log_callback:
-                log_callback(f"🤖 使用模型：{model_config['model']}", 'info')
-
-            # 調用OpenAI API
-            response = client.chat.completions.create(
-                model=model_config['model'],
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=model_config['max_tokens'],
-                temperature=model_config['temperature']
-            )
-
-            # 提取摘要內容
-            summary_content = response.choices[0].message.content
-            summary = summary_content.strip() if summary_content else ""
-
-            if not summary:
-                error_msg = "⚠️ AI 未回傳有效摘要內容"
-                if log_callback:
-                    log_callback(error_msg, 'warning')
-                return False, error_msg
-
-            # 添加header（如果提供）
-            if header_info:
-                summary = self._add_header(summary, header_info)
-
-            if progress_callback:
-                progress_callback(100)
-
-            if log_callback:
-                log_callback("✅ AI 摘要生成完成", 'success')
-
-            return True, summary
-
-        except Exception as e:
-            error_msg = f"❌ AI 摘要生成失敗: {str(e)}"
-            if log_callback:
-                log_callback(error_msg, 'error')
-                log_callback(f"🔍 錯誤詳情: {traceback.format_exc()}", 'error')
-            return False, error_msg
+        return False, f"❌ AI 摘要生成失敗，已嘗試 {attempt} 次"
 
     def save_summary(self,
                     summary: str,
@@ -315,13 +551,14 @@ class SummaryService:
 # 全域摘要服務實例
 _summary_service_instance = None
 
-def get_summary_service(openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None) -> SummaryService:
+def get_summary_service(openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None, ai_provider: Optional[str] = None) -> SummaryService:
     """
     獲取全域摘要服務實例（單例模式）
 
     Args:
         openai_api_key: OpenAI API 金鑰
         config_getter: 配置獲取函數
+        ai_provider: AI 提供商名稱
 
     Returns:
         SummaryService: 摘要服務實例
@@ -329,11 +566,11 @@ def get_summary_service(openai_api_key: Optional[str] = None, config_getter: Opt
     global _summary_service_instance
 
     if _summary_service_instance is None:
-        _summary_service_instance = SummaryService(openai_api_key, config_getter)
+        _summary_service_instance = SummaryService(openai_api_key, config_getter, ai_provider)
     elif openai_api_key:
         # 更新API金鑰
-        _summary_service_instance.openai_api_key = openai_api_key
-        _summary_service_instance._init_openai()
+        _summary_service_instance.current_provider_config = _summary_service_instance._get_provider_config(ai_provider or _summary_service_instance.ai_provider)
+        _summary_service_instance._init_ai_client()
 
     return _summary_service_instance
 

@@ -1,9 +1,67 @@
 {
   "SECRET_KEY": "請填入一組隨機字串",
   "ACCESS_CODE": "你的通行碼（建議設定以提升安全性）",
+
+  "_comment_legacy": "=== 向後兼容的舊版配置 ===",
   "OPENAI_API_KEY": "你的 OpenAI API 金鑰",
+  "OPENAI_MAX_TOKENS": 10000,
+
+  "_comment_ai": "=== AI 提供商配置（新版，優先使用） ===",
+  "_comment_disable": "💡 小技巧：如果要暫時停用某個 AI 提供商，可以在 api_key 中保留 '金鑰' 字樣，系統會自動跳過",
+  "AI_PROVIDER": "openai",
+  "AI_PROVIDERS": {
+    "openai": {
+      "api_key": "你的 OpenAI API 金鑰",
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4o-mini",
+      "max_tokens": 10000,
+      "temperature": 0.7
+    },
+    "claude": {
+      "api_key": "你的 Anthropic API 金鑰",
+      "base_url": "https://api.anthropic.com/v1",
+      "model": "claude-3-5-sonnet-20241022",
+      "max_tokens": 10000,
+      "temperature": 0.7
+    },
+    "ollama": {
+      "api_key": "ollama",
+      "base_url": "http://localhost:11434/v1",
+      "model": "llama3.1:8b",
+      "max_tokens": 10000,
+      "temperature": 0.7
+    },
+
+    "_comment_grok": "Grok API 配置 (暫時停用範例)",
+    "grok": {
+      "api_key": "你的xAI金鑰（暫時停用）",
+      "base_url": "https://api.x.ai/v1",
+      "model": "grok-beta",
+      "max_tokens": 4096,
+      "temperature": 0.7
+    },
+    "deepseek": {
+      "api_key": "你的 DeepSeek API 金鑰",
+      "base_url": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "max_tokens": 10000,
+      "temperature": 0.7
+    },
+    "gemini": {
+      "api_key": "你的 Google Gemini API 金鑰",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta",
+      "model": "gemini-1.5-flash-latest",
+      "max_tokens": 8192,
+      "temperature": 0.7
+    }
+  },
+
+  "_comment_fallback": "=== 容錯切換配置 ===",
+  "AI_FALLBACK_ENABLED": true,
+  "AI_FALLBACK_ORDER": ["openai", "claude", "gemini", "deepseek", "ollama"],
+
+  "_comment_other": "=== 其他配置 ===",
   "TELEGRAM_BOT_TOKEN": "你的 Telegram Bot Token（如需通知功能）",
   "TELEGRAM_CHAT_ID": "你的 Telegram Chat ID（如需通知功能）",
-  "SERVER_PORT": 5000,
-  "OPENAI_MAX_TOKENS": 10000
+  "SERVER_PORT": 5000
 }

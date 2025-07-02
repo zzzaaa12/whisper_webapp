@@ -144,10 +144,16 @@ class QueueWorker:
             def progress_callback(progress):
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=progress)
 
-            # 獲取摘要服務
+            # 獲取摘要服務 - 支援多 AI 提供商
+            preferred_ai_provider = task_id and self.task_queue.get_task(task_id)
+            ai_provider = None
+            if preferred_ai_provider and isinstance(preferred_ai_provider, dict):
+                ai_provider = preferred_ai_provider.get('data', {}).get('ai_provider')
+
             summary_service = get_summary_service(
                 openai_api_key=self.openai_key,
-                config_getter=get_config
+                config_getter=get_config,
+                ai_provider=ai_provider
             )
 
             # 生成並儲存摘要
