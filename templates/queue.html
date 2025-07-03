@@ -42,9 +42,46 @@
         .priority-medium { background-color: #ffc107; color: black; }
         .priority-low { background-color: #28a745; color: white; }
 
+        /* 平滑動畫效果 */
+        #tasks-container {
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .tasks-updating {
+            opacity: 0.7;
+        }
+
+        .queue-status {
+            transition: all 0.3s ease-in-out;
+        }
+
+        /* 微妙的更新指示器 */
+        .update-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 123, 255, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            z-index: 1050;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        }
+
+        .update-indicator.show {
+            opacity: 1;
+        }
+
     </style>
 </head>
 <body>
+    <!-- 更新指示器 -->
+    <div id="update-indicator" class="update-indicator">
+        <i class="bi bi-arrow-clockwise"></i> 更新中...
+    </div>
+
     <!-- 配置狀態警告區域 -->
     <div id="config-warnings"></div>
 
@@ -133,11 +170,11 @@
             <!-- 控制面板 -->
         <div class="row mb-4">
             <div class="col-md-8">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title"><i class="bi bi-funnel"></i> 篩選選項</h5>
                         <div class="row">
-                            <div class="col-md-3">
+                            <div class="col-md-4 col-sm-6 mb-3">
                                 <label for="statusFilter" class="form-label">狀態篩選</label>
                                 <select class="form-select" id="statusFilter">
                                     <option value="">全部狀態</option>
@@ -148,7 +185,7 @@
                                     <option value="cancelled">已取消</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4 col-sm-6 mb-3">
                                 <label for="limitSelect" class="form-label">顯示數量</label>
                                 <select class="form-select" id="limitSelect">
                                     <option value="20">20</option>
@@ -156,7 +193,7 @@
                                     <option value="100">100</option>
                                 </select>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4 col-sm-12 mb-3">
                                 <label class="form-label">&nbsp;</label>
                                 <div class="d-grid">
                                     <button type="button" class="btn btn-primary" onclick="updateAccessCodeAndReload()">
@@ -169,7 +206,7 @@
                 </div>
             </div>
             <div class="col-md-4">
-                <div class="card">
+                <div class="card h-100">
                     <div class="card-body">
                         <h5 class="card-title"><i class="bi bi-tools"></i> 系統操作</h5>
                         <div class="d-grid gap-2">
@@ -324,6 +361,9 @@
         let autoRefreshInterval;
         let currentTaskId = null;
         let taskIdToCancel = null;
+        let lastTasksHash = '';
+        let lastStatusHash = '';
+        let isUpdating = false;
 
         // 檢查配置狀態並顯示警告
         async function checkConfigStatus() {
@@ -360,13 +400,22 @@
         }
 
         // 載入佇列狀態
-        async function loadQueueStatus() {
+        async function loadQueueStatus(showIndicator = false) {
             try {
                 const response = await fetch('/api/queue/status');
                 const result = await response.json();
 
                 if (result.success) {
                     const status = result.status;
+                    const currentHash = generateHash(status);
+
+                    // 只在有變化時才更新界面
+                    if (showIndicator && currentHash === lastStatusHash) {
+                        return;
+                    }
+
+                    lastStatusHash = currentHash;
+
                     document.getElementById('total-tasks').textContent = status.total_tasks;
                     document.getElementById('queued-tasks').textContent = status.queued;
                     document.getElementById('processing-tasks').textContent = status.processing;
@@ -389,7 +438,7 @@
 
         // 更新通行碼並重新載入
         function updateAccessCodeAndReload() {
-            loadTasks();
+            loadTasks(false); // 手動更新時顯示載入動畫
         }
 
         // 更新存取狀態顯示
@@ -398,13 +447,38 @@
             statusText.textContent = '可查看所有任務';
         }
 
+        // 顯示更新指示器
+        function showUpdateIndicator() {
+            const indicator = document.getElementById('update-indicator');
+            indicator.classList.add('show');
+        }
+
+        // 隱藏更新指示器
+        function hideUpdateIndicator() {
+            const indicator = document.getElementById('update-indicator');
+            indicator.classList.remove('show');
+        }
+
+        // 生成內容雜湊值（用於變化檢測）
+        function generateHash(obj) {
+            return JSON.stringify(obj).length + '_' + JSON.stringify(obj).slice(0, 100);
+        }
+
         // 載入任務列表
-        async function loadTasks() {
+        async function loadTasks(showIndicator = false) {
+            if (isUpdating) return; // 防止重複更新
+
+            isUpdating = true;
             const loadingEl = document.getElementById('tasks-loading');
             const containerEl = document.getElementById('tasks-container');
 
-            loadingEl.style.display = 'block';
-            containerEl.innerHTML = '';
+            if (showIndicator) {
+                showUpdateIndicator();
+                containerEl.classList.add('tasks-updating');
+            } else {
+                loadingEl.style.display = 'block';
+                containerEl.innerHTML = '';
+            }
 
             try {
                 const statusFilter = document.getElementById('statusFilter').value;
@@ -418,6 +492,17 @@
                 const response = await fetch(url);
                 const result = await response.json();
 
+                const currentHash = generateHash(result.tasks || []);
+
+                // 只在有變化時才更新界面
+                if (showIndicator && currentHash === lastTasksHash) {
+                    hideUpdateIndicator();
+                    containerEl.classList.remove('tasks-updating');
+                    isUpdating = false;
+                    return;
+                }
+
+                lastTasksHash = currentHash;
                 loadingEl.style.display = 'none';
 
                 if (result.success) {
@@ -435,6 +520,15 @@
                     <div class="alert alert-danger">
                         <i class="bi bi-exclamation-triangle"></i> 載入任務列表失敗: ${error.message}
                     </div>`;
+            } finally {
+                // 清理動畫狀態
+                if (showIndicator) {
+                    setTimeout(() => {
+                        hideUpdateIndicator();
+                        containerEl.classList.remove('tasks-updating');
+                    }, 300);
+                }
+                isUpdating = false;
             }
         }
 
@@ -720,8 +814,8 @@
                 const result = await response.json();
                 if (result.success) {
                     alert(result.message);
-                    loadTasks();
-                    loadQueueStatus();
+                    loadTasks(false);
+                    loadQueueStatus(false);
                 } else {
                     alert('取消任務失敗: ' + result.message);
                 }
@@ -761,8 +855,8 @@
                 if (result.success) {
                     alert(result.message);
                     bootstrap.Modal.getInstance(document.getElementById('cleanupModal')).hide();
-                    loadTasks();
-                    loadQueueStatus();
+                    loadTasks(false);
+                    loadQueueStatus(false);
                 } else {
                     alert('清理任務失敗: ' + result.message);
                 }
@@ -875,8 +969,8 @@
                 if (result.success) {
                     alert(`任務已新增，ID: ${result.task_id}，佇列位置: ${result.queue_position}`);
                     bootstrap.Modal.getInstance(document.getElementById('addTaskModal')).hide();
-                    loadTasks();
-                    loadQueueStatus();
+                    loadTasks(false);
+                    loadQueueStatus(false);
                 } else {
                     alert('新增任務失敗: ' + result.message);
                 }
@@ -894,9 +988,9 @@
                 const isChecked = desktopCheckbox.checked || mobileCheckbox.checked;
                 if (isChecked) {
                     autoRefreshInterval = setInterval(() => {
-                        loadQueueStatus();
-                        loadTasks();
-                    }, 5000); // 每5秒更新一次
+                        loadQueueStatus(true); // 啟用變化檢測
+                        loadTasks(true); // 啟用平滑動畫和變化檢測
+                    }, 15000); // 每15秒更新一次，減少頻率
                 } else {
                     if (autoRefreshInterval) {
                         clearInterval(autoRefreshInterval);
@@ -918,8 +1012,8 @@
         // 頁面載入完成後執行
         document.addEventListener('DOMContentLoaded', function() {
             checkConfigStatus();
-            loadQueueStatus();
-            loadTasks();
+            loadQueueStatus(false);
+            loadTasks(false);
             setupAutoRefresh();
 
             // 設定篩選事件
