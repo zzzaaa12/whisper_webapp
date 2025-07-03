@@ -243,31 +243,6 @@ class QueueWorker:
 
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
-            # 配置 yt-dlp 下載
-            ydl_opts = {
-                'format': 'best[ext=mp4]/best',
-                'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
-                'noplaylist': True,
-            }
-
-            # 下載影片
-            self.task_queue.update_task_status(
-                task_id, TaskStatus.PROCESSING, progress=15,
-                log_message="🔄 開始下載影片..."
-            )
-            print(f"[WORKER] 開始下載影片...")
-            with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-
-            print(f"[WORKER] Downloaded: {filename}")
-            self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
-
-            # 處理音訊轉錄
-            audio_file = Path(filename)
-            if not audio_file.exists():
-                raise FileNotFoundError(f"Downloaded file not found: {filename}")
-
             # 生成輸出檔案路徑
             safe_title = sanitize_filename(video_title)
             date_str = get_timestamp("date")
@@ -276,8 +251,102 @@ class QueueWorker:
             subtitle_path = self.subtitle_folder / f"{base_name}.srt"
             summary_path = self.summary_folder / f"{base_name}.txt"
 
-            # 轉錄音訊
-            self._transcribe_audio(audio_file, subtitle_path, task_id)
+            # 檢查是否已有摘要檔案（快取檢查）
+            if summary_path.exists():
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=90,
+                    log_message="✅ 找到摘要快取，跳過處理"
+                )
+                print(f"[WORKER] 找到摘要快取: {summary_path}")
+
+                # 尋找對應的音訊檔案
+                audio_file = None
+                for pattern in [f"{video_title}.*", f"*{safe_title}*"]:
+                    matches = list(self.download_folder.glob(pattern))
+                    if matches:
+                        audio_file = matches[0]
+                        break
+
+                # 直接返回快取結果
+                result = {
+                    'video_title': video_title,
+                    'subtitle_file': str(subtitle_path),
+                    'summary_file': str(summary_path),
+                    'original_file': str(audio_file) if audio_file and audio_file.exists() else None
+                }
+
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.COMPLETED, progress=100, result=result
+                )
+
+                # 發送快取命中通知
+                notification_msg = f"✅ YouTube 影片處理完成（快取）\n標題: {video_title}\n檔案: {base_name}\n🔗 網址: {url}"
+
+                try:
+                    summary_content = summary_path.read_text(encoding='utf-8')
+                    if len(summary_content) > 3000:
+                        summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
+                    notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
+                except Exception as e:
+                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
+
+                self._send_telegram_notification(notification_msg)
+                return
+
+            # 檢查是否已有字幕檔案
+            skip_transcription = False
+            if subtitle_path.exists():
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=60,
+                    log_message="✅ 找到字幕快取，跳過轉錄"
+                )
+                print(f"[WORKER] 找到字幕快取: {subtitle_path}")
+                skip_transcription = True
+
+            # 尋找是否已下載相同影片
+            audio_file = None
+            for pattern in [f"{video_title}.*", f"*{safe_title}*"]:
+                matches = list(self.download_folder.glob(pattern))
+                if matches:
+                    audio_file = matches[0]
+                    print(f"[WORKER] 找到已下載的檔案: {audio_file}")
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=25,
+                        log_message="✅ 找到已下載檔案，跳過下載"
+                    )
+                    break
+
+            # 如果沒找到已下載的檔案，才進行下載
+            if not audio_file:
+                # 配置 yt-dlp 下載
+                ydl_opts = {
+                    'format': 'best[ext=mp4]/best',
+                    'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
+                    'noplaylist': True,
+                }
+
+                # 下載影片
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=15,
+                    log_message="🔄 開始下載影片..."
+                )
+                print(f"[WORKER] 開始下載影片...")
+                with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
+
+                print(f"[WORKER] Downloaded: {filename}")
+                audio_file = Path(filename)
+                self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+            else:
+                self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+
+            if not audio_file.exists():
+                raise FileNotFoundError(f"音訊檔案不存在: {audio_file}")
+
+            # 轉錄音訊（如果還沒有字幕）
+            if not skip_transcription:
+                self._transcribe_audio(audio_file, subtitle_path, task_id)
 
             # 生成摘要
             if subtitle_path.exists():
