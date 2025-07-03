@@ -100,7 +100,6 @@ document.addEventListener('DOMContentLoaded', () => {
         appendLog('🔌 與後端伺服器斷線。', 'error');
         submitBtn.disabled = true;
         submitBtn.textContent = '連線中斷';
-        accessCodeInput.disabled = true;
         cancelBtn.style.display = 'none';
 
         videoInfoCard.style.display = 'none';
