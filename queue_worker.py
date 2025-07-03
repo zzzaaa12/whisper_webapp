@@ -202,99 +202,40 @@ class QueueWorker:
             info_opts = {
                 'quiet': True,
                 'no_warnings': True,
+                'extract_flat': True
             }
+            with self.yt_dlp.YoutubeDL(info_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                video_title = info.get('title', '')
+                uploader = info.get('uploader', '')
 
-            try:
-                with self.yt_dlp.YoutubeDL(info_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
-                    video_title = title or info.get('title', 'Unknown')
-                    uploader = info.get('uploader', '未知頻道')
+            # 更新任務資料
+            self.task_queue.update_task_status(
+                task_id, TaskStatus.PROCESSING,
+                data_update={'title': video_title, 'uploader': uploader}
+            )
 
-                # 更新任務data並發送到前端日誌
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=5,
-                    data_update={'title': video_title, 'uploader': uploader}
-                )
+            # 發送 Telegram 通知
+            notification_msg = f"🎬 開始處理影片\n標題: {video_title}"
+            if uploader:
+                notification_msg += f"\n上傳者: {uploader}"
+            self._send_telegram_notification(notification_msg)
 
-                # 直接發送影片資訊到前端操作日誌
-                try:
-                    from socketio_instance import emit_log
+            # 準備檔案路徑
+            sanitized_title = sanitize_filename(f"{datetime.now().strftime('%Y.%m.%d')} - {video_title}")
+            subtitle_path = self.subtitle_folder / f"{sanitized_title}.srt"
+            summary_path = self.summary_folder / f"{sanitized_title}.txt"
 
-                    emit_log(f"📺 影片標題: {video_title}", 'info', task_id)
-                    emit_log(f"📡 頻道: {uploader}", 'info', task_id)
-                    print(f"[WORKER] 影片資訊已發送到前端")
-                except Exception as log_error:
-                    print(f"[WORKER] 無法發送日誌到前端: {log_error}")
-
-                # 更新任務進度
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=7
-                )
-                print(f"[WORKER] 📺 影片標題: {video_title}")
-                print(f"[WORKER] 📡 頻道: {uploader}")
-            except Exception as e:
-                print(f"[WORKER] 無法獲取影片資訊: {e}")
-                video_title = title or 'Unknown'
-                uploader = '未知頻道'
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=5,
-                    log_message=f"⚠️ 無法獲取影片資訊，將使用預設標題"
-                )
-
-            self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
-
-            # 生成輸出檔案路徑
-            safe_title = sanitize_filename(video_title)
-            date_str = get_timestamp("date")
-            base_name = f"{date_str} - {safe_title}"
-
-            subtitle_path = self.subtitle_folder / f"{base_name}.srt"
-            summary_path = self.summary_folder / f"{base_name}.txt"
-
-            # 檢查是否已有摘要檔案（快取檢查）
-            if summary_path.exists():
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=90,
-                    log_message="✅ 找到摘要快取，跳過處理"
-                )
-                print(f"[WORKER] 找到摘要快取: {summary_path}")
-
-                # 尋找對應的音訊檔案
-                audio_file = None
-                for pattern in [f"{video_title}.*", f"*{safe_title}*"]:
-                    matches = list(self.download_folder.glob(pattern))
-                    if matches:
-                        audio_file = matches[0]
-                        break
-
-                # 直接返回快取結果
-                result = {
-                    'video_title': video_title,
-                    'subtitle_file': str(subtitle_path),
-                    'summary_file': str(summary_path),
-                    'original_file': str(audio_file) if audio_file and audio_file.exists() else None
-                }
-
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.COMPLETED, progress=100, result=result
-                )
-
-                # 發送快取命中通知
-                notification_msg = f"✅ YouTube 影片處理完成（快取）\n標題: {video_title}\n檔案: {base_name}\n🔗 網址: {url}"
-
-                try:
-                    summary_content = summary_path.read_text(encoding='utf-8')
-                    if len(summary_content) > 3000:
-                        summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
-                    notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
-                except Exception as e:
-                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
-
-                self._send_telegram_notification(notification_msg)
-                return
+            # 檢查是否已有相同檔名的影片
+            audio_file = None
+            skip_transcription = False
+            for file in self.download_folder.glob('*'):
+                if video_title in file.stem:
+                    audio_file = file
+                    print(f"[WORKER] Found existing file: {audio_file}")
+                    break
 
             # 檢查是否已有字幕檔案
-            skip_transcription = False
             if subtitle_path.exists():
                 self.task_queue.update_task_status(
                     task_id, TaskStatus.PROCESSING, progress=60,
@@ -304,19 +245,6 @@ class QueueWorker:
                 skip_transcription = True
 
             # 尋找是否已下載相同影片
-            audio_file = None
-            for pattern in [f"{video_title}.*", f"*{safe_title}*"]:
-                matches = list(self.download_folder.glob(pattern))
-                if matches:
-                    audio_file = matches[0]
-                    print(f"[WORKER] 找到已下載的檔案: {audio_file}")
-                    self.task_queue.update_task_status(
-                        task_id, TaskStatus.PROCESSING, progress=25,
-                        log_message="✅ 找到已下載檔案，跳過下載"
-                    )
-                    break
-
-            # 如果沒找到已下載的檔案，才進行下載
             if not audio_file:
                 # 配置 yt-dlp 下載
                 ydl_opts = {
@@ -366,7 +294,7 @@ class QueueWorker:
             )
 
             # 發送通知（包含摘要內容）
-            notification_msg = f"✅ YouTube 影片處理完成\n標題: {video_title}\n檔案: {base_name}\n🔗 網址: {url}"
+            notification_msg = f"✅ YouTube 影片處理完成\n標題: {video_title}\n檔案: {sanitized_title}\n🔗 網址: {url}"
 
             # 如果摘要文件存在，添加摘要內容到通知
             if summary_path.exists():
@@ -407,6 +335,10 @@ class QueueWorker:
             print(f"[WORKER] Processing uploaded media: {audio_file.name}")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
+            # 發送 Telegram 通知
+            notification_msg = f"🎵 開始處理音訊檔案\n檔案: {title or audio_file.name}"
+            self._send_telegram_notification(notification_msg)
+
             # 轉錄音訊
             self._transcribe_audio(audio_file, subtitle_path, task_id)
 
@@ -427,31 +359,21 @@ class QueueWorker:
                 task_id, TaskStatus.COMPLETED, progress=100, result=result
             )
 
-            # 發送通知（包含摘要內容）
+            # 發送完成通知
             original_title = title if title else audio_file.name
-            notification_msg = f"✅ 音訊檔案處理完成\n檔案: {original_title}\n💾 系統檔案: {audio_file.name}"
-
-            # 如果摘要文件存在，添加摘要內容到通知
-            if summary_path.exists():
-                try:
-                    summary_content = summary_path.read_text(encoding='utf-8')
-                    # 限制摘要長度，避免telegram訊息過長
-                    if len(summary_content) > 3000:
-                        summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
-                    notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
-                except Exception as e:
-                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
-                    notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
-
+            notification_msg = f"✅ 音訊檔案處理完成\n檔案: {original_title}"
             self._send_telegram_notification(notification_msg)
 
         except Exception as e:
-            error_msg = f"上傳媒體任務處理失敗: {str(e)}"
+            error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"
             print(f"[WORKER] {error_msg}")
             print(f"[WORKER] Error details: {traceback.format_exc()}")
             self.task_queue.update_task_status(
-                task_id, TaskStatus.FAILED, error_message=error_msg
+                task_id, TaskStatus.FAILED,
+                error_message=error_msg
             )
+            # 發送錯誤通知
+            self._send_telegram_notification(f"❌ 音訊檔案處理失敗\n檔案: {title or audio_file.name}\n錯誤: {str(e)}")
 
     def _transcribe_audio(self, audio_file, subtitle_path, task_id):
         """轉錄音訊檔案"""
