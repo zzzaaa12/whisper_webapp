@@ -59,7 +59,14 @@ def set_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
-    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
+    # 如果使用 SSL，設定更強的 HSTS
+    use_ssl = get_config("USE_SSL", False)
+    if use_ssl:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains; preload'
+    else:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+
     return response
 
 # --- Global Definitions ---
@@ -2092,6 +2099,32 @@ if __name__ == '__main__':
     else:
         print("✅ OPENAI_API_KEY 已設定")
 
+    # 檢查 SSL 配置
+    use_ssl = get_config("USE_SSL", False)
+    ssl_context = None
+    server_port = int(get_config("SERVER_PORT", 5000))  # 確保是整數類型
+
+    if use_ssl:
+        cert_file = Path(__file__).parent / 'certs' / 'cert.pem'
+        key_file = Path(__file__).parent / 'certs' / 'key.pem'
+
+        if cert_file.exists() and key_file.exists():
+            try:
+                import ssl
+                ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                ssl_context.load_cert_chain(cert_file, key_file)
+                print("✅ SSL 憑證已載入，將使用 HTTPS 模式")
+                print(f"🔐 HTTPS 伺服器將在 https://0.0.0.0:{server_port} 啟動")
+            except Exception as e:
+                print(f"⚠️  SSL 憑證載入失敗: {e}")
+                print("   將使用 HTTP 模式啟動")
+                ssl_context = None
+        else:
+            print("⚠️  找不到 SSL 憑證檔案 (certs/cert.pem, certs/key.pem)")
+            print("   將使用 HTTP 模式啟動")
+    else:
+        print("📡 使用 HTTP 模式")
+
     print("🚀 繼續啟動系統...")
 
     for folder in [DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER, LOG_FOLDER, TRASH_FOLDER, UPLOAD_FOLDER]:
@@ -2123,10 +2156,22 @@ if __name__ == '__main__':
     worker_process = Process(target=background_worker, args=worker_args)
     worker_process.start()
 
-    print("主伺服器啟動，請在瀏覽器中開啟 http://127.0.0.1:5000")
+    # 顯示啟動訊息
+    if ssl_context:
+        print(f"🔐 HTTPS 伺服器啟動，請在瀏覽器中開啟 https://127.0.0.1:{server_port}")
+        print(f"   或透過網路存取：https://你的IP地址:{server_port}")
+    else:
+        print(f"📡 HTTP 伺服器啟動，請在瀏覽器中開啟 http://127.0.0.1:{server_port}")
+        print(f"   或透過網路存取：http://你的IP地址:{server_port}")
 
     try:
-        socketio.run(app, host='0.0.0.0', port=5000, use_reloader=False)
+        socketio.run(
+            app,
+            host='0.0.0.0',
+            port=server_port,
+            use_reloader=False,
+            ssl_context=ssl_context
+        )
     finally:
         print("主伺服器準備關閉...")
         stop_event.set()
