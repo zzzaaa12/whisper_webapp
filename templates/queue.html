@@ -272,6 +272,29 @@
         </div>
     </div>
 
+    <!-- 取消任務模態框 -->
+    <div class="modal fade" id="cancelTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">取消任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>確定要取消這個任務嗎？</p>
+                    <div class="mb-3">
+                        <label for="cancelTaskAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="cancelTaskAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmCancelTask()">確認取消任務</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 任務詳情模態框 -->
     <div class="modal fade" id="taskDetailModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -300,6 +323,7 @@
         let currentAccessCode = '';
         let autoRefreshInterval;
         let currentTaskId = null;
+        let taskIdToCancel = null;
 
         // 檢查配置狀態並顯示警告
         async function checkConfigStatus() {
@@ -642,20 +666,45 @@
 
         // 顯示取消任務對話框
         function showCancelTaskDialog(taskId) {
-            if (confirm('確定要取消這個任務嗎？')) {
-                cancelTaskById(taskId);
-            }
+            taskIdToCancel = taskId;
+            document.getElementById('cancelTaskAccessCode').value = '';
+            new bootstrap.Modal(document.getElementById('cancelTaskModal')).show();
         }
 
         // 取消任務
         async function cancelTask() {
             if (!currentTaskId) return;
-            await cancelTaskById(currentTaskId);
+            taskIdToCancel = currentTaskId;
+            document.getElementById('cancelTaskAccessCode').value = '';
             bootstrap.Modal.getInstance(document.getElementById('taskDetailModal')).hide();
+            new bootstrap.Modal(document.getElementById('cancelTaskModal')).show();
+        }
+
+        // 確認取消任務
+        async function confirmCancelTask() {
+            const accessCode = document.getElementById('cancelTaskAccessCode').value.trim();
+
+            if (!accessCode) {
+                alert('請輸入通行碼');
+                return;
+            }
+
+            if (!taskIdToCancel) {
+                alert('沒有要取消的任務');
+                return;
+            }
+
+            try {
+                await cancelTaskById(taskIdToCancel, accessCode);
+                bootstrap.Modal.getInstance(document.getElementById('cancelTaskModal')).hide();
+                taskIdToCancel = null;
+            } catch (error) {
+                // 錯誤處理已在 cancelTaskById 中處理
+            }
         }
 
         // 根據ID取消任務
-        async function cancelTaskById(taskId) {
+        async function cancelTaskById(taskId, accessCode) {
             try {
                 const response = await fetch('/api/queue/cancel', {
                     method: 'POST',
@@ -663,7 +712,8 @@
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
-                        task_id: taskId
+                        task_id: taskId,
+                        access_code: accessCode
                     })
                 });
 
