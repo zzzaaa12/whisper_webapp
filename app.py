@@ -53,6 +53,19 @@ app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 # 初始化 SocketIO 實例
 socketio = init_socketio(app)
 
+# 初始化核心管理器
+try:
+    from app.core import FileOperationManager, SessionManager, SecurityManager
+    file_manager = FileOperationManager(BASE_DIR)
+    session_manager = SessionManager(LOG_FOLDER)
+    security_manager = SecurityManager()
+except ImportError:
+    # 回退到原始實作
+    print("Warning: Cannot import new core modules, using legacy implementation")
+    file_manager = None
+    session_manager = None
+    security_manager = None
+
 # 安全性增強：設定安全標頭
 @app.after_request
 def set_security_headers(response):
@@ -78,6 +91,7 @@ LOG_FOLDER = BASE_DIR / "logs"  # 新增日誌資料夾
 TRASH_FOLDER = BASE_DIR / "trash"  # 新增回收桶資料夾
 UPLOAD_FOLDER = BASE_DIR / "uploads"  # 新增上傳檔案資料夾
 TRASH_METADATA_FILE = TRASH_FOLDER / "metadata.json"  # 回收桶記錄檔案
+BOOKMARK_FILE = BASE_DIR / "bookmarks.json"  # 書籤檔案
 
 task_queue = Queue()
 results_queue = Queue()
@@ -93,36 +107,48 @@ task_lock = threading.Lock()
 # --- Log Persistence ---
 def save_log_entry(sid, message, level='info'):
     """將日誌條目儲存到檔案"""
-    try:
-        log_file = LOG_FOLDER / f"session_{sid}.log"
-        timestamp = utils_get_timestamp("log")
-        log_entry = f"[{timestamp}] {message}\n"
+    if session_manager:
+        session_manager.save_log_entry(sid, message, level)
+    else:
+        # 回退到原始實作
+        try:
+            log_file = LOG_FOLDER / f"session_{sid}.log"
+            timestamp = utils_get_timestamp("log")
+            log_entry = f"[{timestamp}] {message}\n"
 
-        with open(log_file, 'a', encoding='utf-8') as f:
-            f.write(log_entry)
-    except Exception as e:
-        print(f"Error saving log: {e}")
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(log_entry)
+        except Exception as e:
+            print(f"Error saving log: {e}")
 
 def get_session_logs(sid):
     """獲取指定 session 的日誌記錄"""
-    try:
-        log_file = LOG_FOLDER / f"session_{sid}.log"
-        if log_file.exists():
-            with open(log_file, 'r', encoding='utf-8') as f:
-                return f.read()
-        return ""
-    except Exception as e:
-        print(f"Error reading log: {e}")
-        return ""
+    if session_manager:
+        return session_manager.get_session_logs(sid)
+    else:
+        # 回退到原始實作
+        try:
+            log_file = LOG_FOLDER / f"session_{sid}.log"
+            if log_file.exists():
+                with open(log_file, 'r', encoding='utf-8') as f:
+                    return f.read()
+            return ""
+        except Exception as e:
+            print(f"Error reading log: {e}")
+            return ""
 
 def clear_session_logs(sid):
     """清除指定 session 的日誌記錄"""
-    try:
-        log_file = LOG_FOLDER / f"session_{sid}.log"
-        if log_file.exists():
-            log_file.unlink()
-    except Exception as e:
-        print(f"Error clearing log: {e}")
+    if session_manager:
+        session_manager.clear_session_logs(sid)
+    else:
+        # 回退到原始實作
+        try:
+            log_file = LOG_FOLDER / f"session_{sid}.log"
+            if log_file.exists():
+                log_file.unlink()
+        except Exception as e:
+            print(f"Error clearing log: {e}")
 
 # --- Login Attempt Limiting ---
 LOGIN_ATTEMPTS = {}  # {ip: {'count': int, 'first_attempt': timestamp, 'blocked_until': timestamp}}
@@ -132,71 +158,95 @@ attempts_lock = threading.Lock()
 
 def get_client_ip():
     """獲取客戶端 IP 地址"""
-    forwarded_for = request.headers.get('X-Forwarded-For')
-    if forwarded_for:
-        return forwarded_for.split(',')[0].strip()
-    elif request.headers.get('X-Real-IP'):
-        return request.headers.get('X-Real-IP')
+    if security_manager:
+        return security_manager.get_client_ip()
     else:
-        return request.remote_addr
+        # 回退到原始實作
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            return forwarded_for.split(',')[0].strip()
+        elif request.headers.get('X-Real-IP'):
+            return request.headers.get('X-Real-IP') or ''
+        else:
+            return request.remote_addr or '127.0.0.1'
 
 def is_ip_blocked(ip):
     """檢查 IP 是否被封鎖"""
-    with attempts_lock:
-        if ip not in LOGIN_ATTEMPTS:
+    if security_manager:
+        return security_manager.is_ip_blocked(ip)
+    else:
+        # 回退到原始實作
+        with attempts_lock:
+            if ip not in LOGIN_ATTEMPTS:
+                return False
+
+            attempt_data = LOGIN_ATTEMPTS[ip]
+            current_time = time.time()
+
+            # 檢查是否在封鎖期內
+            if 'blocked_until' in attempt_data and current_time < attempt_data['blocked_until']:
+                return True
+
+            # 檢查是否超過重置時間（1小時）
+            if current_time - attempt_data['first_attempt'] > 3600:
+                # 重置嘗試次數
+                del LOGIN_ATTEMPTS[ip]
+                return False
+
             return False
-
-        attempt_data = LOGIN_ATTEMPTS[ip]
-        current_time = time.time()
-
-        # 檢查是否在封鎖期內
-        if 'blocked_until' in attempt_data and current_time < attempt_data['blocked_until']:
-            return True
-
-        # 檢查是否超過重置時間（1小時）
-        if current_time - attempt_data['first_attempt'] > 3600:
-            # 重置嘗試次數
-            del LOGIN_ATTEMPTS[ip]
-            return False
-
-        return False
 
 def record_failed_attempt(ip):
     """記錄失敗的登入嘗試"""
-    with attempts_lock:
-        current_time = time.time()
+    if security_manager:
+        security_manager.record_failed_attempt(ip)
+    else:
+        # 回退到原始實作
+        with attempts_lock:
+            current_time = time.time()
 
-        if ip not in LOGIN_ATTEMPTS:
-            LOGIN_ATTEMPTS[ip] = {
-                'count': 1,
-                'first_attempt': current_time
-            }
-        else:
-            LOGIN_ATTEMPTS[ip]['count'] += 1
+            if ip not in LOGIN_ATTEMPTS:
+                LOGIN_ATTEMPTS[ip] = {
+                    'count': 1,
+                    'first_attempt': current_time
+                }
+            else:
+                LOGIN_ATTEMPTS[ip]['count'] += 1
 
-            # 如果達到最大嘗試次數，設定封鎖時間
-            if LOGIN_ATTEMPTS[ip]['count'] >= MAX_ATTEMPTS:
-                LOGIN_ATTEMPTS[ip]['blocked_until'] = current_time + BLOCK_DURATION
+                # 如果達到最大嘗試次數，設定封鎖時間
+                if LOGIN_ATTEMPTS[ip]['count'] >= MAX_ATTEMPTS:
+                    LOGIN_ATTEMPTS[ip]['blocked_until'] = current_time + BLOCK_DURATION
 
 def record_successful_attempt(ip):
     """記錄成功的登入嘗試，重置計數器"""
-    with attempts_lock:
-        if ip in LOGIN_ATTEMPTS:
-            del LOGIN_ATTEMPTS[ip]
+    if security_manager:
+        security_manager.record_successful_attempt(ip)
+    else:
+        # 回退到原始實作
+        with attempts_lock:
+            if ip in LOGIN_ATTEMPTS:
+                del LOGIN_ATTEMPTS[ip]
 
 def get_remaining_attempts(ip):
     """獲取剩餘嘗試次數"""
-    with attempts_lock:
-        if ip not in LOGIN_ATTEMPTS:
-            return MAX_ATTEMPTS
-        return max(0, MAX_ATTEMPTS - LOGIN_ATTEMPTS[ip]['count'])
+    if security_manager:
+        return security_manager.get_remaining_attempts(ip)
+    else:
+        # 回退到原始實作
+        with attempts_lock:
+            if ip not in LOGIN_ATTEMPTS:
+                return MAX_ATTEMPTS
+            return max(0, MAX_ATTEMPTS - LOGIN_ATTEMPTS[ip]['count'])
 
 def get_block_remaining_time(ip):
     """獲取封鎖剩餘時間（秒）"""
-    with attempts_lock:
-        if ip not in LOGIN_ATTEMPTS or 'blocked_until' not in LOGIN_ATTEMPTS[ip]:
-            return 0
-        return max(0, int(LOGIN_ATTEMPTS[ip]['blocked_until'] - time.time()))
+    if security_manager:
+        return security_manager.get_block_remaining_time(ip)
+    else:
+        # 回退到原始實作
+        with attempts_lock:
+            if ip not in LOGIN_ATTEMPTS or 'blocked_until' not in LOGIN_ATTEMPTS[ip]:
+                return 0
+            return max(0, int(LOGIN_ATTEMPTS[ip]['blocked_until'] - time.time()))
 
 # --- Global Variables & Model Loading ---
 #延遲導入，在需要時才載入
@@ -378,6 +428,93 @@ def do_summarize(subtitle_content, summary_save_path, sid):
 
 # --- Background Worker ---
 def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitle_p, openai_key):
+    """重構後的背景工作程式 - 使用模組化設計"""
+    from pathlib import Path
+    from queue import Empty as QueueEmpty
+    
+    # 導入新的管理器（暫時使用相對導入，後續會改為絕對導入）
+    try:
+        import sys
+        import os
+        sys.path.append(os.path.join(os.path.dirname(__file__), 'app'))
+        from services.background_worker_manager import BackgroundWorkerManager
+    except ImportError:
+        # 回退到原始實作（向後兼容）
+        print("[WORKER] Cannot import new modules, falling back to legacy implementation")
+        _legacy_background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitle_p, openai_key)
+        return
+    
+    # 設定資料夾
+    folders = {
+        'download': Path(download_p),
+        'summary': Path(summary_p),
+        'subtitle': Path(subtitle_p)
+    }
+    
+    # 建立工作程式管理器
+    worker_manager = BackgroundWorkerManager(folders, openai_key)
+    
+    print("[WORKER] Ready.")
+    while not stop_evt.is_set():
+        try:
+            task = task_q.get(timeout=1)
+            if not task:
+                continue
+
+            print(f"[WORKER] DEBUG: 收到任務: {task}")
+            
+            # 檢查任務類型
+            task_type = task.get('task_type', 'url')
+            print(f"[WORKER] DEBUG: 任務類型: {task_type}")
+
+            try:
+                if task_type == 'audio_file':
+                    print("[WORKER] DEBUG: 處理 audio_file 任務")
+                    success = worker_manager.process_audio_file_task(task, result_q)
+                else:
+                    # 處理 URL 任務（YouTube等）
+                    success = worker_manager.process_youtube_task(task, result_q)
+                    
+                if success:
+                    print(f"[WORKER] Task completed successfully: {task.get('sid', 'unknown')}")
+                else:
+                    print(f"[WORKER] Task failed: {task.get('sid', 'unknown')}")
+                    
+            except Exception as e:
+                print(f"[WORKER] Error processing task: {e}")
+                import traceback
+                print(f"[WORKER] Error details: {traceback.format_exc()}")
+                
+                # 發送錯誤給前端
+                sid = task.get('sid')
+                if sid:
+                    result_q.put({
+                        'event': 'update_log',
+                        'data': {'log': f"❌ 處理時發生錯誤: {e}", 'type': 'error'},
+                        'sid': sid
+                    })
+            finally:
+                # 確保狀態重置
+                sid = task.get('sid')
+                if sid:
+                    result_q.put({
+                        'event': 'update_server_state',
+                        'data': {'is_busy': False, 'current_task': '空閒'}
+                    })
+                    result_q.put({'event': 'processing_finished', 'data': {}, 'sid': sid})
+                    
+        except QueueEmpty:
+            continue
+        except Exception as e:
+            print(f"[WORKER] Unexpected error in main loop: {e}")
+            import traceback
+            print(f"[WORKER] Error details: {traceback.format_exc()}")
+
+    print("[WORKER] Shutting down.")
+
+
+def _legacy_background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitle_p, openai_key):
+    """原始的背景工作程式實作（向後兼容）"""
     import faster_whisper, torch, yt_dlp, openai, re
     from pathlib import Path
 
@@ -386,7 +523,6 @@ def background_worker(task_q, result_q, stop_evt, download_p, summary_p, subtitl
         return utils_send_telegram_notification(message)
 
     DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER = Path(download_p), Path(summary_p), Path(subtitle_p)
-                    # OpenAI 客戶端已移除，改用統一的 ai_summary_service
 
     def worker_emit(event, data, sid): result_q.put({'event': event, 'data': data, 'sid': sid})
     def worker_update_state(is_busy, task_desc): result_q.put({'event': 'update_server_state', 'data': {'is_busy': is_busy, 'current_task': task_desc}})
@@ -1517,36 +1653,51 @@ def delete_file_from_trash(trash_id):
 
 def get_trash_items():
     """獲取回收桶中的所有項目"""
-    try:
-        metadata = load_trash_metadata()
-        # 按刪除時間倒序排列
-        metadata.sort(key=lambda x: x['deleted_at'], reverse=True)
-        return metadata
-    except Exception as e:
-        print(f"Error getting trash items: {e}")
-        return []
+    if file_manager:
+        return file_manager.get_trash_items()
+    else:
+        # 回退到原始實作
+        try:
+            metadata = load_trash_metadata()
+            # 按刪除時間倒序排列
+            metadata.sort(key=lambda x: x['deleted_at'], reverse=True)
+            return metadata
+        except Exception as e:
+            print(f"Error getting trash items: {e}")
+            return []
 
 # --- Bookmark Management Functions ---
 def load_bookmarks():
     """載入書籤資料"""
-    try:
-        if BOOKMARK_FILE.exists():
-            with open(BOOKMARK_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {'bookmarks': []}
-    except Exception as e:
-        print(f"Error loading bookmarks: {e}")
-        return {'bookmarks': []}
+    if file_manager:
+        bookmarks_data = file_manager.load_bookmarks()
+        if not bookmarks_data or 'bookmarks' not in bookmarks_data:
+            return {'bookmarks': []}
+        return bookmarks_data
+    else:
+        # 回退到原始實作
+        try:
+            if BOOKMARK_FILE.exists():
+                with open(BOOKMARK_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return {'bookmarks': []}
+        except Exception as e:
+            print(f"Error loading bookmarks: {e}")
+            return {'bookmarks': []}
 
 def save_bookmarks(bookmarks_data):
     """儲存書籤資料"""
-    try:
-        with open(BOOKMARK_FILE, 'w', encoding='utf-8') as f:
-            json.dump(bookmarks_data, f, ensure_ascii=False, indent=2)
-        return True
-    except Exception as e:
-        print(f"Error saving bookmarks: {e}")
-        return False
+    if file_manager:
+        return file_manager.save_bookmarks(bookmarks_data)
+    else:
+        # 回退到原始實作
+        try:
+            with open(BOOKMARK_FILE, 'w', encoding='utf-8') as f:
+                json.dump(bookmarks_data, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            print(f"Error saving bookmarks: {e}")
+            return False
 
 def add_bookmark(filename, title=None):
     """新增書籤"""
