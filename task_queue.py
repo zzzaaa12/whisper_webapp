@@ -117,6 +117,16 @@ class TaskQueue:
             self._queue_order = [t.task_id for t in sorted(queued_tasks,
                                                           key=lambda x: (-x.priority, x.created_at))]
 
+            # 清理啟動時處於「處理中」狀態的任務
+            processing_tasks = [t for t in self._tasks.values() if t.status == TaskStatus.PROCESSING]
+            if processing_tasks:
+                print(f"發現 {len(processing_tasks)} 個在啟動時處於處理中狀態的任務，將其標記為失敗。")
+                for task in processing_tasks:
+                    task.status = TaskStatus.FAILED
+                    task.error_message = "任務在應用程式啟動時仍處於處理中狀態，可能因先前的不正常關閉導致。"
+                    task.completed_at = datetime.now()
+                    self._save_task(task) # 儲存變更
+
     def _save_task(self, task: Task):
         """儲存單一任務到檔案"""
         task_file = self.tasks_dir / f"{task.task_id}.json"
