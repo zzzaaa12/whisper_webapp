@@ -262,7 +262,7 @@
                 <button onclick="history.back()" class="btn btn-primary">
                     <i class="bi bi-arrow-left"></i> 回上一頁
                 </button>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">回到主頁</a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">回到主頁</a>
             </div>
         </div>
 
@@ -279,11 +279,11 @@
                     </div>
                     <!-- 下載按鈕 -->
                     <div class="btn-group">
-                        <a href="{{ url_for('download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
+                        <a href="{{ url_for('main.download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
                             <i class="bi bi-download"></i> 下載摘要
                         </a>
                         {% if has_subtitle %}
-                        <a href="{{ url_for('download_subtitle', filename=filename) }}" class="btn btn-outline-secondary btn-sm">
+                        <a href="{{ url_for('main.download_subtitle', filename=filename) }}" class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-download"></i> 下載字幕
                         </a>
                         {% endif %}
