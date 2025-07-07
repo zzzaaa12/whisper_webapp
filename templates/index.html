@@ -221,7 +221,8 @@
             <!-- Button for mobile view -->
                             <div class="d-md-none d-flex justify-content-start mb-2">
                         <a href="/queue" class="btn btn-outline-success btn-sm me-2">任務佇列</a>
-                                    <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
+                                    <a href="{{ url_for('main.list_summaries', filter='auto') }}" class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
+                        <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
                         <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
             </div>
             <div class="card">
@@ -232,6 +233,7 @@
                     </div>
                     <h3>Whisper 語音轉文字工具</h3>
                     <div style="position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);">
+                        <a href="{{ url_for('main.list_summaries', filter='auto') }}" class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
                         <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
                         <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
                     </div>

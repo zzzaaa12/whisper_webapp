@@ -190,6 +190,15 @@
                 checkbox.addEventListener('change', updateSelection);
             });
 
+            // Check for URL filter parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('filter') === 'auto') {
+                const autoFilterBtn = document.getElementById('auto-filter-btn');
+                if (autoFilterBtn) {
+                    autoFilterBtn.click();
+                }
+            }
+
             // 搜尋功能
             const searchInput = document.getElementById('search-input');
             const clearButton = document.getElementById('clear-search');
