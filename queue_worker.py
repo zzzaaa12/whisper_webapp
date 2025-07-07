@@ -155,7 +155,16 @@ class QueueWorker:
             send_telegram_notification(notification_msg)
 
             # 準備檔案路徑
-            sanitized_title = sanitize_filename(f"{get_timestamp('date')} - {video_title}")
+            date_str = get_timestamp('date')
+            is_auto_task = data.get('auto', False)
+
+            if is_auto_task:
+                base_name = f"{video_title}"
+                sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+            else:
+                base_name = f"{date_str} - {video_title}"
+                sanitized_title = sanitize_filename(base_name)
+
             subtitle_path = self.subtitle_folder / f"{sanitized_title}.srt"
             summary_path = self.summary_folder / f"{sanitized_title}.txt"
 

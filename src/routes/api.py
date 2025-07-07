@@ -385,6 +385,7 @@ def api_process_youtube():
 
         data = request.get_json()
         youtube_url = data.get('youtube_url', '').strip()
+        auto_process = data.get('auto', 0) == 1
         access_code = data.get('access_code', '').strip()
 
         if not youtube_url:
@@ -402,7 +403,8 @@ def api_process_youtube():
         queue_manager = get_task_queue()
 
         task_data = {
-            'url': youtube_url
+            'url': youtube_url,
+            'auto': auto_process
         }
 
         try:
