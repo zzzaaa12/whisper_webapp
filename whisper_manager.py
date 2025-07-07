@@ -7,7 +7,8 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any, Callable
-from utils import get_timestamp, exception_handler
+from src.config import get_config
+from src.utils.time_formatter import get_timestamp
 
 
 class WhisperModelManager:
