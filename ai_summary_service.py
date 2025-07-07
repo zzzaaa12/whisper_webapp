@@ -3,6 +3,8 @@
 整合所有AI摘要相關功能，避免代碼重複
 """
 
+from typing import Optional, Dict, Any, Callable
+from pathlib import Path
 from src.config import get_config
 
 class SummaryService:

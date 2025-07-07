@@ -410,8 +410,6 @@ if __name__ == '__main__':
     file_service.ensure_dir(TRASH_FOLDER / "summaries")
     file_service.ensure_dir(TRASH_FOLDER / "subtitles")
 
-    socketio.start_background_task(target=queue_listener, res_queue=results_queue)
-
     # 啟動新的佇列工作程式（與舊系統並行）
     try:
         from queue_worker import start_queue_worker

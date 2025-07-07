@@ -16,6 +16,8 @@ import re
 import requests
 from urllib.parse import unquote
 import yt_dlp # Import yt_dlp at the top
+import sys
+print(f"sys.path: {sys.path}")
 
 from task_queue import get_task_queue, TaskStatus
 from src.config import get_config
@@ -84,7 +86,6 @@ class QueueWorker:
 
             summary_service = get_summary_service(
                 openai_api_key=self.openai_key,
-                config_getter=get_config,
                 ai_provider=ai_provider
             )
 
