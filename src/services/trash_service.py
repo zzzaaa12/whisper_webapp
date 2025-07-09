@@ -36,20 +36,24 @@ class TrashService:
         except Exception as e:
             print(f"Error saving trash metadata: {e}")
 
+    def _generate_unique_trash_path(self, file_path: Path, file_type: str) -> Path:
+        trash_subfolder = self.trash_folder / file_type
+        trash_subfolder.mkdir(parents=True, exist_ok=True)
+
+        timestamp = get_timestamp("file")
+        unique_id = str(uuid.uuid4())[:8]
+        safe_name = sanitize_filename(file_path.name)
+        new_filename = f"{timestamp}_{unique_id}_{safe_name}"
+        trash_path = trash_subfolder / new_filename
+        return trash_path
+
     def move_file_to_trash(self, file_path: Path, file_type: str) -> tuple[bool, str]:
         """移動檔案到回收桶"""
         try:
             if not file_path.exists():
                 return False, "檔案不存在"
 
-            trash_subfolder = self.trash_folder / file_type
-            trash_subfolder.mkdir(parents=True, exist_ok=True)
-
-            timestamp = get_timestamp("file")
-            unique_id = str(uuid.uuid4())[:8]
-            safe_name = sanitize_filename(file_path.name)
-            new_filename = f"{timestamp}_{unique_id}_{safe_name}"
-            trash_path = trash_subfolder / new_filename
+            trash_path = self._generate_unique_trash_path(file_path, file_type)
 
             shutil.move(str(file_path), str(trash_path))
 

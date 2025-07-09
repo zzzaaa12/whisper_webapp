@@ -15,6 +15,12 @@ class AuthService:
         self.block_duration = get_config("BLOCK_DURATION", 300)
         self.attempts_lock = Lock()
 
+    def _clean_expired_attempts(self, ip: str, current_time: float):
+        if ip in self.login_attempts:
+            attempt_data = self.login_attempts[ip]
+            if current_time - attempt_data['first_attempt'] > 3600:
+                del self.login_attempts[ip]
+
     def get_client_ip(self) -> str:
         """獲取客戶端 IP 位址"""
         if request.headers.get('X-Forwarded-For'):
@@ -24,20 +30,18 @@ class AuthService:
     def is_ip_blocked(self, ip: str) -> bool:
         """檢查 IP 是否被封鎖"""
         with self.attempts_lock:
-            if ip not in self.login_attempts:
+            current_time = time.time()
+            self._clean_expired_attempts(ip, current_time) # Call the new method
+
+            if ip not in self.login_attempts: # Check again after cleaning
                 return False
 
-            attempt_data = self.login_attempts[ip]
-            current_time = time.time()
+            attempt_data = self.login_attempts[ip] # Re-get attempt_data after potential deletion
 
             if 'blocked_until' in attempt_data and current_time < attempt_data['blocked_until']:
                 return True
 
-            if current_time - attempt_data['first_attempt'] > 3600:
-                del self.login_attempts[ip]
-                return False
-
-            return False
+            return False # If not blocked and not expired, then not blocked
 
     def record_failed_attempt(self, ip: str):
         """記錄失敗的登入嘗試"""

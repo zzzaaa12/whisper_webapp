@@ -5,6 +5,7 @@
 
 from typing import Optional, Dict, Any, Callable
 from pathlib import Path
+from datetime import datetime # Added for datetime usage
 from src.config import get_config
 
 class SummaryService:
@@ -151,6 +152,39 @@ class SummaryService:
                     return True
 
         return False
+
+    def _call_ai_api(self, prompt: str, model_config: Dict[str, Any], log_callback: Optional[Callable]) -> Any:
+        if not self.openai:
+            self._init_ai_client()
+
+        if not self.openai:
+            raise RuntimeError("OpenAI module failed to load.")
+
+        # 動態創建客戶端（支援不同的 base_url）
+        client_kwargs = {"api_key": self.current_provider_config["api_key"]}
+
+        # 如果有自定義的 base_url，則設定
+        if "base_url" in self.current_provider_config:
+            base_url = self.current_provider_config["base_url"]
+            if base_url != "https://api.openai.com/v1":  # 非預設的才設定
+                client_kwargs["base_url"] = base_url
+
+        client = self.openai.OpenAI(**client_kwargs)
+
+        if log_callback:
+            log_callback(f"🤖 使用模型：{model_config['model']} (提供商: {self.ai_provider})", 'info')
+
+        # 調用 AI API
+        response = client.chat.completions.create(
+            model=model_config['model'],
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=model_config['max_tokens'],
+            temperature=model_config['temperature']
+        )
+        return response
 
     def _create_prompt(self, subtitle_content: str, prompt_type: str = "structured") -> str:
         """
@@ -318,46 +352,13 @@ class SummaryService:
                 if progress_callback:
                     progress_callback(90)
 
-                # 初始化 AI 客戶端
-                if not self.openai:
-                    self._init_ai_client()
-
-                if not self.openai:
-                    error_msg = "❌ OpenAI 模組載入失敗"
-                    if log_callback:
-                        log_callback(error_msg, 'error')
-                    return False, error_msg
-
-                # 動態創建客戶端（支援不同的 base_url）
-                client_kwargs = {"api_key": self.current_provider_config["api_key"]}
-
-                # 如果有自定義的 base_url，則設定
-                if "base_url" in self.current_provider_config:
-                    base_url = self.current_provider_config["base_url"]
-                    if base_url != "https://api.openai.com/v1":  # 非預設的才設定
-                        client_kwargs["base_url"] = base_url
-
-                client = self.openai.OpenAI(**client_kwargs)
-
                 # 創建prompt
                 prompt = self._create_prompt(subtitle_content, prompt_type)
 
                 # 獲取模型配置
                 model_config = self._get_model_config()
 
-                if log_callback:
-                    log_callback(f"🤖 使用模型：{model_config['model']} (提供商: {self.ai_provider})", 'info')
-
-                # 調用 AI API
-                response = client.chat.completions.create(
-                    model=model_config['model'],
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=model_config['max_tokens'],
-                    temperature=model_config['temperature']
-                )
+                response = self._call_ai_api(prompt, model_config, log_callback)
 
                 # 提取摘要內容
                 summary_content = response.choices[0].message.content

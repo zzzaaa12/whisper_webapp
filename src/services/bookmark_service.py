@@ -1,5 +1,7 @@
 
 
+from typing import Dict, Any
+
 import json
 from pathlib import Path
 from datetime import datetime
@@ -35,6 +37,18 @@ class BookmarkService:
             print(f"Error saving bookmarks: {e}")
             return False
 
+    def _populate_summary_details(self, bookmark: Dict[str, Any], filename: str):
+        try:
+            summary_path = self.summary_folder / filename
+            if summary_path.exists():
+                bookmark['file_size'] = summary_path.stat().st_size
+                with open(summary_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    lines = content.split('\n')[:3]
+                    bookmark['summary_preview'] = '\n'.join(lines)[:200] + ('...' if len(content) > 200 else '')
+        except Exception as e:
+            print(f"Error reading summary file: {e}")
+
     def add_bookmark(self, filename: str, title: str = None) -> tuple[bool, str]:
         """新增書籤"""
         try:
@@ -51,16 +65,7 @@ class BookmarkService:
                 'file_size': 0,
                 'summary_preview': ""
             }
-            try:
-                summary_path = self.summary_folder / filename
-                if summary_path.exists():
-                    bookmark['file_size'] = summary_path.stat().st_size
-                    with open(summary_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        lines = content.split('\n')[:3]
-                        bookmark['summary_preview'] = '\n'.join(lines)[:200] + ('...' if len(content) > 200 else '')
-            except Exception as e:
-                print(f"Error reading summary file: {e}")
+            self._populate_summary_details(bookmark, filename)
             bookmarks_data['bookmarks'].append(bookmark)
             self._save_bookmarks_data(bookmarks_data)
             return True, "書籤已新增"

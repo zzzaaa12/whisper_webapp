@@ -15,9 +15,7 @@ import json
 import re
 import requests
 from urllib.parse import unquote
-import yt_dlp # Import yt_dlp at the top
-import sys
-print(f"sys.path: {sys.path}")
+import yt_dlp
 
 from task_queue import get_task_queue, TaskStatus
 from src.config import get_config
@@ -25,7 +23,10 @@ from src.services.notification_service import send_telegram_notification
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.srt_converter import segments_to_srt
 from src.utils.time_formatter import get_timestamp
-from whisper_manager import get_whisper_manager
+from src.services.whisper_manager import get_whisper_manager
+from src.services.ai_summary_service import get_summary_service
+from src.services.file_service import FileService
+from src.services.task_processor import TaskProcessor
 
 
 class QueueWorker:
@@ -42,8 +43,15 @@ class QueueWorker:
         self.stop_event = threading.Event()
         self.task_queue = get_task_queue()
 
-        # 移除OpenAI相關初始化，統一使用ai_summary_service
-        # self.openai = None
+        # Initialize TaskProcessor
+        self.task_processor = TaskProcessor(
+            data_dir=data_dir,
+            task_queue_manager=self.task_queue,
+            whisper_manager_instance=get_whisper_manager(),
+            summary_service_instance=get_summary_service(openai_api_key=self.openai_key),
+            notification_service_instance=send_telegram_notification,
+            file_service_instance=FileService()
+        )
 
         # 工作線程
         self.worker_thread = None
@@ -111,6 +119,29 @@ class QueueWorker:
         except Exception as e:
             print(f"[WORKER] Error generating summary: {e}")
             print(f"[WORKER] Summary error details: {traceback.format_exc()}")
+
+    def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
+        # 配置 yt-dlp 下載
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
+            'noplaylist': True,
+        }
+
+        # 下載影片
+        self.task_queue.update_task_status(
+            task_id, TaskStatus.PROCESSING, progress=15,
+            log_message="🔄 開始下載影片..."
+        )
+        print(f"[WORKER] 開始下載影片...")
+        with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+
+        print(f"[WORKER] Downloaded: {filename}")
+        audio_file = Path(filename)
+        self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+        return audio_file
 
     def _process_youtube_task(self, task):
         """處理 YouTube 任務"""
@@ -188,26 +219,7 @@ class QueueWorker:
 
             # 尋找是否已下載相同影片
             if not audio_file:
-                # 配置 yt-dlp 下載
-                ydl_opts = {
-                    'format': 'best[ext=mp4]/best',
-                    'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
-                    'noplaylist': True,
-                }
-
-                # 下載影片
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=15,
-                    log_message="🔄 開始下載影片..."
-                )
-                print(f"[WORKER] 開始下載影片...")
-                with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-
-                print(f"[WORKER] Downloaded: {filename}")
-                audio_file = Path(filename)
-                self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+                audio_file = self._download_youtube_audio(url, task_id, video_title)
             else:
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 
@@ -366,9 +378,9 @@ class QueueWorker:
 
                 # 根據任務類型處理
                 if task.task_type == 'youtube':
-                    self._process_youtube_task(task)
+                    self.task_processor.process_youtube_task(task)
                 elif task.task_type == 'upload_media':
-                    self._process_upload_media_task(task)
+                    self.task_processor.process_upload_media_task(task)
                 elif task.task_type == 'upload_subtitle':
                     # 字幕上傳不需要處理，直接標記為完成
                     self.task_queue.update_task_status(

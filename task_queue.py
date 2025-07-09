@@ -5,8 +5,11 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Callable
 import os
+from src.config import get_config
+
+
 
 class TaskStatus(Enum):
     """任務狀態枚舉"""
@@ -76,8 +79,9 @@ class Task:
 class TaskQueue:
     """任務佇列管理器"""
 
-    def __init__(self, data_dir: Optional[Path] = None):
-        self.data_dir = data_dir or Path(__file__).parent / "tasks"
+    def __init__(self, data_dir: Optional[Path] = None, config_getter: Callable = None):
+        self.config_getter = config_getter or get_config
+        self.data_dir = data_dir or self.config_getter('PATHS.TASKS_DIR')
         self.tasks_dir = self.data_dir / "tasks"
         self.results_dir = self.data_dir / "results"
         self.queue_file = self.data_dir / "queue_metadata.json"

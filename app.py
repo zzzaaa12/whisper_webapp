@@ -15,16 +15,16 @@ from flask_socketio import emit
 from dotenv import load_dotenv
 import requests
 
-from src.config import get_config
+
 from src.services.auth_service import AuthService
-from socketio_instance import init_socketio
+from src.services.socketio_instance import init_socketio
 from task_queue import get_task_queue, TaskStatus
 
 from src.utils.file_sanitizer import sanitize_filename as utils_sanitize_filename
 from src.utils.srt_converter import segments_to_srt as utils_segments_to_srt
 from src.utils.time_formatter import get_timestamp as utils_get_timestamp
 from src.services.notification_service import send_telegram_notification as utils_send_telegram_notification
-from whisper_manager import get_whisper_manager, transcribe_audio
+from src.services.whisper_manager import get_whisper_manager, transcribe_audio
 
 from src.services.file_service import FileService
 from src.services.bookmark_service import BookmarkService
@@ -37,24 +37,28 @@ from src.services.socket_service import SocketService
 # --- Initialization ---
 load_dotenv()
 app = Flask(__name__)
+BASE_DIR = Path(__file__).parent.resolve()
+from src.config import init_config, get_config
+init_config(BASE_DIR)
+
+
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 socketio = init_socketio(app)
 auth_service = AuthService()
 
-BASE_DIR = Path(__file__).parent.resolve()
-DOWNLOAD_FOLDER = BASE_DIR / "downloads"
-SUMMARY_FOLDER = BASE_DIR / "summaries"
-SUBTITLE_FOLDER = BASE_DIR / "subtitles"
-LOG_FOLDER = BASE_DIR / "logs"
-TRASH_FOLDER = BASE_DIR / "trash"
-UPLOAD_FOLDER = BASE_DIR / "uploads"
+DOWNLOAD_FOLDER = get_config('PATHS.DOWNLOADS_DIR')
+SUMMARY_FOLDER = get_config('PATHS.SUMMARIES_DIR')
+SUBTITLE_FOLDER = get_config('PATHS.SUBTITLES_DIR')
+LOG_FOLDER = get_config('PATHS.LOGS_DIR')
+TRASH_FOLDER = get_config('PATHS.TRASH_DIR')
+UPLOAD_FOLDER = get_config('PATHS.UPLOADS_DIR')
 
 file_service = FileService()
-log_service = LogService(LOG_FOLDER)
+log_service = LogService(get_config('PATHS.LOGS_DIR'))
 gpu_service = GPUService()
 socket_service = SocketService(socketio, log_service)
-bookmark_service = BookmarkService(BASE_DIR / "bookmarks.json", SUMMARY_FOLDER)
-trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
+bookmark_service = BookmarkService(BASE_DIR / "bookmarks.json", get_config('PATHS.SUMMARIES_DIR'))
+trash_service = TrashService(get_config('PATHS.TRASH_DIR'), get_config('PATHS.SUMMARIES_DIR'), get_config('PATHS.SUBTITLES_DIR'))
 url_service = URLService()
 
 
@@ -118,7 +122,7 @@ def log_and_emit(message, level='info', sid=None):
 
     # 儲存日誌到檔案
     if sid:
-        save_log_entry(sid, message, level)
+        log_service.save_log_entry(sid, message, level)
 
     socketio.emit('update_log', {'log': message, 'type': level}, to=sid)
 
@@ -222,20 +226,18 @@ def handle_start_processing(data):
 
     auth_service.record_successful_attempt(client_ip)
 
-    task_queue_manager = get_task_queue()
-
     try:
         url = data.get('audio_url')
         socket_service.log_and_emit(f"收到請求，準備處理網址: {url}", 'info', sid)
 
-        task_id = task_queue_manager.add_task(
+        task_id = get_task_queue().add_task(
             task_type='youtube',
             data={'url': url},
             user_ip=client_ip,
             priority=5
         )
 
-        queue_position = task_queue_manager.get_user_queue_position(task_id)
+        queue_position = get_task_queue().get_user_queue_position(task_id)
 
         if queue_position > 1:
             socket_service.log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}", 'warning', sid)
@@ -244,6 +246,8 @@ def handle_start_processing(data):
 
     except Exception as e:
         socket_service.log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
+
+    
 
 @socketio.on('cancel_processing')
 def handle_cancel_processing():
@@ -381,8 +385,8 @@ if __name__ == '__main__':
     server_port = int(get_config("SERVER_PORT", 5000))  # 確保是整數類型
 
     if use_ssl:
-        cert_file = Path(__file__).parent / 'certs' / 'cert.pem'
-        key_file = Path(__file__).parent / 'certs' / 'key.pem'
+        cert_file = get_config('PATHS.CERTS_DIR') / 'cert.pem'
+        key_file = get_config('PATHS.CERTS_DIR') / 'key.pem'
 
         if cert_file.exists() and key_file.exists():
             try:
@@ -403,18 +407,18 @@ if __name__ == '__main__':
 
     print("🚀 繼續啟動系統...")
 
-    for folder in [DOWNLOAD_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER, LOG_FOLDER, TRASH_FOLDER, UPLOAD_FOLDER]:
-        file_service.ensure_dir(folder)
+    for folder_key in ['DOWNLOADS_DIR', 'SUMMARIES_DIR', 'SUBTITLES_DIR', 'LOGS_DIR', 'TRASH_DIR', 'UPLOADS_DIR']:
+        file_service.ensure_dir(get_config(f'PATHS.{folder_key}'))
 
     # 建立回收桶子資料夾
-    file_service.ensure_dir(TRASH_FOLDER / "summaries")
-    file_service.ensure_dir(TRASH_FOLDER / "subtitles")
+    file_service.ensure_dir(get_config('PATHS.TRASH_DIR') / "summaries")
+    file_service.ensure_dir(get_config('PATHS.TRASH_DIR') / "subtitles")
 
     # 啟動新的佇列工作程式（與舊系統並行）
     try:
-        from queue_worker import start_queue_worker
+        from src.services.queue_worker import start_queue_worker
         queue_worker = start_queue_worker(
-            data_dir=Path(__file__).parent,
+            data_dir=BASE_DIR,
             openai_key=get_config("OPENAI_API_KEY")
         )
         print("✅ 新任務佇列工作程式已啟動")
