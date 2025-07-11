@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}請輸入通行碼{% endblock %}
+
+{% block head %}
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: var(--bs-body-bg);
+        }
+        .access-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 2rem;
+            margin: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            background-color: var(--bs-body-bg);
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        main.container {
+            margin: 0 !important;
+            padding: 0 1rem !important;
+            max-width: none !important;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="access-container text-center">
+    <h1 class="h3 mb-3 fw-normal">需要授權</h1>
+    <p>請輸入通行碼以繼續訪問。</p>
+
+    {% if error %}
+        <div class="alert alert-danger" role="alert">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('main.access') }}">
+        <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+        <div class="form-floating mb-3">
+            <input type="password" class="form-control" id="access_code" name="access_code" placeholder="通行碼" required autofocus>
+            <label for="access_code">通行碼</label>
+        </div>
+        <button class="w-100 btn btn-lg btn-primary" type="submit">進入</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Override the nav in base.html for this specific page
+    document.addEventListener('DOMContentLoaded', function() {
+        const nav = document.querySelector('nav.navbar');
+        if (nav) {
+            nav.style.display = 'none';
+        }
+        const mainContainer = document.querySelector('main.container');
+        if(mainContainer) {
+            mainContainer.classList.remove('mt-4');
+        }
+    });
+</script>
+{% endblock %}
