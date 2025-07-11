@@ -7,7 +7,8 @@ import traceback
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any, Callable
-from utils import get_timestamp, exception_handler
+from src.config import get_config
+from src.utils.time_formatter import get_timestamp
 
 
 class WhisperModelManager:
@@ -19,6 +20,30 @@ class WhisperModelManager:
         self.device = "cpu"
         self.compute_type = "int8"
         self.is_loaded = False
+
+    def _detect_device_and_compute_type(self, prefer_cuda: bool, log_callback: Optional[Callable]) -> Tuple[str, str]:
+        device = "cpu"
+        compute_type = "int8"
+
+        if prefer_cuda and torch.cuda.is_available():
+            try:
+                # 測試 CUDA 是否真的可以工作
+                test_tensor = torch.zeros(1, device="cuda")
+                del test_tensor
+
+                device = "cuda"
+                compute_type = "float16"
+
+                if log_callback:
+                    log_callback("✅ CUDA 測試成功，使用 GPU 加速", 'success')
+
+            except Exception as cuda_error:
+                if log_callback:
+                    log_callback(f"⚠️ CUDA 測試失敗：{cuda_error}，回退到 CPU", 'warning')
+
+                device = "cpu"
+                compute_type = "int8"
+        return device, compute_type
 
     def load_model(self, prefer_cuda: bool = True, log_callback: Optional[Callable] = None) -> bool:
         """
@@ -41,29 +66,8 @@ class WhisperModelManager:
             self.model = None
             self.is_loaded = False
 
-            # 設定初始設備配置
-            self.device = "cpu"
-            self.compute_type = "int8"
-
-            # 嘗試使用 CUDA（如果偏好且可用）
-            if prefer_cuda and torch.cuda.is_available():
-                try:
-                    # 測試 CUDA 是否真的可以工作
-                    test_tensor = torch.zeros(1, device="cuda")
-                    del test_tensor
-
-                    self.device = "cuda"
-                    self.compute_type = "float16"
-
-                    if log_callback:
-                        log_callback("✅ CUDA 測試成功，使用 GPU 加速", 'success')
-
-                except Exception as cuda_error:
-                    if log_callback:
-                        log_callback(f"⚠️ CUDA 測試失敗：{cuda_error}，回退到 CPU", 'warning')
-
-                    self.device = "cpu"
-                    self.compute_type = "int8"
+            # 偵測設備和計算類型
+            self.device, self.compute_type = self._detect_device_and_compute_type(prefer_cuda, log_callback)
 
             # 載入模型
             if log_callback:

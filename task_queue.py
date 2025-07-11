@@ -5,8 +5,11 @@ import threading
 from datetime import datetime, timedelta
 from pathlib import Path
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Callable
 import os
+from src.config import get_config
+
+
 
 class TaskStatus(Enum):
     """任務狀態枚舉"""
@@ -76,8 +79,9 @@ class Task:
 class TaskQueue:
     """任務佇列管理器"""
 
-    def __init__(self, data_dir: Optional[Path] = None):
-        self.data_dir = data_dir or Path(__file__).parent / "tasks"
+    def __init__(self, data_dir: Optional[Path] = None, config_getter: Callable = None):
+        self.config_getter = config_getter or get_config
+        self.data_dir = data_dir or self.config_getter('PATHS.TASKS_DIR')
         self.tasks_dir = self.data_dir / "tasks"
         self.results_dir = self.data_dir / "results"
         self.queue_file = self.data_dir / "queue_metadata.json"
@@ -116,6 +120,16 @@ class TaskQueue:
             queued_tasks = [t for t in self._tasks.values() if t.status == TaskStatus.QUEUED]
             self._queue_order = [t.task_id for t in sorted(queued_tasks,
                                                           key=lambda x: (-x.priority, x.created_at))]
+
+            # 清理啟動時處於「處理中」狀態的任務
+            processing_tasks = [t for t in self._tasks.values() if t.status == TaskStatus.PROCESSING]
+            if processing_tasks:
+                print(f"發現 {len(processing_tasks)} 個在啟動時處於處理中狀態的任務，將其標記為失敗。")
+                for task in processing_tasks:
+                    task.status = TaskStatus.FAILED
+                    task.error_message = "任務在應用程式啟動時仍處於處理中狀態，可能因先前的不正常關閉導致。"
+                    task.completed_at = datetime.now()
+                    self._save_task(task) # 儲存變更
 
     def _save_task(self, task: Task):
         """儲存單一任務到檔案"""
@@ -219,13 +233,13 @@ class TaskQueue:
         """發送日誌訊息到前端"""
         try:
             # 嘗試多種方式發送到前端
-            from utils import get_timestamp
+            from src.utils.time_formatter import get_timestamp
             timestamp = get_timestamp("time")
             formatted_message = f"[{timestamp}] {message}"
 
             # 使用統一的 SocketIO 實例發送日誌
             try:
-                from socketio_instance import emit_log
+                from src.services.socketio_instance import emit_log
                 emit_log(message, 'info', task_id)
                 print(f"[TASK-{task_id[:8]}] 日誌已發送到前端: {message}")
                 return
@@ -244,8 +258,9 @@ class TaskQueue:
         """取消任務"""
         # 這裡可以加入通行碼驗證邏輯
         if access_code:
-            from utils import validate_access_code
-            if not validate_access_code(access_code):
+            from src.services.auth_service import AuthService
+            auth_service = AuthService()
+            if not auth_service.verify_access_code(access_code):
                 return False, "通行碼錯誤"
 
         with self._lock:

@@ -15,15 +15,18 @@ import json
 import re
 import requests
 from urllib.parse import unquote
+import yt_dlp
 
 from task_queue import get_task_queue, TaskStatus
-
-# 統一工具函數導入
-from utils import (
-    get_config, sanitize_filename, segments_to_srt,
-    send_telegram_notification, get_timestamp
-)
-from whisper_manager import get_whisper_manager, transcribe_audio
+from src.config import get_config
+from src.services.notification_service import send_telegram_notification
+from src.utils.file_sanitizer import sanitize_filename
+from src.utils.srt_converter import segments_to_srt
+from src.utils.time_formatter import get_timestamp
+from src.services.whisper_manager import get_whisper_manager
+from src.services.ai_summary_service import get_summary_service
+from src.services.file_service import FileService
+from src.services.task_processor import TaskProcessor
 
 
 class QueueWorker:
@@ -40,93 +43,32 @@ class QueueWorker:
         self.stop_event = threading.Event()
         self.task_queue = get_task_queue()
 
-        # 延遲導入的模組
-        self.faster_whisper = None
-        self.torch = None
-        self.yt_dlp = None
-        # 移除OpenAI相關初始化，統一使用ai_summary_service
-        # self.openai = None
-        self.model = None
+        # Initialize TaskProcessor
+        self.task_processor = TaskProcessor(
+            data_dir=data_dir,
+            task_queue_manager=self.task_queue,
+            whisper_manager_instance=get_whisper_manager(),
+            summary_service_instance=get_summary_service(openai_api_key=self.openai_key),
+            notification_service_instance=send_telegram_notification,
+            file_service_instance=FileService()
+        )
 
         # 工作線程
         self.worker_thread = None
         self.is_running = False
+        self.yt_dlp = yt_dlp # Assign yt_dlp here
 
     # _get_config 已移除，統一使用 utils.get_config
 
     # _send_telegram_notification 已移除，統一使用 utils.send_telegram_notification
-    def _send_telegram_notification(self, message):
-        """發送 Telegram 通知 - 使用統一工具"""
-        return send_telegram_notification(message)
 
-    def _send_log_to_frontend(self, message, task_id=None):
-        """發送日誌到前端（簡化版本）"""
-        try:
-            # 直接在終端輸出
-            print(f"[WORKER] {message}")
 
-            # 如果有task_id，透過task_queue發送到前端
-            if task_id and self.task_queue:
-                try:
-                    # 使用update_task_status的log_message參數
-                    task_data = self.task_queue.get_task(task_id)
-                    if task_data:
-                        from task_queue import TaskStatus
-                        current_status = TaskStatus(task_data['status'])
-                        self.task_queue.update_task_status(
-                            task_id, current_status, log_message=message
-                        )
-                except Exception as e:
-                    print(f"[WORKER] Failed to send log via task_queue: {e}")
 
-        except Exception as e:
-            print(f"[WORKER] {message}")
-            print(f"[WORKER] Log error: {e}")
     # _sanitize_filename 已移除，統一使用 utils.sanitize_filename
 
     # _segments_to_srt 已移除，統一使用 utils.segments_to_srt
 
-    def _load_model(self):
-        """載入 Whisper 模型"""
-        if self.model is not None:
-            return True
 
-        try:
-            # 延遲導入
-            if not self.faster_whisper:
-                import faster_whisper
-                self.faster_whisper = faster_whisper
-
-            if not self.torch:
-                import torch
-                self.torch = torch
-
-            # 嘗試使用 CUDA，如果失敗則降級到 CPU
-            device = "cpu"
-            compute = "int8"
-
-            if self.torch.cuda.is_available():
-                try:
-                    test_tensor = self.torch.zeros(1, device="cuda")
-                    del test_tensor
-                    device = "cuda"
-                    compute = "float16"
-                    print(f"[WORKER] Using GPU")
-                except Exception:
-                    print(f"[WORKER] CUDA failed, using CPU")
-
-            print(f"[WORKER] Loading model with device={device}")
-            self.model = self.faster_whisper.WhisperModel(
-                "asadfgglie/faster-whisper-large-v3-zh-TW",
-                device=device,
-                compute_type=compute
-            )
-            print("[WORKER] Model loaded successfully.")
-            return True
-
-        except Exception as e:
-            print(f"[WORKER] Could not load model: {e}")
-            return False
 
     def _do_summarize(self, subtitle_content, summary_save_path, task_id, header_info=None):
         """生成摘要（使用統一的摘要服務）"""
@@ -152,7 +94,6 @@ class QueueWorker:
 
             summary_service = get_summary_service(
                 openai_api_key=self.openai_key,
-                config_getter=get_config,
                 ai_provider=ai_provider
             )
 
@@ -179,6 +120,29 @@ class QueueWorker:
             print(f"[WORKER] Error generating summary: {e}")
             print(f"[WORKER] Summary error details: {traceback.format_exc()}")
 
+    def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
+        # 配置 yt-dlp 下載
+        ydl_opts = {
+            'format': 'best[ext=mp4]/best',
+            'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
+            'noplaylist': True,
+        }
+
+        # 下載影片
+        self.task_queue.update_task_status(
+            task_id, TaskStatus.PROCESSING, progress=15,
+            log_message="🔄 開始下載影片..."
+        )
+        print(f"[WORKER] 開始下載影片...")
+        with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+
+        print(f"[WORKER] Downloaded: {filename}")
+        audio_file = Path(filename)
+        self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+        return audio_file
+
     def _process_youtube_task(self, task):
         """處理 YouTube 任務"""
         task_id = task.task_id
@@ -191,10 +155,10 @@ class QueueWorker:
             if not url:
                 raise ValueError("缺少 YouTube URL")
 
-            # 延遲導入 yt-dlp
-            if not self.yt_dlp:
-                import yt_dlp
-                self.yt_dlp = yt_dlp
+            # 移除延遲導入 yt-dlp
+            # if not self.yt_dlp:
+            #     import yt_dlp
+            #     self.yt_dlp = yt_dlp
 
             print(f"[WORKER] Processing YouTube URL: {url}")
 
@@ -219,10 +183,19 @@ class QueueWorker:
             notification_msg = f"🎬 開始處理影片\n標題: {video_title}"
             if uploader:
                 notification_msg += f"\n上傳者: {uploader}"
-            self._send_telegram_notification(notification_msg)
+            send_telegram_notification(notification_msg)
 
             # 準備檔案路徑
-            sanitized_title = sanitize_filename(f"{datetime.now().strftime('%Y.%m.%d')} - {video_title}")
+            date_str = get_timestamp('date')
+            is_auto_task = data.get('auto', False)
+
+            if is_auto_task:
+                base_name = f"{video_title}"
+                sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+            else:
+                base_name = f"{date_str} - {video_title}"
+                sanitized_title = sanitize_filename(base_name)
+
             subtitle_path = self.subtitle_folder / f"{sanitized_title}.srt"
             summary_path = self.summary_folder / f"{sanitized_title}.txt"
 
@@ -246,26 +219,7 @@ class QueueWorker:
 
             # 尋找是否已下載相同影片
             if not audio_file:
-                # 配置 yt-dlp 下載
-                ydl_opts = {
-                    'format': 'best[ext=mp4]/best',
-                    'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
-                    'noplaylist': True,
-                }
-
-                # 下載影片
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=15,
-                    log_message="🔄 開始下載影片..."
-                )
-                print(f"[WORKER] 開始下載影片...")
-                with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    filename = ydl.prepare_filename(info)
-
-                print(f"[WORKER] Downloaded: {filename}")
-                audio_file = Path(filename)
-                self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
+                audio_file = self._download_youtube_audio(url, task_id, video_title)
             else:
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 
@@ -308,7 +262,7 @@ class QueueWorker:
                     print(f"[WORKER] 讀取摘要文件失敗: {e}")
                     notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
 
-            self._send_telegram_notification(notification_msg)
+            send_telegram_notification(notification_msg)
 
         except Exception as e:
             error_msg = f"YouTube 任務處理失敗: {str(e)}"
@@ -337,7 +291,7 @@ class QueueWorker:
 
             # 發送 Telegram 通知
             notification_msg = f"🎵 開始處理音訊檔案\n檔案: {title or audio_file.name}"
-            self._send_telegram_notification(notification_msg)
+            send_telegram_notification(notification_msg)
 
             # 轉錄音訊
             self._transcribe_audio(audio_file, subtitle_path, task_id)
@@ -362,7 +316,7 @@ class QueueWorker:
             # 發送完成通知
             original_title = title if title else audio_file.name
             notification_msg = f"✅ 音訊檔案處理完成\n檔案: {original_title}"
-            self._send_telegram_notification(notification_msg)
+            send_telegram_notification(notification_msg)
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"
@@ -373,67 +327,38 @@ class QueueWorker:
                 error_message=error_msg
             )
             # 發送錯誤通知
-            self._send_telegram_notification(f"❌ 音訊檔案處理失敗\n檔案: {title or audio_file.name}\n錯誤: {str(e)}")
+            send_telegram_notification(f"❌ 音訊檔案處理失敗\n檔案: {title or audio_file.name}\n錯誤: {str(e)}")
 
     def _transcribe_audio(self, audio_file, subtitle_path, task_id):
         """轉錄音訊檔案"""
-        if not self._load_model():
-            raise RuntimeError("無法載入 Whisper 模型")
+        whisper_manager = get_whisper_manager()
+        if not whisper_manager.is_loaded:
+            whisper_manager.load_model()
 
         print(f"[WORKER] Transcribing audio: {audio_file}")
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=60)
 
         try:
-            # 轉錄音訊
-            segments, _ = self.model.transcribe(
-                str(audio_file),
-                beam_size=1,
-                language="zh",
-                vad_filter=True
-            )
+            success, segments_list = whisper_manager.transcribe_with_fallback(str(audio_file))
 
-            # 轉換為列表以便計算進度
-            segments_list = list(segments)
+            if not success:
+                raise RuntimeError("轉錄失敗")
+
             print(f"[WORKER] Transcription completed, {len(segments_list)} segments")
 
-            # 生成 SRT 字幕
             srt_content = segments_to_srt(segments_list)
 
-            # 確保目錄存在
             subtitle_path.parent.mkdir(exist_ok=True)
 
-            # 儲存字幕
             with open(subtitle_path, 'w', encoding='utf-8') as f:
                 f.write(srt_content)
 
             print(f"[WORKER] Subtitle saved to {subtitle_path}")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=80)
 
-        except RuntimeError as e:
-            if "cublas" in str(e).lower() or "cuda" in str(e).lower():
-                print("[WORKER] CUDA error, retrying with CPU...")
-                # 重新載入 CPU 模型
-                self.model = self.faster_whisper.WhisperModel(
-                    "asadfgglie/faster-whisper-large-v3-zh-TW",
-                    device="cpu",
-                    compute_type="int8"
-                )
-
-                # 重新嘗試轉錄
-                segments, _ = self.model.transcribe(
-                    str(audio_file),
-                    beam_size=1,
-                    language="zh",
-                    vad_filter=True
-                )
-                segments_list = list(segments)
-                srt_content = segments_to_srt(segments_list)
-
-                with open(subtitle_path, 'w', encoding='utf-8') as f:
-                    f.write(srt_content)
-                print(f"[WORKER] CPU transcription completed and saved")
-            else:
-                raise
+        except Exception as e:
+            print(f"[WORKER] Transcription error: {e}")
+            raise
 
     def _worker_loop(self):
         """工作程式主迴圈"""
@@ -453,9 +378,9 @@ class QueueWorker:
 
                 # 根據任務類型處理
                 if task.task_type == 'youtube':
-                    self._process_youtube_task(task)
+                    self.task_processor.process_youtube_task(task)
                 elif task.task_type == 'upload_media':
-                    self._process_upload_media_task(task)
+                    self.task_processor.process_upload_media_task(task)
                 elif task.task_type == 'upload_subtitle':
                     # 字幕上傳不需要處理，直接標記為完成
                     self.task_queue.update_task_status(

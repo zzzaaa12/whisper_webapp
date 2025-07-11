@@ -89,9 +89,8 @@
         <div class="container mt-4">
             <!-- 導航按鈕 (手機版) -->
             <div class="d-md-none d-flex justify-content-start mb-2">
+                <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-info btn-sm me-2">所有摘要</a>
                 <a href="/" class="btn btn-outline-primary btn-sm me-2">返回首頁</a>
-                <a href="{{ url_for('list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
-                <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
             </div>
 
             <!-- 主標題卡片 -->
@@ -108,6 +107,7 @@
                     </div>
                     <h3><i class="bi bi-list-task"></i> 任務佇列管理</h3>
                     <div style="position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);">
+                        <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-info btn-sm me-2">所有摘要</a>
                         <a href="/" class="btn btn-outline-primary btn-sm">返回首頁</a>
                     </div>
                 </div>
@@ -555,6 +555,18 @@
                 const startedAt = task.started_at ? new Date(task.started_at).toLocaleString('zh-TW') : '-';
                 const completedAt = task.completed_at ? new Date(task.completed_at).toLocaleString('zh-TW') : '-';
 
+                // 新增：摘要按鈕邏輯
+                let summaryButtonHtml = '';
+                if (task.status === 'completed' && task.result && task.result.summary_file) {
+                    const summaryFilename = task.result.summary_file.split(/[\\\/]/).pop();
+                    const summaryUrl = `/summary/${encodeURIComponent(summaryFilename)}?back_to=/queue`;
+                    summaryButtonHtml = `
+                        <a href="${summaryUrl}" class="btn btn-sm btn-outline-success" title="查看摘要">
+                            <i class="bi bi-file-text"></i> 摘要
+                        </a>
+                    `;
+                }
+
                 html += `
                     <div class="card task-card ${statusClass}">
                         <div class="card-body">
@@ -579,14 +591,17 @@
                                     </small>
                                 </div>
                                 <div class="col-md-4 text-end">
-                                    <button class="btn btn-sm btn-outline-info" onclick="showTaskDetail('${task.task_id}')">
-                                        <i class="bi bi-eye"></i> 詳情
-                                    </button>
-                                    ${task.status === 'queued' ? `
-                                        <button class="btn btn-sm btn-outline-warning" onclick="showCancelTaskDialog('${task.task_id}')">
-                                            <i class="bi bi-x-circle"></i> 取消
+                                    <div class="btn-group" role="group">
+                                        <button class="btn btn-sm btn-outline-info" onclick="showTaskDetail('${task.task_id}')" title="查看詳情">
+                                            <i class="bi bi-eye"></i> 詳情
                                         </button>
-                                    ` : ''}
+                                        ${summaryButtonHtml}
+                                        ${task.status === 'queued' ? `
+                                            <button class="btn btn-sm btn-outline-warning" onclick="showCancelTaskDialog('${task.task_id}')" title="取消任務">
+                                                <i class="bi bi-x-circle"></i> 取消
+                                            </button>
+                                        ` : ''}
+                                    </div>
                                 </div>
                             </div>
                             ${task.progress > 0 ? `

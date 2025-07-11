@@ -259,10 +259,10 @@
                 <h1 class="h3 page-title" title="{{ title }}">{{ title }}</h1>
             </div>
             <div class="btn-group button-container">
-                <button onclick="history.back()" class="btn btn-primary">
+                <button id="back-button" class="btn btn-primary">
                     <i class="bi bi-arrow-left"></i> 回上一頁
                 </button>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">回到主頁</a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">回到主頁</a>
             </div>
         </div>
 
@@ -279,11 +279,11 @@
                     </div>
                     <!-- 下載按鈕 -->
                     <div class="btn-group">
-                        <a href="{{ url_for('download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
+                        <a href="{{ url_for('main.download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
                             <i class="bi bi-download"></i> 下載摘要
                         </a>
                         {% if has_subtitle %}
-                        <a href="{{ url_for('download_subtitle', filename=filename) }}" class="btn btn-outline-secondary btn-sm">
+                        <a href="{{ url_for('main.download_subtitle', filename=filename) }}" class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-download"></i> 下載字幕
                         </a>
                         {% endif %}
@@ -337,6 +337,20 @@
 
         // 初始化 Markdown 內容
         document.addEventListener('DOMContentLoaded', function() {
+            // 新增：處理返回按鈕的邏輯
+            const backButton = document.getElementById('back-button');
+            if (backButton) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const backTo = urlParams.get('back_to');
+
+                if (backTo) {
+                    backButton.onclick = () => { window.location.href = backTo; };
+                } else {
+                    // 如果沒有 back_to 參數，則連結到摘要列表
+                    backButton.onclick = () => { window.location.href = "{{ url_for('main.list_summaries') }}"; };
+                }
+            }
+
             const rawText = document.getElementById('raw-content').textContent;
             markdownContent = marked.parse(rawText);
             document.getElementById('markdown-content').innerHTML = markdownContent;

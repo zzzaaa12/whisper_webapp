@@ -3,31 +3,26 @@
 整合所有AI摘要相關功能，避免代碼重複
 """
 
-import os
-import json
-import time
-from datetime import datetime
-from pathlib import Path
 from typing import Optional, Dict, Any, Callable
-import traceback
+from pathlib import Path
+from datetime import datetime # Added for datetime usage
+from src.config import get_config
 
 class SummaryService:
     """統一的摘要服務類別 - 支援多 AI 提供商"""
 
-    def __init__(self, openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None, ai_provider: Optional[str] = None):
+    def __init__(self, openai_api_key: Optional[str] = None, ai_provider: Optional[str] = None):
         """
         初始化摘要服務
 
         Args:
             openai_api_key: OpenAI API 金鑰（向後兼容）
-            config_getter: 配置獲取函數，用於獲取各種配置值
             ai_provider: AI 提供商名稱 (openai, claude, ollama, groq 等)
         """
-        self.config_getter = config_getter or (lambda key, default=None: os.getenv(key, default))
         self.openai = None
 
         # 決定使用的 AI 提供商
-        self.ai_provider = ai_provider or self.config_getter("AI_PROVIDER", "openai")
+        self.ai_provider = ai_provider or get_config("AI_PROVIDER", "openai")
 
         # 向後兼容：如果直接傳入 openai_api_key，則使用 openai 提供商
         if openai_api_key:
@@ -46,7 +41,7 @@ class SummaryService:
         """獲取指定 AI 提供商的配置"""
         try:
             # 嘗試從新版配置中獲取
-            providers_config = self.config_getter("AI_PROVIDERS", {})
+            providers_config = get_config("AI_PROVIDERS", {})
             if isinstance(providers_config, dict) and provider_name in providers_config:
                 config = providers_config[provider_name].copy()
 
@@ -67,7 +62,7 @@ class SummaryService:
 
             # 向後兼容：從舊版配置構建 openai 配置
             if provider_name == "openai":
-                api_key = self._legacy_api_key or self.config_getter("OPENAI_API_KEY")
+                api_key = self._legacy_api_key or get_config("OPENAI_API_KEY")
                 if api_key:
                     # 檢查舊版 API key 是否包含 "金鑰"
                     if "金鑰" in str(api_key):
@@ -77,9 +72,9 @@ class SummaryService:
                     return {
                         "api_key": api_key,
                         "base_url": "https://api.openai.com/v1",
-                        "model": self.config_getter("OPENAI_MODEL", "gpt-4o-mini"),
-                        "max_tokens": int(self.config_getter("OPENAI_MAX_TOKENS", "10000") or "10000"),
-                        "temperature": float(self.config_getter("OPENAI_TEMPERATURE", "0.7") or "0.7")
+                        "model": get_config("OPENAI_MODEL", "gpt-4o-mini"),
+                        "max_tokens": int(get_config("OPENAI_MAX_TOKENS", "10000") or "10000"),
+                        "temperature": float(get_config("OPENAI_TEMPERATURE", "0.7") or "0.7")
                     }
 
             return None
@@ -119,9 +114,9 @@ class SummaryService:
         if not self.current_provider_config:
             # 向後兼容的預設配置
             return {
-                'model': self.config_getter("OPENAI_MODEL", "gpt-4o-mini"),
-                'max_tokens': int(self.config_getter("OPENAI_MAX_TOKENS", "10000") or "10000"),
-                'temperature': float(self.config_getter("OPENAI_TEMPERATURE", "0.7") or "0.7")
+                'model': get_config("OPENAI_MODEL", "gpt-4o-mini"),
+                'max_tokens': int(get_config("OPENAI_MAX_TOKENS", "10000") or "10000"),
+                'temperature': float(get_config("OPENAI_TEMPERATURE", "0.7") or "0.7")
             }
 
         return {
@@ -132,11 +127,11 @@ class SummaryService:
 
     def _try_fallback_provider(self, log_callback: Optional[Callable] = None) -> bool:
         """嘗試容錯切換到下一個可用的提供商"""
-        fallback_enabled = self.config_getter("AI_FALLBACK_ENABLED", True)
+        fallback_enabled = get_config("AI_FALLBACK_ENABLED", True)
         if not fallback_enabled:
             return False
 
-        fallback_order = self.config_getter("AI_FALLBACK_ORDER", ["openai", "claude", "groq", "ollama"])
+        fallback_order = get_config("AI_FALLBACK_ORDER", ["openai", "claude", "groq", "ollama"])
         if not isinstance(fallback_order, list):
             return False
 
@@ -157,6 +152,39 @@ class SummaryService:
                     return True
 
         return False
+
+    def _call_ai_api(self, prompt: str, model_config: Dict[str, Any], log_callback: Optional[Callable]) -> Any:
+        if not self.openai:
+            self._init_ai_client()
+
+        if not self.openai:
+            raise RuntimeError("OpenAI module failed to load.")
+
+        # 動態創建客戶端（支援不同的 base_url）
+        client_kwargs = {"api_key": self.current_provider_config["api_key"]}
+
+        # 如果有自定義的 base_url，則設定
+        if "base_url" in self.current_provider_config:
+            base_url = self.current_provider_config["base_url"]
+            if base_url != "https://api.openai.com/v1":  # 非預設的才設定
+                client_kwargs["base_url"] = base_url
+
+        client = self.openai.OpenAI(**client_kwargs)
+
+        if log_callback:
+            log_callback(f"🤖 使用模型：{model_config['model']} (提供商: {self.ai_provider})", 'info')
+
+        # 調用 AI API
+        response = client.chat.completions.create(
+            model=model_config['model'],
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=model_config['max_tokens'],
+            temperature=model_config['temperature']
+        )
+        return response
 
     def _create_prompt(self, subtitle_content: str, prompt_type: str = "structured") -> str:
         """
@@ -324,46 +352,13 @@ class SummaryService:
                 if progress_callback:
                     progress_callback(90)
 
-                # 初始化 AI 客戶端
-                if not self.openai:
-                    self._init_ai_client()
-
-                if not self.openai:
-                    error_msg = "❌ OpenAI 模組載入失敗"
-                    if log_callback:
-                        log_callback(error_msg, 'error')
-                    return False, error_msg
-
-                # 動態創建客戶端（支援不同的 base_url）
-                client_kwargs = {"api_key": self.current_provider_config["api_key"]}
-
-                # 如果有自定義的 base_url，則設定
-                if "base_url" in self.current_provider_config:
-                    base_url = self.current_provider_config["base_url"]
-                    if base_url != "https://api.openai.com/v1":  # 非預設的才設定
-                        client_kwargs["base_url"] = base_url
-
-                client = self.openai.OpenAI(**client_kwargs)
-
                 # 創建prompt
                 prompt = self._create_prompt(subtitle_content, prompt_type)
 
                 # 獲取模型配置
                 model_config = self._get_model_config()
 
-                if log_callback:
-                    log_callback(f"🤖 使用模型：{model_config['model']} (提供商: {self.ai_provider})", 'info')
-
-                # 調用 AI API
-                response = client.chat.completions.create(
-                    model=model_config['model'],
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant. 用台灣用語與正體中文回答"},
-                        {"role": "user", "content": prompt}
-                    ],
-                    max_tokens=model_config['max_tokens'],
-                    temperature=model_config['temperature']
-                )
+                response = self._call_ai_api(prompt, model_config, log_callback)
 
                 # 提取摘要內容
                 summary_content = response.choices[0].message.content
@@ -551,13 +546,12 @@ class SummaryService:
 # 全域摘要服務實例
 _summary_service_instance = None
 
-def get_summary_service(openai_api_key: Optional[str] = None, config_getter: Optional[Callable] = None, ai_provider: Optional[str] = None) -> SummaryService:
+def get_summary_service(openai_api_key: Optional[str] = None, ai_provider: Optional[str] = None) -> SummaryService:
     """
     獲取全域摘要服務實例（單例模式）
 
     Args:
         openai_api_key: OpenAI API 金鑰
-        config_getter: 配置獲取函數
         ai_provider: AI 提供商名稱
 
     Returns:
@@ -566,7 +560,7 @@ def get_summary_service(openai_api_key: Optional[str] = None, config_getter: Opt
     global _summary_service_instance
 
     if _summary_service_instance is None:
-        _summary_service_instance = SummaryService(openai_api_key, config_getter, ai_provider)
+        _summary_service_instance = SummaryService(openai_api_key, ai_provider)
     elif openai_api_key:
         # 更新API金鑰
         _summary_service_instance.current_provider_config = _summary_service_instance._get_provider_config(ai_provider or _summary_service_instance.ai_provider)

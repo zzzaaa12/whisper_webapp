@@ -101,7 +101,7 @@
                 <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark-solid">
                     <i class="bi bi-bookmark-fill"></i> 書籤
                 </a>
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">返回主頁</a>
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">返回主頁</a>
             </div>
         </div>
 
@@ -117,6 +117,9 @@
                            autocomplete="off">
                     <button class="btn btn-outline-secondary" type="button" id="clear-search">
                         <i class="bi bi-x-lg"></i>
+                    </button>
+                    <button class="btn btn-outline-primary" type="button" id="auto-filter-btn">
+                        <i class="bi bi-robot"></i> Auto
                     </button>
                 </div>
                 <div class="mt-2">
@@ -169,7 +172,7 @@
                         <i class="bi bi-file-text"></i>
                         <h4>沒有摘要紀錄</h4>
                         <p>目前沒有任何摘要檔案</p>
-                        <a href="{{ url_for('index') }}" class="btn btn-primary">開始處理音訊</a>
+                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">開始處理音訊</a>
                     </div>
                 {% endif %}
             </div>
@@ -186,6 +189,15 @@
             checkboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', updateSelection);
             });
+
+            // Check for URL filter parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('filter') === 'auto') {
+                const autoFilterBtn = document.getElementById('auto-filter-btn');
+                if (autoFilterBtn) {
+                    autoFilterBtn.click();
+                }
+            }
 
             // 搜尋功能
             const searchInput = document.getElementById('search-input');
@@ -376,6 +388,61 @@
                 const alert = document.querySelector('.alert');
                 if (alert) alert.remove();
             }, 3000);
+        }
+
+        // Auto filter functionality
+        const autoFilterBtn = document.getElementById('auto-filter-btn');
+        if (autoFilterBtn) {
+            autoFilterBtn.addEventListener('click', () => {
+                // 1. 先切換狀態
+                autoFilterBtn.classList.toggle('active');
+
+                // 2. 根據新狀態執行搜尋
+                performSearch();
+
+                // 3. 根據新狀態更新按鈕文字
+                if (autoFilterBtn.classList.contains('active')) {
+                    autoFilterBtn.textContent = '顯示全部';
+                } else {
+                    autoFilterBtn.innerHTML = '<i class="bi bi-robot"></i> Auto';
+                }
+            });
+        }
+
+        function performSearch() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+            const isAutoFilterActive = autoFilterBtn ? autoFilterBtn.classList.contains('active') : false;
+            const summaryItems = document.querySelectorAll('.summary-item');
+            const searchResults = document.getElementById('search-results');
+            let visibleCount = 0;
+
+            summaryItems.forEach(item => {
+                const filename = item.getAttribute('data-filename').toLowerCase();
+                let isVisible = filename.includes(searchTerm);
+
+                // 如果 Auto 篩選是啟動的，則增加篩選條件
+                if (isAutoFilterActive) {
+                    isVisible = isVisible && filename.includes('[auto]');
+                }
+
+                item.style.display = isVisible ? 'flex' : 'none';
+                if (isVisible) visibleCount++;
+            });
+
+            // 更新搜尋結果文字
+            const totalCount = summaryItems.length;
+            if (searchTerm === '' && !isAutoFilterActive) {
+                searchResults.textContent = `顯示全部 ${totalCount} 個項目`;
+            } else {
+                searchResults.textContent = `找到 ${visibleCount} 個符合條件的項目，共 ${totalCount} 個`;
+            }
+
+            // 重置勾選狀態
+            selectedItems.clear();
+            document.querySelectorAll('.summary-select').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+            updateSelection();
         }
     </script>
 </body>
