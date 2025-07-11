@@ -61,6 +61,8 @@
   "AI_FALLBACK_ORDER": ["openai", "claude", "gemini", "deepseek", "ollama"],
 
   "_comment_other": "=== 其他配置 ===",
+  "PUBLIC_PORT": 0, // 0 表示使用 SERVER_PORT，大於 0 時將作為公開訪問埠號
+  "WEBSITE_BASE_URL": "localhost",
   "TELEGRAM_BOT_TOKEN": "你的 Telegram Bot Token（如需通知功能）",
   "TELEGRAM_CHAT_ID": "你的 Telegram Chat ID（如需通知功能）",
   "SERVER_PORT": 5000,

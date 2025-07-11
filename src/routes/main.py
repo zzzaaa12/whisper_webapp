@@ -40,8 +40,26 @@ def list_summaries():
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
     from urllib.parse import unquote
+    from flask import request
+    from task_queue import get_task_queue
+
     decoded_filename = unquote(filename)
     safe_path = SUMMARY_FOLDER / decoded_filename
+
+    # New logic to handle task_id
+    task_id = request.args.get('task_id')
+    if task_id:
+        task_queue = get_task_queue()
+        task_info = task_queue.get_task(task_id)
+        if task_info and task_info.get('result') and task_info['result'].get('summary_file'):
+            summary_file_path = Path(task_info['result']['summary_file'])
+            if summary_file_path.exists():
+                safe_path = summary_file_path
+                decoded_filename = summary_file_path.name
+            else:
+                return "摘要檔案不存在 (透過任務ID)", 404
+        else:
+            return "任務或摘要檔案資訊不完整", 404
 
     try:
         safe_path = safe_path.resolve()

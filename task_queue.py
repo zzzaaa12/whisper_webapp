@@ -233,13 +233,13 @@ class TaskQueue:
         """發送日誌訊息到前端"""
         try:
             # 嘗試多種方式發送到前端
-            from utils import get_timestamp
+            from src.utils.time_formatter import get_timestamp
             timestamp = get_timestamp("time")
             formatted_message = f"[{timestamp}] {message}"
 
             # 使用統一的 SocketIO 實例發送日誌
             try:
-                from socketio_instance import emit_log
+                from src.services.socketio_instance import emit_log
                 emit_log(message, 'info', task_id)
                 print(f"[TASK-{task_id[:8]}] 日誌已發送到前端: {message}")
                 return
@@ -258,8 +258,9 @@ class TaskQueue:
         """取消任務"""
         # 這裡可以加入通行碼驗證邏輯
         if access_code:
-            from utils import validate_access_code
-            if not validate_access_code(access_code):
+            from src.services.auth_service import AuthService
+            auth_service = AuthService()
+            if not auth_service.verify_access_code(access_code):
                 return False, "通行碼錯誤"
 
         with self._lock:

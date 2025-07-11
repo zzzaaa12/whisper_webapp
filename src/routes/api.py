@@ -284,6 +284,21 @@ def api_upload_media():
 
         queue_position = queue_manager.get_user_queue_position(queue_task_id)
 
+        website_base_url = get_config("WEBSITE_BASE_URL", "127.0.0.1")
+        use_ssl = get_config("USE_SSL", False)
+        server_port = get_config("SERVER_PORT", 5000)
+        public_port = get_config("PUBLIC_PORT", 0)
+
+        effective_port = public_port if public_port > 0 else server_port
+
+        protocol = "https" if use_ssl else "http"
+        if (protocol == "http" and effective_port == 80) or \
+           (protocol == "https" and effective_port == 443):
+            base_url = f"{protocol}://{website_base_url}"
+        else:
+            base_url = f"{protocol}://{website_base_url}:{effective_port}"
+        summary_url = f"{base_url}/summaries/{queue_task_id}"
+
         return jsonify({
             'success': True,
             'message': '檔案上傳成功，已加入處理佇列',
@@ -292,7 +307,8 @@ def api_upload_media():
             'filename': safe_filename,
             'title': title or safe_title,
             'file_size': file_size,
-            'original_task_id': task_id
+            'original_task_id': task_id,
+            'summary_url': summary_url
         })
     except Exception as e:
         return jsonify({'success': False, 'message': f'上傳檔案時發生錯誤：{str(e)}'}), 500
@@ -368,11 +384,27 @@ def api_add_queue_task():
 
         queue_position = queue_manager.get_user_queue_position(task_id)
 
+        website_base_url = get_config("WEBSITE_BASE_URL", "127.0.0.1")
+        use_ssl = get_config("USE_SSL", False)
+        server_port = get_config("SERVER_PORT", 5000)
+        public_port = get_config("PUBLIC_PORT", 0)
+
+        effective_port = public_port if public_port > 0 else server_port
+
+        protocol = "https" if use_ssl else "http"
+        if (protocol == "http" and effective_port == 80) or \
+           (protocol == "https" and effective_port == 443):
+            base_url = f"{protocol}://{website_base_url}"
+        else:
+            base_url = f"{protocol}://{website_base_url}:{effective_port}"
+        summary_url = f"{base_url}/summaries/{task_id}"
+
         return jsonify({
             'success': True,
             'message': '任務已加入佇列',
             'task_id': task_id,
-            'queue_position': queue_position
+            'queue_position': queue_position,
+            'summary_url': summary_url
         })
     except Exception as e:
         return jsonify({'success': False, 'message': f'新增任務失敗: {str(e)}'}), 500
@@ -428,12 +460,28 @@ def api_process_youtube():
         queue_task_id = queue_manager.add_task('youtube', task_data, priority=5, user_ip=user_ip)
         queue_position = queue_manager.get_user_queue_position(queue_task_id)
 
+        website_base_url = get_config("WEBSITE_BASE_URL", "127.0.0.1")
+        use_ssl = get_config("USE_SSL", False)
+        server_port = get_config("SERVER_PORT", 5000)
+        public_port = get_config("PUBLIC_PORT", 0)
+
+        effective_port = public_port if public_port > 0 else server_port
+
+        protocol = "https" if use_ssl else "http"
+        if (protocol == "http" and effective_port == 80) or \
+           (protocol == "https" and effective_port == 443):
+            base_url = f"{protocol}://{website_base_url}"
+        else:
+            base_url = f"{protocol}://{website_base_url}:{effective_port}"
+        summary_url = f"{base_url}/summaries/{queue_task_id}"
+
         return jsonify({
             'status': 'processing',
             'message': f'YouTube任務已加入佇列，目前排隊位置: {queue_position}',
             'task_id': queue_task_id,
             'queue_position': queue_position,
-            'youtube_url': youtube_url
+            'youtube_url': youtube_url,
+            'summary_url': summary_url
         }), 200
 
     except Exception as e:

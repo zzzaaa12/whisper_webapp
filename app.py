@@ -239,10 +239,26 @@ def handle_start_processing(data):
 
         queue_position = get_task_queue().get_user_queue_position(task_id)
 
-        if queue_position > 1:
-            socket_service.log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}", 'warning', sid)
+        website_base_url = get_config("WEBSITE_BASE_URL", "127.0.0.1")
+        use_ssl = get_config("USE_SSL", False)
+        server_port = get_config("SERVER_PORT", 5000)
+        public_port = get_config("PUBLIC_PORT", 0)
+
+        effective_port = public_port if public_port > 0 else server_port
+
+        protocol = "https" if use_ssl else "http"
+        if (protocol == "http" and effective_port == 80) or \
+           (protocol == "https" and effective_port == 443):
+            # Standard ports, no need to include port in URL
+            base_url = f"{protocol}://{website_base_url}"
         else:
-            socket_service.log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}', 'success', sid)
+            base_url = f"{protocol}://{website_base_url}:{effective_port}"
+        summary_url = f"{base_url}/summaries/{task_id}"
+
+        if queue_position > 1:
+            socket_service.log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}。預計摘要網址：{summary_url}", 'warning', sid)
+        else:
+            socket_service.log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}。預計摘要網址：{summary_url}', 'success', sid)
 
     except Exception as e:
         socket_service.log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
