@@ -23,9 +23,10 @@ class AuthService:
 
     def get_client_ip(self) -> str:
         """獲取客戶端 IP 位址"""
-        if request.headers.get('X-Forwarded-For'):
-            return request.headers.get('X-Forwarded-For').split(',')[0].strip()
-        return request.remote_addr
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            return forwarded_for.split(',')[0].strip()
+        return request.remote_addr or '0.0.0.0'
 
     def is_ip_blocked(self, ip: str) -> bool:
         """檢查 IP 是否被封鎖"""
@@ -74,11 +75,13 @@ class AuthService:
                 return 0
             return max(0, int(self.login_attempts[ip]['blocked_until'] - time.time()))
 
-    def verify_access_code(self, user_code: str) -> bool:
+    def verify_access_code(self, user_code: str | None) -> bool:
         """驗證通行碼"""
         system_access_code = get_config("ACCESS_CODE")
         if not system_access_code:
             return True
+        if not user_code:
+            return False
         return user_code == system_access_code
 
     def get_login_attempts_info(self) -> list:

@@ -21,6 +21,7 @@ from src.utils.srt_converter import segments_to_srt
 from src.utils.time_formatter import get_timestamp
 from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
+from src.services.email_service import EmailService
 
 class TaskProcessor:
     """
@@ -47,6 +48,7 @@ class TaskProcessor:
         self.notification_service = notification_service_instance
         self.file_service = file_service_instance
         self.yt_dlp = yt_dlp
+        self.email_service = EmailService()
 
     def _log_worker_message(self, task_id, message, level='info'):
         # This is a placeholder. In a real app, this would emit to a central log or socket.
@@ -140,6 +142,16 @@ class TaskProcessor:
         if not success:
             self._log_worker_message(task_id, f"Summary generation failed: {result}", 'error')
             raise RuntimeError(f"Summary generation failed: {result}") # Raise to fail task
+
+    def _send_summary_email(self, task_id: str, title: str, summary_path: Path):
+        """發送摘要郵件"""
+        try:
+            if self.email_service.send_summary(title, summary_path):
+                self._log_worker_message(task_id, "✉️ 摘要郵件發送成功")
+            else:
+                self._log_worker_message(task_id, "⚠️ 摘要郵件發送失敗：郵件設定不完整", 'warning')
+        except Exception as e:
+            self._log_worker_message(task_id, f"❌ 摘要郵件發送失敗：{str(e)}", 'error')
 
     def _send_task_notification(self, task_id, video_title, sanitized_title, url, summary_path, original_file_name=None):
         notification_msg = ""
@@ -246,28 +258,26 @@ class TaskProcessor:
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
                 self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url})
 
+                # 發送摘要郵件
+                self._send_summary_email(task_id, video_title, summary_path)
+
             # 更新任務結果
             result = {
-                'video_title': video_title,
+                'audio_file': str(audio_file),
                 'subtitle_file': str(subtitle_path),
-                'summary_file': str(summary_path) if summary_path.exists() else None,
-                'original_file': str(audio_file)
+                'summary_file': str(summary_path),
+                'title': video_title,
+                'url': url
             }
 
-            self.task_queue.update_task_status(
-                task_id, TaskStatus.COMPLETED, progress=100, result=result
-            )
-
-            # 發送通知（包含摘要內容）
+            # 發送完成通知
             self._send_task_notification(task_id, video_title, sanitized_title, url, summary_path)
 
+            return result
+
         except Exception as e:
-            error_msg = f"YouTube 任務處理失敗: {str(e)}"
-            self._log_worker_message(task_id, error_msg, 'error')
-            self._log_worker_message(task_id, f"Error details: {traceback.format_exc()}", 'error')
-            self.task_queue.update_task_status(
-                task_id, TaskStatus.FAILED, error_message=error_msg
-            )
+            self._log_worker_message(task_id, f"處理 YouTube 任務時發生錯誤：{str(e)}", 'error')
+            raise
 
     def process_upload_media_task(self, task):
         """處理上傳媒體任務"""

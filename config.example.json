@@ -81,5 +81,12 @@
     "LOGS_DIR": "logs",
     "CERTS_DIR": "certs",
     "TRASH_DIR": "trash"
+  },
+  "EMAIL": {
+    "SMTP_SERVER": "smtp.gmail.com",
+    "SMTP_PORT": 587,
+    "SENDER_EMAIL": "your-email@gmail.com",
+    "APP_PASSWORD": "your-gmail-app-password",
+    "RECIPIENT_EMAIL": "recipient@example.com"
   }
 }

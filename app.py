@@ -42,8 +42,13 @@ BASE_DIR = Path(__file__).parent.resolve()
 from src.config import init_config, get_config
 init_config(BASE_DIR)
 
-
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
+
+@app.context_processor
+def inject_session():
+    """Make session available to all templates"""
+    return dict(session=session)
+
 socketio = init_socketio(app)
 auth_service = AuthService()
 

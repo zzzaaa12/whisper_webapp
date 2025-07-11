@@ -25,7 +25,11 @@ trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
 def access():
     """處理全站通行碼驗證"""
     # 如果功能未開啟，或已經驗證過，直接導向首頁
-    if not get_config("ACCESS_CODE_ALL_PAGE", False) or session.get('is_authorized'):
+    if not get_config("ACCESS_CODE_ALL_PAGE", False):
+        session['is_authorized'] = True
+        return redirect(url_for('main.index'))
+
+    if session.get('is_authorized'):
         return redirect(url_for('main.index'))
 
     if request.method == 'POST':
@@ -34,6 +38,7 @@ def access():
             session['is_authorized'] = True
             # 讓 session 在瀏覽器關閉時過期
             session.permanent = False
+            flash('登入成功！', 'success')
 
             next_url = request.form.get('next')
             # 安全性檢查：確保 next_url 是相對路徑
@@ -41,7 +46,8 @@ def access():
                 return redirect(next_url)
             return redirect(url_for('main.index'))
         else:
-            return render_template('access_code.html', error="通行碼不正確")
+            flash('通行碼不正確', 'danger')
+            return render_template('access_code.html')
 
     return render_template('access_code.html')
 
@@ -167,3 +173,10 @@ def bookmarks_page():
 @main_bp.route('/queue')
 def queue_page():
     return render_template('queue.html')
+
+@main_bp.route('/logout')
+def logout():
+    """處理登出功能"""
+    session.clear()
+    flash('您已成功登出', 'success')
+    return redirect(url_for('main.access'))
