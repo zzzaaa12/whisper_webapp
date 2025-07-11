@@ -1,6 +1,8 @@
 {
   "SECRET_KEY": "請填入一組隨機字串",
   "ACCESS_CODE": "你的通行碼（建議設定以提升安全性）",
+  "ACCESS_CODE_ALL_PAGE": false,
+  "_comment_all_page_access": "💡 設為 true 時，所有頁面都需要通行碼驗證",
 
   "_comment_legacy": "=== 向後兼容的舊版配置 ===",
   "OPENAI_API_KEY": "你的 OpenAI API 金鑰",

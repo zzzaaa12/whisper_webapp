@@ -10,10 +10,11 @@ import time
 import json
 import uuid
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from flask_socketio import emit
 from dotenv import load_dotenv
 import requests
+
 
 
 from src.services.auth_service import AuthService
@@ -77,6 +78,25 @@ def set_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
 
     return response
+
+@app.before_request
+def require_access_code():
+    """在每個請求前檢查是否需要通行碼"""
+    # 檢查功能是否開啟
+    if not get_config("ACCESS_CODE_ALL_PAGE", False):
+        return
+
+    # 檢查使用者是否已通過驗證
+    if session.get('is_authorized'):
+        return
+
+    # 允許訪問特定頁面，避免無限重導向
+    # 也允許訪問 Socket.IO 的內部路徑
+    if request.endpoint in ['main.access', 'static'] or request.path.startswith('/socket.io'):
+        return
+
+    # 重導向到通行碼輸入頁面
+    return redirect(url_for('main.access', next=request.path))
 
 # --- Global Definitions ---
 
@@ -263,7 +283,7 @@ def handle_start_processing(data):
     except Exception as e:
         socket_service.log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
 
-    
+
 
 @socketio.on('cancel_processing')
 def handle_cancel_processing():
@@ -441,7 +461,7 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"⚠️  新任務佇列工作程式啟動失敗: {e}")
 
-    
+
 
     # 顯示啟動訊息
     if ssl_context:

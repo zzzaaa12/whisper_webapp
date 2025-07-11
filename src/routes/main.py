@@ -1,9 +1,10 @@
 
-from flask import Blueprint, render_template, send_file
+from flask import Blueprint, render_template, send_file, request, session, redirect, url_for, flash
 from pathlib import Path
 import os
 
 from src.config import get_config
+from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
 
@@ -15,12 +16,40 @@ SUBTITLE_FOLDER = BASE_DIR / "subtitles"
 TRASH_FOLDER = BASE_DIR / "trash"
 BOOKMARK_FILE = BASE_DIR / "bookmarks.json"
 
+auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
 trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
+
+
+@main_bp.route('/access', methods=['GET', 'POST'])
+def access():
+    """處理全站通行碼驗證"""
+    # 如果功能未開啟，或已經驗證過，直接導向首頁
+    if not get_config("ACCESS_CODE_ALL_PAGE", False) or session.get('is_authorized'):
+        return redirect(url_for('main.index'))
+
+    if request.method == 'POST':
+        code = request.form.get('access_code')
+        if auth_service.verify_access_code(code):
+            session['is_authorized'] = True
+            # 讓 session 在瀏覽器關閉時過期
+            session.permanent = False
+
+            next_url = request.form.get('next')
+            # 安全性檢查：確保 next_url 是相對路徑
+            if next_url and next_url.startswith('/'):
+                return redirect(next_url)
+            return redirect(url_for('main.index'))
+        else:
+            return render_template('access_code.html', error="通行碼不正確")
+
+    return render_template('access_code.html')
+
 
 @main_bp.route('/')
 def index():
     return render_template('index.html')
+
 
 @main_bp.route('/summary')
 def list_summaries():
