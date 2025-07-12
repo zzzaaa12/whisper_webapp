@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from src.config import get_config
 from task_queue import get_task_queue
 import re
+import os
 from pathlib import Path
 import uuid # Import uuid module
 
@@ -9,6 +10,7 @@ from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
 from src.services.url_service import URLService
+from src.services.file_service import file_service
 from src.utils.time_formatter import get_timestamp
 from src.utils.file_sanitizer import sanitize_filename
 
@@ -18,7 +20,6 @@ BASE_DIR = Path(__file__).parent.parent.parent.resolve()
 SUMMARY_FOLDER = BASE_DIR / "summaries"
 SUBTITLE_FOLDER = BASE_DIR / "subtitles"
 TRASH_FOLDER = BASE_DIR / "trash"
-UPLOAD_FOLDER = BASE_DIR / "uploads"
 BOOKMARK_FILE = BASE_DIR / "bookmarks.json"
 
 auth_service = AuthService()
@@ -227,89 +228,27 @@ def api_upload_subtitle():
 @api_bp.route('/upload_media', methods=['POST'])
 def api_upload_media():
     try:
-        if 'media_file' not in request.files:
-            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
-        file = request.files['media_file']
-        if file.filename == '':
-            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
-
         access_code = request.form.get('access_code', '').strip()
-        title = os.path.splitext(file.filename)[0] if file.filename else ""
-
         if not auth_service.verify_access_code(access_code):
             return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
 
-        file.seek(0, 2)
-        file_size = file.tell()
-        file.seek(0)
+        if 'media_file' not in request.files:
+            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
 
-        max_size = 500 * 1024 * 1024
-        if file_size > max_size:
-            return jsonify({'success': False, 'message': f'檔案過大，最大限制 500MB，目前檔案 {file_size / (1024*1024):.1f}MB'}), 413
-
-        allowed_extensions = {
-            '.mp3', '.mp4', '.wav', '.m4a', '.flv', '.avi', '.mov',
-            '.mkv', '.webm', '.ogg', '.aac', '.wma', '.wmv', '.3gp'
-        }
-        file_ext = Path(file.filename).suffix.lower()
-        if file_ext not in allowed_extensions:
-            return jsonify({'success': False, 'message': f'不支援的檔案格式：{file_ext}。支援格式：{", ".join(sorted(allowed_extensions))}'}), 400
-
-        timestamp = get_timestamp("file")
-        safe_title = sanitize_filename(title) if title else "未命名"
-        task_id = str(uuid.uuid4())[:8]
-        safe_filename = f"{timestamp}_{task_id}_{safe_title}{file_ext}"
-
-        UPLOAD_FOLDER.mkdir(exist_ok=True)
-        file_path = UPLOAD_FOLDER / safe_filename
-        file.save(str(file_path))
-
-        date_str = get_timestamp("date")
-        base_name = f"{date_str} - {safe_title}"
-        subtitle_path = SUBTITLE_FOLDER / f"{base_name}.srt"
-        summary_path = SUMMARY_FOLDER / f"{base_name}.txt"
-
+        file = request.files['media_file']
         user_ip = auth_service.get_client_ip()
-        queue_manager = get_task_queue()
 
-        task_data = {
-            'audio_file': str(file_path),
-            'subtitle_path': str(subtitle_path),
-            'summary_path': str(summary_path),
-            'title': title or safe_title,
-            'filename': safe_filename
-        }
+        result = file_service.save_uploaded_media(file, user_ip)
 
-        queue_task_id = queue_manager.add_task('upload_media', task_data, priority=5, user_ip=user_ip)
+        if not result.get('success'):
+            status_code = result.pop('status_code', 500)
+            return jsonify(result), status_code
 
-        queue_position = queue_manager.get_user_queue_position(queue_task_id)
+        return jsonify(result)
 
-        website_base_url = get_config("WEBSITE_BASE_URL", "127.0.0.1")
-        use_ssl = get_config("USE_SSL", False)
-        server_port = get_config("SERVER_PORT", 5000)
-        public_port = get_config("PUBLIC_PORT", 0)
-
-        effective_port = public_port if public_port > 0 else server_port
-
-        protocol = "https" if use_ssl else "http"
-        if (protocol == "http" and effective_port == 80) or \
-           (protocol == "https" and effective_port == 443):
-            base_url = f"{protocol}://{website_base_url}"
-        else:
-            base_url = f"{protocol}://{website_base_url}:{effective_port}"
-
-        return jsonify({
-            'success': True,
-            'message': '檔案上傳成功，已加入處理佇列',
-            'task_id': queue_task_id,
-            'queue_position': queue_position,
-            'filename': safe_filename,
-            'title': title or safe_title,
-            'file_size': file_size,
-            'original_task_id': task_id,
-        })
     except Exception as e:
-        return jsonify({'success': False, 'message': f'上傳檔案時發生錯誤：{str(e)}'}), 500
+        # Consider logging the exception e for debugging
+        return jsonify({'success': False, 'message': f'上傳檔案時發生未預期的錯誤：{str(e)}'}), 500
 
 @api_bp.route('/queue/cancel', methods=['POST'])
 def api_cancel_queue_task():
