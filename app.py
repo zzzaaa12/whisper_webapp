@@ -87,6 +87,10 @@ def set_security_headers(response):
 @app.before_request
 def require_access_code():
     """在每個請求前檢查是否需要通行碼"""
+    # API 請求應跳過此驗證
+    if request.path.startswith('/api'):
+        return
+
     # 檢查功能是否開啟
     if not get_config("ACCESS_CODE_ALL_PAGE", False):
         return
