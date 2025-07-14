@@ -1,6 +1,7 @@
 
 import requests
 from src.config import get_config
+from src.utils.logger_manager import get_logger_manager
 
 class NotificationService:
     """統一通知服務"""
@@ -11,7 +12,8 @@ class NotificationService:
         chat_id = get_config('TELEGRAM_CHAT_ID')
 
         if not bot_token or not chat_id:
-            print("[NOTIFICATION] Telegram credentials not set. Skipping notification.")
+            logger_manager = get_logger_manager()
+            logger_manager.debug("Telegram credentials not set. Skipping notification.", "notification")
             return False
 
         api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
@@ -26,10 +28,12 @@ class NotificationService:
             if response.status_code == 200:
                 return True
             else:
-                print(f"[NOTIFICATION] Error sending Telegram message: {response.text}")
+                logger_manager = get_logger_manager()
+                logger_manager.error(f"Error sending Telegram message: {response.text}", "notification")
                 return False
         except Exception as e:
-            print(f"[NOTIFICATION] Exception while sending Telegram message: {e}")
+            logger_manager = get_logger_manager()
+            logger_manager.error(f"Exception while sending Telegram message: {e}", "notification")
             return False
 
 # 全域單例實例

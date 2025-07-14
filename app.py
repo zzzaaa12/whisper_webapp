@@ -49,6 +49,9 @@ init_config(BASE_DIR)
 setup_logging(BASE_DIR / "logs", enable_console=True)
 logger_manager = get_logger_manager()
 
+# 確保路徑管理器在配置初始化後才被使用
+path_manager = get_path_manager()
+
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 
 @app.context_processor

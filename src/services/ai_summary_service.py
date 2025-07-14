@@ -7,6 +7,7 @@ from typing import Optional, Dict, Any, Callable
 from pathlib import Path
 from datetime import datetime # Added for datetime usage
 from src.config import get_config
+from src.utils.logger_manager import get_logger_manager
 
 class SummaryService:
     """統一的摘要服務類別 - 支援多 AI 提供商"""
@@ -20,6 +21,7 @@ class SummaryService:
             ai_provider: AI 提供商名稱 (openai, claude, ollama, groq 等)
         """
         self.openai = None
+        self.logger_manager = get_logger_manager()
 
         # 決定使用的 AI 提供商
         self.ai_provider = ai_provider or get_config("AI_PROVIDER", "openai")
@@ -52,10 +54,10 @@ class SummaryService:
                 # 檢查 API key 是否包含 "金鑰" - 如果包含則表示未設置有效金鑰
                 api_key = config.get("api_key", "")
                 if "金鑰" in str(api_key):
-                    print(f"[SUMMARY] Provider {provider_name} API key contains '金鑰', skipping...")
+                    self.logger_manager.debug(f"Provider {provider_name} API key contains placeholder, skipping", "ai_summary")
                     return None
                 elif api_key == "":
-                    print(f"[SUMMARY] Provider {provider_name} API key is empty, skipping...")
+                    self.logger_manager.debug(f"Provider {provider_name} API key is empty, skipping", "ai_summary")
                     return None
 
                 return config
@@ -66,7 +68,7 @@ class SummaryService:
                 if api_key:
                     # 檢查舊版 API key 是否包含 "金鑰"
                     if "金鑰" in str(api_key):
-                        print(f"[SUMMARY] Legacy OpenAI API key contains '金鑰', skipping...")
+                        self.logger_manager.debug("Legacy OpenAI API key contains placeholder, skipping", "ai_summary")
                         return None
 
                     return {
@@ -80,7 +82,7 @@ class SummaryService:
             return None
 
         except Exception as e:
-            print(f"[SUMMARY] Error getting provider config for {provider_name}: {e}")
+            self.logger_manager.error(f"Error getting provider config for {provider_name}: {e}", "ai_summary")
             return None
 
     def _init_ai_client(self):
@@ -88,18 +90,18 @@ class SummaryService:
         self.current_provider_config = self._get_provider_config(self.ai_provider or "openai")
 
         if not self.current_provider_config:
-            print(f"[SUMMARY] Warning: No valid config found for AI provider '{self.ai_provider}' (may contain '金鑰')")
+            self.logger_manager.warning(f"No valid config found for AI provider '{self.ai_provider}'", "ai_summary")
 
             # 嘗試容錯切換到其他可用的提供商
             if self._try_fallback_provider():
-                print(f"[SUMMARY] Successfully switched to fallback provider: {self.ai_provider}")
+                self.logger_manager.info(f"Successfully switched to fallback provider: {self.ai_provider}", "ai_summary")
             else:
-                print(f"[SUMMARY] No valid AI providers available")
+                self.logger_manager.warning("No valid AI providers available", "ai_summary")
                 return
 
         # 再次檢查配置是否有效（可能已經通過容錯切換更新）
         if not self.current_provider_config or not self.current_provider_config.get("api_key"):
-            print(f"[SUMMARY] Warning: No valid API key found for AI provider '{self.ai_provider}'")
+            self.logger_manager.warning(f"No valid API key found for AI provider '{self.ai_provider}'", "ai_summary")
             return
 
         if not self.openai:
@@ -107,7 +109,7 @@ class SummaryService:
                 import openai
                 self.openai = openai
             except ImportError:
-                print("[SUMMARY] Warning: OpenAI library not installed")
+                self.logger_manager.warning("OpenAI library not installed", "ai_summary")
 
     def _get_model_config(self) -> Dict[str, Any]:
         """獲取當前提供商的模型配置"""

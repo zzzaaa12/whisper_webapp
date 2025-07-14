@@ -53,7 +53,9 @@ class TaskProcessor:
 
     def _log_worker_message(self, task_id, message, level='info'):
         # This is a placeholder. In a real app, this would emit to a central log or socket.
-        print(f"[WORKER][Task {task_id[:8]}] {message}")
+        from src.utils.logger_manager import get_logger_manager
+        logger_manager = get_logger_manager()
+        logger_manager.info(f"[Task {task_id[:8]}] {message}", "task_processor")
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, log_message=message)
 
 
