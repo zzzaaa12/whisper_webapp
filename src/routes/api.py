@@ -296,6 +296,46 @@ def api_cleanup_queue():
     except Exception as e:
         return jsonify({'success': False, 'message': f'清理任務失敗: {str(e)}'}), 500
 
+@api_bp.route('/queue/delete', methods=['POST'])
+@require_access_code
+def api_delete_failed_task():
+    """刪除失敗的任務"""
+    try:
+        data = request.get_json()
+        if not data or 'task_id' not in data:
+            return APIResponse.validation_error('缺少任務ID')
+
+        task_id = data['task_id']
+        queue_manager = get_task_queue()
+        success, message = queue_manager.delete_task(task_id)
+
+        if success:
+            return APIResponse.success(message=message)
+        else:
+            return APIResponse.error(message, 400)
+    except Exception as e:
+        return APIResponse.internal_error(f'刪除任務失敗: {str(e)}')
+
+@api_bp.route('/queue/restart', methods=['POST'])
+@require_access_code
+def api_restart_failed_task():
+    """重啟失敗的任務"""
+    try:
+        data = request.get_json()
+        if not data or 'task_id' not in data:
+            return APIResponse.validation_error('缺少任務ID')
+
+        task_id = data['task_id']
+        queue_manager = get_task_queue()
+        success, message = queue_manager.restart_task(task_id)
+
+        if success:
+            return APIResponse.success(message=message)
+        else:
+            return APIResponse.error(message, 400)
+    except Exception as e:
+        return APIResponse.internal_error(f'重啟任務失敗: {str(e)}')
+
 @api_bp.route('/queue/add', methods=['POST'])
 def api_add_queue_task():
     try:

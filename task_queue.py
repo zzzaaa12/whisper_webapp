@@ -382,6 +382,75 @@ class TaskQueue:
 
         return deleted_count
 
+    def delete_task(self, task_id: str) -> tuple[bool, str]:
+        """刪除指定任務（僅限失敗或已取消的任務）"""
+        with self._lock:
+            if task_id not in self._tasks:
+                return False, "任務不存在"
+
+            task = self._tasks[task_id]
+
+            # 只允許刪除失敗或已取消的任務
+            if task.status not in [TaskStatus.FAILED, TaskStatus.CANCELLED]:
+                return False, f"只能刪除失敗或已取消的任務，當前狀態：{task.status.value}"
+
+            try:
+                # 刪除任務檔案
+                task_file = self.tasks_dir / f"{task_id}.json"
+                result_file = self.results_dir / f"{task_id}_result.json"
+
+                if task_file.exists():
+                    task_file.unlink()
+                if result_file.exists():
+                    result_file.unlink()
+
+                # 從記憶體中移除
+                del self._tasks[task_id]
+                if task_id in self._queue_order:
+                    self._queue_order.remove(task_id)
+
+                # 儲存更新的元資料
+                self._save_queue_metadata()
+
+                return True, "任務已刪除"
+
+            except Exception as e:
+                return False, f"刪除任務失敗：{str(e)}"
+
+    def restart_task(self, task_id: str) -> tuple[bool, str]:
+        """重啟失敗的任務"""
+        with self._lock:
+            if task_id not in self._tasks:
+                return False, "任務不存在"
+
+            task = self._tasks[task_id]
+
+            # 只允許重啟失敗的任務
+            if task.status != TaskStatus.FAILED:
+                return False, f"只能重啟失敗的任務，當前狀態：{task.status.value}"
+
+            try:
+                # 重置任務狀態
+                task.status = TaskStatus.QUEUED
+                task.progress = 0
+                task.error_message = None
+                task.started_at = None
+                task.completed_at = None
+                task.result = {}
+
+                # 重新加入佇列
+                if task_id not in self._queue_order:
+                    self._queue_order.append(task_id)
+
+                # 儲存任務
+                self._save_task(task)
+                self._save_queue_metadata()
+
+                return True, "任務已重啟並加入佇列"
+
+            except Exception as e:
+                return False, f"重啟任務失敗：{str(e)}"
+
     def get_user_queue_position(self, task_id: str) -> int:
         """獲取任務在佇列中的位置"""
         with self._lock:

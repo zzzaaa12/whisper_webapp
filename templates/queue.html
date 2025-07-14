@@ -332,6 +332,52 @@
         </div>
     </div>
 
+    <!-- 刪除任務模態框 -->
+    <div class="modal fade" id="deleteTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">刪除失敗任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>確定要永久刪除這個失敗的任務嗎？此操作無法復原。</p>
+                    <div class="mb-3">
+                        <label for="deleteTaskAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="deleteTaskAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDeleteTask()">確認刪除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 重啟任務模態框 -->
+    <div class="modal fade" id="restartTaskModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">重啟失敗任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>確定要重新執行這個失敗的任務嗎？任務將重新加入佇列。</p>
+                    <div class="mb-3">
+                        <label for="restartTaskAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="restartTaskAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="confirmRestartTask()">確認重啟</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 任務詳情模態框 -->
     <div class="modal fade" id="taskDetailModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -361,6 +407,8 @@
         let autoRefreshInterval;
         let currentTaskId = null;
         let taskIdToCancel = null;
+        let taskIdToDelete = null;
+        let taskIdToRestart = null;
         let lastTasksHash = '';
         let lastStatusHash = '';
         let isUpdating = false;
@@ -601,6 +649,14 @@
                                                 <i class="bi bi-x-circle"></i> 取消
                                             </button>
                                         ` : ''}
+                                        ${task.status === 'failed' ? `
+                                            <button class="btn btn-sm btn-outline-danger" onclick="showDeleteTaskDialog('${task.task_id}')" title="刪除任務">
+                                                <i class="bi bi-trash"></i> 刪除
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-success" onclick="showRestartTaskDialog('${task.task_id}')" title="重啟任務">
+                                                <i class="bi bi-arrow-clockwise"></i> 重啟
+                                            </button>
+                                        ` : ''}
                                     </div>
                                 </div>
                             </div>
@@ -809,6 +865,120 @@
                 taskIdToCancel = null;
             } catch (error) {
                 // 錯誤處理已在 cancelTaskById 中處理
+            }
+        }
+
+        // 顯示刪除任務對話框
+        function showDeleteTaskDialog(taskId) {
+            taskIdToDelete = taskId;
+            document.getElementById('deleteTaskAccessCode').value = '';
+            new bootstrap.Modal(document.getElementById('deleteTaskModal')).show();
+        }
+
+        // 確認刪除任務
+        async function confirmDeleteTask() {
+            const accessCode = document.getElementById('deleteTaskAccessCode').value.trim();
+
+            if (!accessCode) {
+                alert('請輸入通行碼');
+                return;
+            }
+
+            if (!taskIdToDelete) {
+                alert('沒有要刪除的任務');
+                return;
+            }
+
+            try {
+                await deleteTaskById(taskIdToDelete, accessCode);
+                bootstrap.Modal.getInstance(document.getElementById('deleteTaskModal')).hide();
+                taskIdToDelete = null;
+            } catch (error) {
+                // 錯誤處理已在 deleteTaskById 中處理
+            }
+        }
+
+        // 根據ID刪除任務
+        async function deleteTaskById(taskId, accessCode) {
+            try {
+                const response = await fetch('/api/queue/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_id: taskId,
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadTasks(false);
+                    loadQueueStatus(false);
+                } else {
+                    alert('刪除任務失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('刪除任務失敗: ' + error.message);
+            }
+        }
+
+        // 顯示重啟任務對話框
+        function showRestartTaskDialog(taskId) {
+            taskIdToRestart = taskId;
+            document.getElementById('restartTaskAccessCode').value = '';
+            new bootstrap.Modal(document.getElementById('restartTaskModal')).show();
+        }
+
+        // 確認重啟任務
+        async function confirmRestartTask() {
+            const accessCode = document.getElementById('restartTaskAccessCode').value.trim();
+
+            if (!accessCode) {
+                alert('請輸入通行碼');
+                return;
+            }
+
+            if (!taskIdToRestart) {
+                alert('沒有要重啟的任務');
+                return;
+            }
+
+            try {
+                await restartTaskById(taskIdToRestart, accessCode);
+                bootstrap.Modal.getInstance(document.getElementById('restartTaskModal')).hide();
+                taskIdToRestart = null;
+            } catch (error) {
+                // 錯誤處理已在 restartTaskById 中處理
+            }
+        }
+
+        // 根據ID重啟任務
+        async function restartTaskById(taskId, accessCode) {
+            try {
+                const response = await fetch('/api/queue/restart', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        task_id: taskId,
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    loadTasks(false);
+                    loadQueueStatus(false);
+                } else {
+                    alert('重啟任務失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('重啟任務失敗: ' + error.message);
             }
         }
 
