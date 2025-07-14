@@ -492,7 +492,7 @@ if __name__ == '__main__':
         print("主伺服器準備關閉...")
         # 停止新的佇列工作程式
         try:
-            from queue_worker import stop_queue_worker
+            from src.services.queue_worker import stop_queue_worker
             stop_queue_worker()
             print("✅ 新任務佇列工作程式已停止")
         except Exception as e:
