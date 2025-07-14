@@ -7,14 +7,17 @@ from src.config import get_config
 from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
+from src.utils.path_manager import get_path_manager
+from src.utils.file_validator import FileValidator
 
 main_bp = Blueprint('main', __name__)
 
-BASE_DIR = Path(__file__).parent.parent.parent.resolve()
-SUMMARY_FOLDER = BASE_DIR / "summaries"
-SUBTITLE_FOLDER = BASE_DIR / "subtitles"
-TRASH_FOLDER = BASE_DIR / "trash"
-BOOKMARK_FILE = BASE_DIR / "bookmarks.json"
+# 使用統一的路徑管理器
+path_manager = get_path_manager()
+SUMMARY_FOLDER = path_manager.get_summary_folder()
+SUBTITLE_FOLDER = path_manager.get_subtitle_folder()
+TRASH_FOLDER = path_manager.get_trash_folder()
+BOOKMARK_FILE = path_manager.get_bookmark_file()
 
 auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
@@ -74,12 +77,8 @@ def list_summaries():
 
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
-    from urllib.parse import unquote
     from flask import request
     from task_queue import get_task_queue
-
-    decoded_filename = unquote(filename)
-    safe_path = SUMMARY_FOLDER / decoded_filename
 
     # New logic to handle task_id
     task_id = request.args.get('task_id')
@@ -89,24 +88,16 @@ def show_summary(filename):
         if task_info and task_info.get('result') and task_info['result'].get('summary_file'):
             summary_file_path = Path(task_info['result']['summary_file'])
             if summary_file_path.exists():
-                safe_path = summary_file_path
-                decoded_filename = summary_file_path.name
+                filename = summary_file_path.name
             else:
                 return "摘要檔案不存在 (透過任務ID)", 404
         else:
             return "任務或摘要檔案資訊不完整", 404
 
-    try:
-        safe_path = safe_path.resolve()
-        SUMMARY_FOLDER_RESOLVED = SUMMARY_FOLDER.resolve()
-        if not str(safe_path).startswith(str(SUMMARY_FOLDER_RESOLVED)):
-            return "檔案路徑無效", 400
-        if not safe_path.exists():
-            return "檔案不存在", 404
-        if safe_path.suffix.lower() != '.txt':
-            return "檔案類型不支援", 400
-    except Exception:
-        return "檔案路徑無效", 400
+    # 使用統一的檔案驗證
+    is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
+    if not is_valid:
+        return error_msg, 400 if "無效" in error_msg else 404
 
     content = safe_path.read_text(encoding='utf-8')
     subtitle_filename = safe_path.stem + '.srt'
@@ -122,38 +113,24 @@ def show_summary(filename):
 @main_bp.route('/download/summary/<filename>')
 def download_summary(filename):
     try:
-        from urllib.parse import unquote
-        filename = unquote(filename)
-        safe_path = (SUMMARY_FOLDER / filename).resolve()
-        SUMMARY_FOLDER_RESOLVED = SUMMARY_FOLDER.resolve()
-        if not str(safe_path).startswith(str(SUMMARY_FOLDER_RESOLVED)):
-            return "檔案路徑無效", 400
-        if not safe_path.exists():
-            return "檔案不存在", 404
-        if safe_path.suffix.lower() != '.txt':
-            return "檔案類型不支援", 400
-        return send_file(safe_path, as_attachment=True, download_name=filename)
+        # 使用統一的檔案驗證
+        is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
+        if not is_valid:
+            return error_msg, 400 if "無效" in error_msg else 404
+        
+        return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500
 
 @main_bp.route('/download/subtitle/<filename>')
 def download_subtitle(filename):
     try:
-        from urllib.parse import unquote
-        filename = unquote(filename)
-        if filename.endswith('.txt'):
-            filename = filename[:-4] + '.srt'
-        elif not filename.endswith('.srt'):
-            filename += '.srt'
-        safe_path = (SUBTITLE_FOLDER / filename).resolve()
-        SUBTITLE_FOLDER_RESOLVED = SUBTITLE_FOLDER.resolve()
-        if not str(safe_path).startswith(str(SUBTITLE_FOLDER_RESOLVED)):
-            return "檔案路徑無效", 400
-        if not safe_path.exists():
-            return "字幕檔案不存在", 404
-        if safe_path.suffix.lower() != '.srt':
-            return "檔案類型不支援", 400
-        return send_file(safe_path, as_attachment=True, download_name=filename)
+        # 使用統一的檔案驗證
+        is_valid, error_msg, safe_path = FileValidator.validate_subtitle_file(filename, SUBTITLE_FOLDER)
+        if not is_valid:
+            return error_msg, 400 if "無效" in error_msg else 404
+        
+        return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500
 

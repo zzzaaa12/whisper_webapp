@@ -31,6 +31,8 @@ from src.services.file_service import FileService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
 from src.services.url_service import URLService
+from src.utils.path_manager import get_path_manager
+from src.utils.url_builder import URLBuilder
 from src.services.log_service import LogService
 from src.services.gpu_service import GPUService
 from src.services.socket_service import SocketService
