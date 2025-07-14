@@ -33,6 +33,7 @@ from src.services.trash_service import TrashService
 from src.services.url_service import URLService
 from src.utils.path_manager import get_path_manager
 from src.utils.url_builder import URLBuilder
+from src.utils.logger_manager import setup_logging, get_logger_manager
 from src.services.log_service import LogService
 from src.services.gpu_service import GPUService
 from src.services.socket_service import SocketService
@@ -43,6 +44,10 @@ app = Flask(__name__)
 BASE_DIR = Path(__file__).parent.resolve()
 from src.config import init_config, get_config
 init_config(BASE_DIR)
+
+# 初始化日誌系統
+setup_logging(BASE_DIR / "logs", enable_console=True)
+logger_manager = get_logger_manager()
 
 app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 
@@ -149,7 +154,7 @@ task_lock = threading.Lock()
 
 def log_and_emit(message, level='info', sid=None):
     """Helper function to print to console and emit to client."""
-    print(f"[{level.upper()}] {message}")
+    logger_manager.info(f"[{level.upper()}] {message}", "app")
 
     # 儲存日誌到檔案
     if sid:
@@ -163,7 +168,7 @@ def update_server_state(is_busy, task_description):
         SERVER_STATE['is_busy'] = is_busy
         SERVER_STATE['current_task'] = task_description
         socketio.emit('server_status_update', SERVER_STATE)
-    print(f"Server state updated: {SERVER_STATE}")
+    logger_manager.info(f"Server state updated: {SERVER_STATE}", "app")
 
 # sanitize_filename 函數已移至 utils.py
 
@@ -412,19 +417,19 @@ if __name__ == '__main__':
     access_code = get_config("ACCESS_CODE")
     openai_key = get_config("OPENAI_API_KEY")
 
-    print("🔍 檢查系統配置...")
+    logger_manager.info("🔍 檢查系統配置...", "app")
 
     if not access_code:
-        print("⚠️  警告：未設定 ACCESS_CODE 環境變數")
-        print("   系統將允許無通行碼存取，建議設定 ACCESS_CODE 以提升安全性")
+        logger_manager.warning("未設定 ACCESS_CODE 環境變數", "app")
+        logger_manager.warning("系統將允許無通行碼存取，建議設定 ACCESS_CODE 以提升安全性", "app")
     else:
-        print("✅ ACCESS_CODE 已設定")
+        logger_manager.info("✅ ACCESS_CODE 已設定", "app")
 
     if not openai_key:
-        print("⚠️  警告：未設定 OPENAI_API_KEY")
-        print("   AI 摘要功能將無法使用，請設定 OPENAI_API_KEY 啟用此功能")
+        logger_manager.warning("未設定 OPENAI_API_KEY", "app")
+        logger_manager.warning("AI 摘要功能將無法使用，請設定 OPENAI_API_KEY 啟用此功能", "app")
     else:
-        print("✅ OPENAI_API_KEY 已設定")
+        logger_manager.info("✅ OPENAI_API_KEY 已設定", "app")
 
     # 檢查 SSL 配置
     use_ssl = get_config("USE_SSL", False)

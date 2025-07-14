@@ -22,6 +22,7 @@ from src.config import get_config
 from src.services.notification_service import send_telegram_notification
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.srt_converter import segments_to_srt
+from src.utils.logger_manager import create_log_callback
 from src.utils.time_formatter import get_timestamp
 from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
@@ -79,9 +80,12 @@ class QueueWorker:
         try:
             from ai_summary_service import get_summary_service
 
-            # 創建回調函數
-            def log_callback(message, level='info'):
-                print(f"[WORKER] {message}")
+            # 創建統一的日誌回調
+            log_callback = create_log_callback(
+                module="queue_worker",
+                task_id=task_id,
+                socketio_callback=lambda msg, level: print(f"[WORKER] {msg}")
+            )
 
             def progress_callback(progress):
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=progress)
