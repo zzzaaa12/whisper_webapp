@@ -201,7 +201,8 @@ app.register_blueprint(api_bp)
 
 @socketio.on('connect')
 def handle_connect():
-    sid = request.sid; print(f"Client connected: {sid}")
+    sid = request.sid
+    logger_manager.info(f"Client connected: {sid}", "socketio")
 
     previous_logs = log_service.get_session_logs(sid)
     if previous_logs.strip():
@@ -219,7 +220,7 @@ def handle_connect():
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
-    print(f"Client disconnected: {sid}")
+    logger_manager.info(f"Client disconnected: {sid}", "socketio")
 
     def delayed_cleanup():
         time.sleep(30)
@@ -445,19 +446,19 @@ if __name__ == '__main__':
                 import ssl
                 ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
                 ssl_context.load_cert_chain(cert_file, key_file)
-                print("✅ SSL 憑證已載入，將使用 HTTPS 模式")
-                print(f"🔐 HTTPS 伺服器將在 https://0.0.0.0:{server_port} 啟動")
+                logger_manager.info("✅ SSL 憑證已載入，將使用 HTTPS 模式", "app")
+                logger_manager.info(f"🔐 HTTPS 伺服器將在 https://0.0.0.0:{server_port} 啟動", "app")
             except Exception as e:
-                print(f"⚠️  SSL 憑證載入失敗: {e}")
-                print("   將使用 HTTP 模式啟動")
+                logger_manager.warning(f"SSL 憑證載入失敗: {e}", "app")
+                logger_manager.warning("將使用 HTTP 模式啟動", "app")
                 ssl_context = None
         else:
-            print("⚠️  找不到 SSL 憑證檔案 (certs/cert.pem, certs/key.pem)")
-            print("   將使用 HTTP 模式啟動")
+            logger_manager.warning("找不到 SSL 憑證檔案 (certs/cert.pem, certs/key.pem)", "app")
+            logger_manager.warning("將使用 HTTP 模式啟動", "app")
     else:
-        print("📡 使用 HTTP 模式")
+        logger_manager.info("📡 使用 HTTP 模式", "app")
 
-    print("🚀 繼續啟動系統...")
+    logger_manager.info("🚀 繼續啟動系統...", "app")
 
     for folder_key in ['DOWNLOADS_DIR', 'SUMMARIES_DIR', 'SUBTITLES_DIR', 'LOGS_DIR', 'TRASH_DIR', 'UPLOADS_DIR']:
         file_service.ensure_dir(get_config(f'PATHS.{folder_key}'))
@@ -473,19 +474,19 @@ if __name__ == '__main__':
             data_dir=BASE_DIR,
             openai_key=get_config("OPENAI_API_KEY")
         )
-        print("✅ 新任務佇列工作程式已啟動")
+        logger_manager.info("✅ 新任務佇列工作程式已啟動", "app")
     except Exception as e:
-        print(f"⚠️  新任務佇列工作程式啟動失敗: {e}")
+        logger_manager.warning(f"新任務佇列工作程式啟動失敗: {e}", "app")
 
 
 
     # 顯示啟動訊息
     if ssl_context:
-        print(f"🔐 HTTPS 伺服器啟動，請在瀏覽器中開啟 https://127.0.0.1:{server_port}")
-        print(f"   或透過網路存取：https://你的IP地址:{server_port}")
+        logger_manager.info(f"🔐 HTTPS 伺服器啟動，請在瀏覽器中開啟 https://127.0.0.1:{server_port}", "app")
+        logger_manager.info(f"或透過網路存取：https://你的IP地址:{server_port}", "app")
     else:
-        print(f"📡 HTTP 伺服器啟動，請在瀏覽器中開啟 http://127.0.0.1:{server_port}")
-        print(f"   或透過網路存取：http://你的IP地址:{server_port}")
+        logger_manager.info(f"📡 HTTP 伺服器啟動，請在瀏覽器中開啟 http://127.0.0.1:{server_port}", "app")
+        logger_manager.info(f"或透過網路存取：http://你的IP地址:{server_port}", "app")
 
     try:
         socketio.run(
@@ -496,12 +497,12 @@ if __name__ == '__main__':
             ssl_context=ssl_context
         )
     finally:
-        print("主伺服器準備關閉...")
+        logger_manager.info("主伺服器準備關閉...", "app")
         # 停止新的佇列工作程式
         try:
             from src.services.queue_worker import stop_queue_worker
             stop_queue_worker()
-            print("✅ 新任務佇列工作程式已停止")
+            logger_manager.info("✅ 新任務佇列工作程式已停止", "app")
         except Exception as e:
-            print(f"⚠️  停止新任務佇列工作程式失敗: {e}")
-        print("程式已完全關閉。")
+            logger_manager.warning(f"停止新任務佇列工作程式失敗: {e}", "app")
+        logger_manager.info("程式已完全關閉。", "app")
