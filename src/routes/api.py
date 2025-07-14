@@ -33,7 +33,6 @@ trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
 url_service = URLService()
 
 @api_bp.route('/trash/move', methods=['POST'])
-@require_access_code
 def api_move_to_trash():
     try:
         data = request.get_json()
@@ -61,7 +60,6 @@ def api_move_to_trash():
         return APIResponse.internal_error(f'操作失敗: {str(e)}')
 
 @api_bp.route('/trash/restore', methods=['POST'])
-@require_access_code
 def api_restore_from_trash():
     try:
         data = request.get_json()
@@ -79,7 +77,6 @@ def api_restore_from_trash():
         return APIResponse.internal_error(f'還原失敗: {str(e)}')
 
 @api_bp.route('/trash/delete', methods=['POST'])
-@require_access_code
 def api_delete_from_trash():
     try:
         data = request.get_json()
