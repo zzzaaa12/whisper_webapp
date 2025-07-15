@@ -357,6 +357,17 @@ def api_add_queue_task():
         if task_type not in valid_types:
             return jsonify({'success': False, 'message': f'無效的任務類型。支援類型: {", ".join(valid_types)}'}), 400
 
+        # 如果是 YouTube 任務，檢測是否為 live 直播
+        if task_type == 'youtube':
+            youtube_url = task_data.get('url', '')
+            if youtube_url:
+                if not url_service.validate_youtube_url(youtube_url):
+                    return jsonify({'success': False, 'message': '請輸入有效的 YouTube 網址'}), 400
+                
+                is_live, live_message = url_service.is_youtube_live(youtube_url)
+                if is_live:
+                    return jsonify({'success': False, 'message': f'不支援處理直播影片。{live_message}'}), 400
+
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()
         task_id = queue_manager.add_task(task_type, task_data, priority, user_ip)
@@ -395,6 +406,11 @@ def api_process_youtube():
 
         if len(youtube_url) > 500:
             return jsonify({'status': 'error', 'message': 'URL 長度超過限制'}), 400
+
+        # 檢測是否為 live 直播
+        is_live, live_message = url_service.is_youtube_live(youtube_url)
+        if is_live:
+            return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
 
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()

@@ -29,7 +29,6 @@ from src.services.ai_summary_service import get_summary_service
 from src.services.file_service import FileService
 from src.services.task_processor import TaskProcessor
 
-
 class QueueWorker:
     """任務佇列工作程式"""
 

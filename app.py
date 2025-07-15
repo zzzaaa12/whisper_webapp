@@ -15,8 +15,6 @@ from flask_socketio import emit
 from dotenv import load_dotenv
 import requests
 
-
-
 from src.services.auth_service import AuthService
 from src.services.socketio_instance import init_socketio
 from task_queue import get_task_queue, TaskStatus

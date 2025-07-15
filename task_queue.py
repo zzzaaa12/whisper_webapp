@@ -9,8 +9,6 @@ from typing import Dict, List, Optional, Any, Union, Callable
 import os
 from src.config import get_config
 
-
-
 class TaskStatus(Enum):
     """任務狀態枚舉"""
     QUEUED = "queued"

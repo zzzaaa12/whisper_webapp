@@ -12,7 +12,6 @@ from src.config import get_config
 # 全域認證服務實例
 auth_service = AuthService()
 
-
 def require_access_code(f):
     """
     需要通行碼驗證的裝飾器
