@@ -258,7 +258,7 @@
                         <input type="number" class="form-control" id="olderThanDays" value="7" min="1" max="365">
                         <div class="form-text">將刪除指定天數前完成的任務記錄</div>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" id="cleanupAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                         <label for="cleanupAccessCode" class="form-label">通行碼</label>
                         <input type="password" class="form-control" id="cleanupAccessCode" placeholder="請輸入通行碼">
                     </div>
@@ -296,7 +296,7 @@
                     <div id="task-form-container">
                         <!-- 動態表單內容 -->
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" id="addTaskAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                         <label for="addTaskAccessCode" class="form-label">通行碼</label>
                         <input type="password" class="form-control" id="addTaskAccessCode" placeholder="請輸入通行碼">
                     </div>
@@ -319,7 +319,7 @@
                 </div>
                 <div class="modal-body">
                     <p>確定要取消這個任務嗎？</p>
-                    <div class="mb-3">
+                    <div class="mb-3" id="cancelTaskAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                         <label for="cancelTaskAccessCode" class="form-label">通行碼</label>
                         <input type="password" class="form-control" id="cancelTaskAccessCode" placeholder="請輸入通行碼">
                     </div>
@@ -342,7 +342,7 @@
                 </div>
                 <div class="modal-body">
                     <p>確定要永久刪除這個失敗的任務嗎？此操作無法復原。</p>
-                    <div class="mb-3">
+                    <div class="mb-3" id="deleteTaskAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                         <label for="deleteTaskAccessCode" class="form-label">通行碼</label>
                         <input type="password" class="form-control" id="deleteTaskAccessCode" placeholder="請輸入通行碼">
                     </div>
@@ -365,7 +365,7 @@
                 </div>
                 <div class="modal-body">
                     <p>確定要重新執行這個失敗的任務嗎？任務將重新加入佇列。</p>
-                    <div class="mb-3">
+                    <div class="mb-3" id="restartTaskAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                         <label for="restartTaskAccessCode" class="form-label">通行碼</label>
                         <input type="password" class="form-control" id="restartTaskAccessCode" placeholder="請輸入通行碼">
                     </div>
@@ -845,13 +845,26 @@
             new bootstrap.Modal(document.getElementById('cancelTaskModal')).show();
         }
 
+        // 檢查是否需要通行碼
+        function isAccessCodeRequired() {
+            // 如果啟用全站通行碼且已認證，則不需要通行碼
+            {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}
+                return false;
+            {% else %}
+                return true;
+            {% endif %}
+        }
+
         // 確認取消任務
         async function confirmCancelTask() {
-            const accessCode = document.getElementById('cancelTaskAccessCode').value.trim();
+            let accessCode = '';
 
-            if (!accessCode) {
-                alert('請輸入通行碼');
-                return;
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('cancelTaskAccessCode').value.trim();
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
             }
 
             if (!taskIdToCancel) {
@@ -877,11 +890,14 @@
 
         // 確認刪除任務
         async function confirmDeleteTask() {
-            const accessCode = document.getElementById('deleteTaskAccessCode').value.trim();
+            let accessCode = '';
 
-            if (!accessCode) {
-                alert('請輸入通行碼');
-                return;
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('deleteTaskAccessCode').value.trim();
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
             }
 
             if (!taskIdToDelete) {
@@ -934,11 +950,14 @@
 
         // 確認重啟任務
         async function confirmRestartTask() {
-            const accessCode = document.getElementById('restartTaskAccessCode').value.trim();
+            let accessCode = '';
 
-            if (!accessCode) {
-                alert('請輸入通行碼');
-                return;
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('restartTaskAccessCode').value.trim();
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
             }
 
             if (!taskIdToRestart) {
@@ -1017,11 +1036,14 @@
         // 清理任務
         async function cleanupTasks() {
             const olderThanDays = document.getElementById('olderThanDays').value;
-            let accessCode = document.getElementById('cleanupAccessCode').value;
+            let accessCode = '';
 
-            if (!accessCode) {
-                alert('請輸入通行碼');
-                return;
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('cleanupAccessCode').value;
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
             }
 
             try {
@@ -1108,11 +1130,14 @@
         async function addTask() {
             const taskType = document.getElementById('taskType').value;
             const priority = parseInt(document.getElementById('taskPriority').value);
-            let accessCode = document.getElementById('addTaskAccessCode').value;
+            let accessCode = '';
 
-            if (!accessCode) {
-                alert('請輸入通行碼');
-                return;
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('addTaskAccessCode').value;
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
             }
 
             let taskData = {};

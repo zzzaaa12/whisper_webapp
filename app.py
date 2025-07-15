@@ -59,6 +59,11 @@ def inject_session():
     """Make session available to all templates"""
     return dict(session=session)
 
+@app.context_processor
+def inject_config():
+    """Make config available to all templates"""
+    return dict(config=get_config)
+
 socketio = init_socketio(app)
 auth_service = AuthService()
 

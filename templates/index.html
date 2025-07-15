@@ -252,7 +252,7 @@
                             </div>
                             <div class="col-md-3">
                                 <label for="access_code" class="form-label">通行碼</label>
-                                <input type="password" class="form-control" id="access_code" name="access_code" placeholder="請輸入通行碼...">
+                                <input type="password" class="form-control" id="access_code" name="access_code" placeholder="請輸入通行碼..." {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                             </div>
                             <div class="col-md-3">
                                 <div class="btn-container">
@@ -281,7 +281,7 @@
                             </div>
                             <div class="col-md-3">
                                 <label for="upload_access_code" class="form-label">通行碼</label>
-                                <input type="password" class="form-control" id="upload_access_code" name="upload_access_code" placeholder="請輸入通行碼...">
+                                <input type="password" class="form-control" id="upload_access_code" name="upload_access_code" placeholder="請輸入通行碼..." {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                             </div>
                             <div class="col-md-3">
                                 <div class="btn-container">
