@@ -231,8 +231,16 @@ def api_upload_subtitle():
 def api_upload_media():
     try:
         access_code = request.form.get('access_code', '').strip()
-        if not auth_service.verify_access_code(access_code):
-            return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+
+        # 檢查是否需要通行碼驗證
+        from flask import session
+        if get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized'):
+            # 已通過全站認證，跳過通行碼驗證
+            pass
+        else:
+            # 需要驗證通行碼
+            if not auth_service.verify_access_code(access_code):
+                return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
 
         if 'media_file' not in request.files:
             return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
@@ -376,8 +384,16 @@ def api_add_queue_task():
 
         if not task_type:
             return jsonify({'success': False, 'message': '缺少任務類型'}), 400
-        if not auth_service.verify_access_code(access_code):
-            return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+
+        # 檢查是否需要通行碼驗證
+        from flask import session
+        if get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized'):
+            # 已通過全站認證，跳過通行碼驗證
+            pass
+        else:
+            # 需要驗證通行碼
+            if not auth_service.verify_access_code(access_code):
+                return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
 
         valid_types = ['youtube', 'upload_media', 'upload_subtitle']
         if task_type not in valid_types:
@@ -424,8 +440,16 @@ def api_process_youtube():
 
         if not youtube_url:
             return jsonify({'status': 'error', 'message': '缺少 youtube_url 參數'}), 400
-        if not auth_service.verify_access_code(access_code):
-            return jsonify({'status': 'error', 'message': '通行碼錯誤'}), 401
+
+        # 檢查是否需要通行碼驗證
+        from flask import session
+        if get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized'):
+            # 已通過全站認證，跳過通行碼驗證
+            pass
+        else:
+            # 需要驗證通行碼
+            if not auth_service.verify_access_code(access_code):
+                return jsonify({'status': 'error', 'message': '通行碼錯誤'}), 401
 
         if not url_service.validate_youtube_url(youtube_url):
             return jsonify({'status': 'error', 'message': '請輸入有效的 YouTube 網址 (必須包含 https:// 或 http://)'}), 400

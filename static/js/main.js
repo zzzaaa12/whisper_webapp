@@ -231,7 +231,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = urlInput.value.trim();
 
         // 檢查是否需要通行碼
-        const isAccessCodeRequired = !document.querySelector('#access_code[style*="display: none"]');
+        const accessCodeDiv = document.querySelector('#access_code').closest('div');
+        const isAccessCodeRequired = !accessCodeDiv.style.display.includes('none');
         let accessCode = '';
 
         if (isAccessCodeRequired) {
@@ -318,7 +319,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const file = mediaFileInput.files[0];
 
         // 檢查是否需要通行碼
-        const isUploadAccessCodeRequired = !document.querySelector('#upload_access_code[style*="display: none"]');
+        const uploadAccessCodeDiv = document.querySelector('#upload_access_code').closest('div');
+        const isUploadAccessCodeRequired = !uploadAccessCodeDiv.style.display.includes('none');
         let accessCode = '';
 
         if (isUploadAccessCodeRequired) {
@@ -344,7 +346,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function checkAccessCodeBeforeUpload(file, accessCode) {
         // 如果不需要通行碼，直接開始上傳
-        const isUploadAccessCodeRequired = !document.querySelector('#upload_access_code[style*="display: none"]');
+        const uploadAccessCodeDiv = document.querySelector('#upload_access_code').closest('div');
+        const isUploadAccessCodeRequired = !uploadAccessCodeDiv.style.display.includes('none');
         if (!isUploadAccessCodeRequired) {
             startFileUpload(file, accessCode);
             return;
