@@ -195,9 +195,12 @@
                             </div>
                             <div class="col-md-4 col-sm-12 mb-3">
                                 <label class="form-label">&nbsp;</label>
-                                <div class="d-grid">
+                                <div class="d-grid gap-2">
                                     <button type="button" class="btn btn-primary" onclick="updateAccessCodeAndReload()">
                                         <i class="bi bi-arrow-clockwise"></i> 更新列表
+                                    </button>
+                                    <button type="button" class="btn btn-danger" id="deleteAllBtn" onclick="showDeleteAllModal()" style="display: none;">
+                                        <i class="bi bi-trash"></i> 刪除全部
                                     </button>
                                 </div>
                             </div>
@@ -378,6 +381,33 @@
         </div>
     </div>
 
+    <!-- 批量刪除任務模態框 -->
+    <div class="modal fade" id="deleteAllModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">批量刪除任務</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>警告：</strong>此操作將永久刪除所有 <span id="deleteAllStatusText"></span> 的任務，無法復原！
+                    </div>
+                    <p>將要刪除 <strong><span id="deleteAllCount">0</span></strong> 個任務。</p>
+                    <div class="mb-3" id="deleteAllAccessCodeDiv" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
+                        <label for="deleteAllAccessCode" class="form-label">通行碼</label>
+                        <input type="password" class="form-control" id="deleteAllAccessCode" placeholder="請輸入通行碼">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmDeleteAll()">確認刪除全部</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 任務詳情模態框 -->
     <div class="modal fade" id="taskDetailModal" tabindex="-1">
         <div class="modal-dialog modal-lg">
@@ -412,6 +442,7 @@
         let lastTasksHash = '';
         let lastStatusHash = '';
         let isUpdating = false;
+        let currentDeleteAllStatus = null;
 
         // 檢查配置狀態並顯示警告
         async function checkConfigStatus() {
@@ -580,9 +611,24 @@
             }
         }
 
+        // 更新刪除全部按鈕的顯示狀態
+        function updateDeleteAllButton() {
+            const statusFilter = document.getElementById('statusFilter').value;
+            const deleteAllBtn = document.getElementById('deleteAllBtn');
+
+            if (statusFilter === 'failed' || statusFilter === 'cancelled') {
+                deleteAllBtn.style.display = 'block';
+            } else {
+                deleteAllBtn.style.display = 'none';
+            }
+        }
+
         // 顯示任務列表
         function displayTasks(tasks) {
             const container = document.getElementById('tasks-container');
+
+            // 更新刪除全部按鈕
+            updateDeleteAllButton();
 
             if (tasks.length === 0) {
                 container.innerHTML = `
@@ -930,7 +976,7 @@
 
                 const result = await response.json();
                 if (result.success) {
-                    alert(result.message);
+                    // 刪除成功，直接更新列表，不顯示提示訊息
                     loadTasks(false);
                     loadQueueStatus(false);
                 } else {
@@ -1126,6 +1172,89 @@
             container.innerHTML = formHtml;
         }
 
+        // 顯示批量刪除模態框
+        async function showDeleteAllModal() {
+            const statusFilter = document.getElementById('statusFilter').value;
+
+            if (statusFilter !== 'failed' && statusFilter !== 'cancelled') {
+                alert('只能批量刪除失敗或已取消的任務');
+                return;
+            }
+
+            currentDeleteAllStatus = statusFilter;
+
+            // 獲取當前篩選的任務數量
+            try {
+                const response = await fetch(`/api/queue/list?status=${statusFilter}&limit=1000`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const taskCount = result.tasks.length;
+
+                    if (taskCount === 0) {
+                        alert(`沒有找到狀態為「${statusFilter === 'failed' ? '失敗' : '已取消'}」的任務`);
+                        return;
+                    }
+
+                    // 更新模態框內容
+                    const statusText = statusFilter === 'failed' ? '失敗' : '已取消';
+                    document.getElementById('deleteAllStatusText').textContent = statusText;
+                    document.getElementById('deleteAllCount').textContent = taskCount;
+                    document.getElementById('deleteAllAccessCode').value = '';
+
+                    new bootstrap.Modal(document.getElementById('deleteAllModal')).show();
+                } else {
+                    alert('獲取任務列表失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('獲取任務列表失敗: ' + error.message);
+            }
+        }
+
+        // 確認批量刪除
+        async function confirmDeleteAll() {
+            let accessCode = '';
+
+            if (isAccessCodeRequired()) {
+                accessCode = document.getElementById('deleteAllAccessCode').value.trim();
+                if (!accessCode) {
+                    alert('請輸入通行碼');
+                    return;
+                }
+            }
+
+            if (!currentDeleteAllStatus) {
+                alert('沒有指定要刪除的任務狀態');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/queue/delete-batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        status: currentDeleteAllStatus,
+                        access_code: accessCode
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    // 成功時不顯示 alert，直接更新列表
+                    bootstrap.Modal.getInstance(document.getElementById('deleteAllModal')).hide();
+                    currentDeleteAllStatus = null;
+                    loadTasks(false);
+                    loadQueueStatus(false);
+                } else {
+                    alert('批量刪除失敗: ' + result.message);
+                }
+            } catch (error) {
+                alert('批量刪除失敗: ' + error.message);
+            }
+        }
+
         // 新增任務
         async function addTask() {
             const taskType = document.getElementById('taskType').value;
@@ -1227,7 +1356,10 @@
             setupAutoRefresh();
 
             // 設定篩選事件
-            document.getElementById('statusFilter').addEventListener('change', updateAccessCodeAndReload);
+            document.getElementById('statusFilter').addEventListener('change', function() {
+                updateDeleteAllButton();
+                updateAccessCodeAndReload();
+            });
             document.getElementById('limitSelect').addEventListener('change', updateAccessCodeAndReload);
         });
     </script>

@@ -316,6 +316,32 @@ def api_delete_failed_task():
     except Exception as e:
         return APIResponse.internal_error(f'刪除任務失敗: {str(e)}')
 
+@api_bp.route('/queue/delete-batch', methods=['POST'])
+@require_access_code
+def api_delete_tasks_batch():
+    """批量刪除指定狀態的任務"""
+    try:
+        data = request.get_json()
+        if not data or 'status' not in data:
+            return APIResponse.validation_error('缺少狀態參數')
+
+        status = data['status']
+        if status not in ['failed', 'cancelled']:
+            return APIResponse.validation_error('只能批量刪除失敗或已取消的任務')
+
+        queue_manager = get_task_queue()
+        success, message, deleted_count = queue_manager.delete_tasks_by_status(status)
+
+        if success:
+            return APIResponse.success({
+                'deleted_count': deleted_count,
+                'message': message
+            }, message)
+        else:
+            return APIResponse.error(message, 400)
+    except Exception as e:
+        return APIResponse.internal_error(f'批量刪除任務失敗: {str(e)}')
+
 @api_bp.route('/queue/restart', methods=['POST'])
 @require_access_code
 def api_restart_failed_task():
@@ -363,7 +389,7 @@ def api_add_queue_task():
             if youtube_url:
                 if not url_service.validate_youtube_url(youtube_url):
                     return jsonify({'success': False, 'message': '請輸入有效的 YouTube 網址'}), 400
-                
+
                 is_live, live_message = url_service.is_youtube_live(youtube_url)
                 if is_live:
                     return jsonify({'success': False, 'message': f'不支援處理直播影片。{live_message}'}), 400

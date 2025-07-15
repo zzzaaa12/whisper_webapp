@@ -457,6 +457,58 @@ class TaskQueue:
             except ValueError:
                 return -1  # 任務不在佇列中
 
+    def delete_tasks_by_status(self, status: str) -> tuple[bool, str, int]:
+        """批量刪除指定狀態的任務（僅限失敗或已取消的任務）"""
+        if status not in ['failed', 'cancelled']:
+            return False, "只能批量刪除失敗或已取消的任務", 0
+
+        with self._lock:
+            # 找到符合條件的任務
+            target_status = TaskStatus.FAILED if status == 'failed' else TaskStatus.CANCELLED
+            tasks_to_delete = [
+                task_id for task_id, task in self._tasks.items()
+                if task.status == target_status
+            ]
+
+            if not tasks_to_delete:
+                return True, f"沒有找到狀態為「{status}」的任務", 0
+
+            deleted_count = 0
+            failed_deletions = []
+
+            for task_id in tasks_to_delete:
+                try:
+                    # 刪除任務檔案
+                    task_file = self.tasks_dir / f"{task_id}.json"
+                    result_file = self.results_dir / f"{task_id}_result.json"
+
+                    if task_file.exists():
+                        task_file.unlink()
+                    if result_file.exists():
+                        result_file.unlink()
+
+                    # 從記憶體中移除
+                    del self._tasks[task_id]
+                    if task_id in self._queue_order:
+                        self._queue_order.remove(task_id)
+
+                    deleted_count += 1
+
+                except Exception as e:
+                    failed_deletions.append(f"{task_id}: {str(e)}")
+                    print(f"Error deleting task {task_id}: {e}")
+
+            # 儲存更新的元資料
+            if deleted_count > 0:
+                self._save_queue_metadata()
+
+            if failed_deletions:
+                error_msg = f"成功刪除 {deleted_count} 個任務，但有 {len(failed_deletions)} 個任務刪除失敗"
+                return False, error_msg, deleted_count
+            else:
+                success_msg = f"成功刪除 {deleted_count} 個狀態為「{status}」的任務"
+                return True, success_msg, deleted_count
+
 # 全域任務佇列實例（單例模式）
 _task_queue_instance: Optional[TaskQueue] = None
 _task_queue_lock = threading.Lock()
