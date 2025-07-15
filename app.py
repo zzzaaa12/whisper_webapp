@@ -255,17 +255,23 @@ def handle_start_processing(data):
         seconds = remaining_time % 60
         return socket_service.log_and_emit(f"🔒 您的 IP 已被暫時封鎖，請等待 {minutes} 分 {seconds} 秒後再試。", 'error', sid)
 
-    if not auth_service.verify_access_code(data.get('access_code')):
-        auth_service.record_failed_attempt(client_ip)
-        remaining_attempts = auth_service.get_remaining_attempts(client_ip)
+    # 檢查是否需要通行碼驗證
+    if get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized'):
+        # 已通過全站認證，跳過通行碼驗證
+        pass
+    else:
+        # 需要驗證通行碼
+        if not auth_service.verify_access_code(data.get('access_code')):
+            auth_service.record_failed_attempt(client_ip)
+            remaining_attempts = auth_service.get_remaining_attempts(client_ip)
 
-        if remaining_attempts > 0:
-            socket_service.log_and_emit(f"🔴 錯誤：通行碼不正確。剩餘嘗試次數：{remaining_attempts}", 'error', sid)
-        else:
-            socket_service.log_and_emit(f"🔒 錯誤：通行碼不正確。您的 IP 已被封鎖 {auth_service.block_duration//60} 分鐘。", 'error', sid)
+            if remaining_attempts > 0:
+                socket_service.log_and_emit(f"🔴 錯誤：通行碼不正確。剩餘嘗試次數：{remaining_attempts}", 'error', sid)
+            else:
+                socket_service.log_and_emit(f"🔒 錯誤：通行碼不正確。您的 IP 已被封鎖 {auth_service.block_duration//60} 分鐘。", 'error', sid)
 
-        socket_service.emit_access_code_error(sid)
-        return
+            socket_service.emit_access_code_error(sid)
+            return
 
     auth_service.record_successful_attempt(client_ip)
 
