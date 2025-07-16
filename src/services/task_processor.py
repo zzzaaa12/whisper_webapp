@@ -335,13 +335,12 @@ class TaskProcessor:
                 # 發送摘要郵件（無論是否跳過摘要生成）
                 self._send_summary_email(task_id, video_title, summary_path)
 
-            # 更新任務結果
+            # 準備任務結果
             result = {
-                'audio_file': str(audio_file),
+                'video_title': video_title,
                 'subtitle_file': str(subtitle_path),
                 'summary_file': str(summary_path),
-                'title': video_title,
-                'url': url
+                'original_file': str(audio_file)
             }
 
             # 發送完成通知
@@ -402,7 +401,7 @@ class TaskProcessor:
                     self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
                     self._do_summarize(subtitle_content, summary_path, task_id, header_info={'filename': audio_file.name, 'title': title})
 
-            # 更新任務結果
+            # 準備任務結果
             result = {
                 'title': title,
                 'subtitle_file': str(subtitle_path),
@@ -410,13 +409,11 @@ class TaskProcessor:
                 'original_file': str(audio_file)
             }
 
-            self.task_queue.update_task_status(
-                task_id, TaskStatus.COMPLETED, progress=100, result=result
-            )
-
             # 發送完成通知
             original_title = title if title else audio_file.name
             self._send_task_notification(task_id, None, None, None, summary_path, original_file_name=original_title)
+
+            return result
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"

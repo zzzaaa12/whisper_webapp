@@ -382,9 +382,17 @@ class QueueWorker:
 
                 # 根據任務類型處理
                 if task.task_type == 'youtube':
-                    self.task_processor.process_youtube_task(task)
+                    result = self.task_processor.process_youtube_task(task)
+                    # 確保任務狀態正確更新為完成
+                    self.task_queue.update_task_status(
+                        task.task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
                 elif task.task_type == 'upload_media':
-                    self.task_processor.process_upload_media_task(task)
+                    result = self.task_processor.process_upload_media_task(task)
+                    # 確保任務狀態正確更新為完成
+                    self.task_queue.update_task_status(
+                        task.task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
                 elif task.task_type == 'upload_subtitle':
                     # 字幕上傳不需要處理，直接標記為完成
                     self.task_queue.update_task_status(
