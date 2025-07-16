@@ -250,7 +250,7 @@
                                 <label for="audio_url" class="form-label">音訊來源網址</label>
                                 <input type="url" class="form-control" id="audio_url" name="audio_url" placeholder="請貼上音訊來源網址...">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                                 <label for="access_code" class="form-label">通行碼</label>
                                 <input type="password" class="form-control" id="access_code" name="access_code" placeholder="請輸入通行碼...">
                             </div>
@@ -279,7 +279,7 @@
                                        accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg"
                                        placeholder="選擇影音檔案...">
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
                                 <label for="upload_access_code" class="form-label">通行碼</label>
                                 <input type="password" class="form-control" id="upload_access_code" name="upload_access_code" placeholder="請輸入通行碼...">
                             </div>

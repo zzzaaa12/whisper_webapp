@@ -7,15 +7,17 @@ from src.config import get_config
 from task_queue import get_task_queue
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.time_formatter import get_timestamp
+from src.utils.path_manager import get_path_manager
+from src.utils.directory_manager import DirectoryManager
 
 class FileService:
     """統一檔案操作工具"""
 
     def __init__(self):
-        self.base_dir = Path(__file__).parent.parent.parent.resolve()
-        self.upload_folder = self.base_dir / "uploads"
-        self.subtitle_folder = self.base_dir / "subtitles"
-        self.summary_folder = self.base_dir / "summaries"
+        path_manager = get_path_manager()
+        self.upload_folder = path_manager.uploads_dir
+        self.subtitle_folder = path_manager.subtitles_dir
+        self.summary_folder = path_manager.summaries_dir
         self.max_file_size = 500 * 1024 * 1024  # 500MB
         self.allowed_extensions = {
             '.mp3', '.mp4', '.wav', '.m4a', '.flv', '.avi', '.mov',
@@ -50,7 +52,7 @@ class FileService:
         task_id_short = str(uuid.uuid4())[:8]
         safe_filename = f"{timestamp}_{task_id_short}_{safe_title}{file_ext}"
 
-        self.ensure_dir(self.upload_folder)
+        DirectoryManager.ensure_dir(self.upload_folder)
         file_path = self.upload_folder / safe_filename
         file.save(str(file_path))
 
@@ -96,8 +98,8 @@ class FileService:
     def safe_write_text(file_path: Path, content: str, encoding: str = "utf-8") -> bool:
         """安全寫入文字檔案"""
         try:
-            # 確保目錄存在
-            file_path.parent.mkdir(parents=True, exist_ok=True)
+            # 使用統一的目錄管理器
+            DirectoryManager.ensure_parent_dir(file_path)
             file_path.write_text(content, encoding=encoding)
             return True
         except Exception as e:
@@ -105,8 +107,8 @@ class FileService:
 
     @staticmethod
     def ensure_dir(dir_path: Path) -> None:
-        """確保目錄存在"""
-        dir_path.mkdir(parents=True, exist_ok=True)
+        """確保目錄存在（向後兼容）"""
+        DirectoryManager.ensure_dir(dir_path)
 
 # 便捷函數導出
 file_service = FileService()

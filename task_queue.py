@@ -9,8 +9,6 @@ from typing import Dict, List, Optional, Any, Union, Callable
 import os
 from src.config import get_config
 
-
-
 class TaskStatus(Enum):
     """任務狀態枚舉"""
     QUEUED = "queued"
@@ -124,12 +122,101 @@ class TaskQueue:
             # 清理啟動時處於「處理中」狀態的任務
             processing_tasks = [t for t in self._tasks.values() if t.status == TaskStatus.PROCESSING]
             if processing_tasks:
-                print(f"發現 {len(processing_tasks)} 個在啟動時處於處理中狀態的任務，將其標記為失敗。")
+                print(f"發現 {len(processing_tasks)} 個在啟動時處於處理中狀態的任務，正在檢查完成狀態...")
                 for task in processing_tasks:
-                    task.status = TaskStatus.FAILED
-                    task.error_message = "任務在應用程式啟動時仍處於處理中狀態，可能因先前的不正常關閉導致。"
-                    task.completed_at = datetime.now()
+                    # 檢查任務是否實際已完成（通過檢查摘要文件是否存在）
+                    is_actually_completed = self._check_task_completion(task)
+
+                    if is_actually_completed:
+                        task.status = TaskStatus.COMPLETED
+                        task.progress = 100
+                        task.completed_at = datetime.now()
+                        print(f"任務 {task.task_id[:8]} 實際已完成，標記為已完成狀態")
+                    else:
+                        task.status = TaskStatus.FAILED
+                        task.error_message = "任務在應用程式啟動時仍處於處理中狀態，可能因先前的不正常關閉導致。"
+                        task.completed_at = datetime.now()
+                        print(f"任務 {task.task_id[:8]} 未完成，標記為失敗狀態")
+
                     self._save_task(task) # 儲存變更
+
+    def _check_task_completion(self, task: Task) -> bool:
+        """檢查任務是否實際已完成
+
+        Args:
+            task: 要檢查的任務
+
+        Returns:
+            bool: True 如果任務實際已完成，False 否則
+        """
+        try:
+            # 根據任務類型檢查相應的輸出文件
+            if task.task_type in ['youtube', 'upload_media']:
+                # 檢查是否有摘要文件或字幕文件
+                data = task.data
+
+                # 嘗試從任務數據中獲取文件路徑信息
+                if task.task_type == 'youtube':
+                    # YouTube 任務：檢查摘要文件
+                    title = data.get('title', '')
+                    if title:
+                        from src.utils.file_sanitizer import sanitize_filename
+                        from src.utils.time_formatter import get_timestamp
+
+                        # 重建可能的文件路徑
+                        date_str = task.created_at.strftime('%Y.%m.%d')
+                        is_auto_task = data.get('auto', False)
+
+                        if is_auto_task:
+                            base_name = f"{title}"
+                            uploader = data.get('uploader', '')
+                            if len(uploader) <= 10:
+                                sanitized_title = f"{date_str} - [Auto][{uploader}] " + sanitize_filename(base_name)
+                            elif uploader == "All-In Podcast":
+                                sanitized_title = f"{date_str} - [Auto][All-In] " + sanitize_filename(base_name)
+                            else:
+                                sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+                        else:
+                            base_name = f"{date_str} - {title}"
+                            sanitized_title = sanitize_filename(base_name)
+
+                        # 檢查摘要文件是否存在
+                        summary_path = self.data_dir.parent / "summaries" / f"{sanitized_title}.txt"
+                        if summary_path.exists() and summary_path.stat().st_size > 500:
+                            return True
+
+                        # 檢查字幕文件是否存在
+                        subtitle_path = self.data_dir.parent / "subtitles" / f"{sanitized_title}.srt"
+                        if subtitle_path.exists() and subtitle_path.stat().st_size > 500:
+                            return True
+
+                elif task.task_type == 'upload_media':
+                    # 上傳媒體任務：檢查結果中的文件路徑
+                    if task.result:
+                        summary_file = task.result.get('summary_file')
+                        subtitle_file = task.result.get('subtitle_file')
+
+                        if summary_file:
+                            from pathlib import Path
+                            summary_path = Path(summary_file)
+                            if summary_path.exists() and summary_path.stat().st_size > 500:
+                                return True
+
+                        if subtitle_file:
+                            from pathlib import Path
+                            subtitle_path = Path(subtitle_file)
+                            if subtitle_path.exists() and subtitle_path.stat().st_size > 500:
+                                return True
+
+            elif task.task_type == 'upload_subtitle':
+                # 字幕上傳任務通常很快完成，如果在處理中狀態可能是已完成
+                return True
+
+            return False
+
+        except Exception as e:
+            print(f"檢查任務完成狀態時發生錯誤: {e}")
+            return False
 
     def _save_task(self, task: Task):
         """儲存單一任務到檔案"""
@@ -382,6 +469,75 @@ class TaskQueue:
 
         return deleted_count
 
+    def delete_task(self, task_id: str) -> tuple[bool, str]:
+        """刪除指定任務（僅限失敗或已取消的任務）"""
+        with self._lock:
+            if task_id not in self._tasks:
+                return False, "任務不存在"
+
+            task = self._tasks[task_id]
+
+            # 只允許刪除失敗或已取消的任務
+            if task.status not in [TaskStatus.FAILED, TaskStatus.CANCELLED]:
+                return False, f"只能刪除失敗或已取消的任務，當前狀態：{task.status.value}"
+
+            try:
+                # 刪除任務檔案
+                task_file = self.tasks_dir / f"{task_id}.json"
+                result_file = self.results_dir / f"{task_id}_result.json"
+
+                if task_file.exists():
+                    task_file.unlink()
+                if result_file.exists():
+                    result_file.unlink()
+
+                # 從記憶體中移除
+                del self._tasks[task_id]
+                if task_id in self._queue_order:
+                    self._queue_order.remove(task_id)
+
+                # 儲存更新的元資料
+                self._save_queue_metadata()
+
+                return True, "任務已刪除"
+
+            except Exception as e:
+                return False, f"刪除任務失敗：{str(e)}"
+
+    def restart_task(self, task_id: str) -> tuple[bool, str]:
+        """重啟失敗的任務"""
+        with self._lock:
+            if task_id not in self._tasks:
+                return False, "任務不存在"
+
+            task = self._tasks[task_id]
+
+            # 只允許重啟失敗的任務
+            if task.status != TaskStatus.FAILED:
+                return False, f"只能重啟失敗的任務，當前狀態：{task.status.value}"
+
+            try:
+                # 重置任務狀態
+                task.status = TaskStatus.QUEUED
+                task.progress = 0
+                task.error_message = None
+                task.started_at = None
+                task.completed_at = None
+                task.result = {}
+
+                # 重新加入佇列
+                if task_id not in self._queue_order:
+                    self._queue_order.append(task_id)
+
+                # 儲存任務
+                self._save_task(task)
+                self._save_queue_metadata()
+
+                return True, "任務已重啟並加入佇列"
+
+            except Exception as e:
+                return False, f"重啟任務失敗：{str(e)}"
+
     def get_user_queue_position(self, task_id: str) -> int:
         """獲取任務在佇列中的位置"""
         with self._lock:
@@ -389,6 +545,58 @@ class TaskQueue:
                 return self._queue_order.index(task_id) + 1
             except ValueError:
                 return -1  # 任務不在佇列中
+
+    def delete_tasks_by_status(self, status: str) -> tuple[bool, str, int]:
+        """批量刪除指定狀態的任務（僅限失敗或已取消的任務）"""
+        if status not in ['failed', 'cancelled']:
+            return False, "只能批量刪除失敗或已取消的任務", 0
+
+        with self._lock:
+            # 找到符合條件的任務
+            target_status = TaskStatus.FAILED if status == 'failed' else TaskStatus.CANCELLED
+            tasks_to_delete = [
+                task_id for task_id, task in self._tasks.items()
+                if task.status == target_status
+            ]
+
+            if not tasks_to_delete:
+                return True, f"沒有找到狀態為「{status}」的任務", 0
+
+            deleted_count = 0
+            failed_deletions = []
+
+            for task_id in tasks_to_delete:
+                try:
+                    # 刪除任務檔案
+                    task_file = self.tasks_dir / f"{task_id}.json"
+                    result_file = self.results_dir / f"{task_id}_result.json"
+
+                    if task_file.exists():
+                        task_file.unlink()
+                    if result_file.exists():
+                        result_file.unlink()
+
+                    # 從記憶體中移除
+                    del self._tasks[task_id]
+                    if task_id in self._queue_order:
+                        self._queue_order.remove(task_id)
+
+                    deleted_count += 1
+
+                except Exception as e:
+                    failed_deletions.append(f"{task_id}: {str(e)}")
+                    print(f"Error deleting task {task_id}: {e}")
+
+            # 儲存更新的元資料
+            if deleted_count > 0:
+                self._save_queue_metadata()
+
+            if failed_deletions:
+                error_msg = f"成功刪除 {deleted_count} 個任務，但有 {len(failed_deletions)} 個任務刪除失敗"
+                return False, error_msg, deleted_count
+            else:
+                success_msg = f"成功刪除 {deleted_count} 個狀態為「{status}」的任務"
+                return True, success_msg, deleted_count
 
 # 全域任務佇列實例（單例模式）
 _task_queue_instance: Optional[TaskQueue] = None

@@ -229,14 +229,22 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', (e) => {
         e.preventDefault();
         const url = urlInput.value.trim();
-        const accessCode = accessCodeInput.value.trim();
+
+        // 檢查是否需要通行碼
+        const accessCodeDiv = document.querySelector('#access_code').closest('div');
+        const isAccessCodeRequired = !accessCodeDiv.style.display.includes('none');
+        let accessCode = '';
+
+        if (isAccessCodeRequired) {
+            accessCode = accessCodeInput.value.trim();
+            if (!accessCode) {
+                appendLog('請輸入通行碼。', 'error');
+                return;
+            }
+        }
 
         if (!url) {
             appendLog('請輸入有效的音訊來源網址。', 'error');
-            return;
-        }
-        if (!accessCode) {
-            appendLog('請輸入通行碼。', 'error');
             return;
         }
 
@@ -309,7 +317,15 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
 
         const file = mediaFileInput.files[0];
-        const accessCode = uploadAccessCodeInput.value.trim();
+
+        // 檢查是否需要通行碼
+        const uploadAccessCodeDiv = document.querySelector('#upload_access_code').closest('div');
+        const isUploadAccessCodeRequired = !uploadAccessCodeDiv.style.display.includes('none');
+        let accessCode = '';
+
+        if (isUploadAccessCodeRequired) {
+            accessCode = uploadAccessCodeInput.value.trim();
+        }
 
         // 驗證輸入
         if (!file) {
@@ -329,6 +345,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function checkAccessCodeBeforeUpload(file, accessCode) {
+        // 如果不需要通行碼，直接開始上傳
+        const uploadAccessCodeDiv = document.querySelector('#upload_access_code').closest('div');
+        const isUploadAccessCodeRequired = !uploadAccessCodeDiv.style.display.includes('none');
+        if (!isUploadAccessCodeRequired) {
+            startFileUpload(file, accessCode);
+            return;
+        }
+
+        if (!accessCode) {
+            appendLog('請輸入通行碼。', 'error');
+            return;
+        }
+
         appendLog('🔍 檢查通行碼...', 'info');
 
         // 發送一個輕量級的請求來檢查通行碼

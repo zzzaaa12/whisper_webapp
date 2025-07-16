@@ -18,6 +18,7 @@ from src.config import get_config
 from src.services.notification_service import send_telegram_notification
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.srt_converter import segments_to_srt
+from src.utils.logger_manager import create_log_callback
 from src.utils.time_formatter import get_timestamp
 from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
@@ -52,8 +53,58 @@ class TaskProcessor:
 
     def _log_worker_message(self, task_id, message, level='info'):
         # This is a placeholder. In a real app, this would emit to a central log or socket.
-        print(f"[WORKER][Task {task_id[:8]}] {message}")
+        from src.utils.logger_manager import get_logger_manager
+        logger_manager = get_logger_manager()
+        logger_manager.info(f"[Task {task_id[:8]}] {message}", "task_processor")
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, log_message=message)
+
+    def _should_skip_transcription(self, subtitle_path: Path) -> tuple[bool, str]:
+        """檢查是否應該跳過轉錄工作
+
+        Returns:
+            tuple: (should_skip, reason)
+        """
+        if not subtitle_path.exists():
+            return False, "字幕檔案不存在"
+
+        try:
+            file_size = subtitle_path.stat().st_size
+            if file_size <= 500:
+                return False, f"字幕檔案過小 ({file_size} bytes)"
+
+            # 檢查檔案內容是否可讀
+            content = subtitle_path.read_text(encoding='utf-8')
+            if len(content.strip()) == 0:
+                return False, "字幕檔案為空"
+
+            return True, f"找到有效字幕檔案 ({file_size} bytes)"
+
+        except Exception as e:
+            return False, f"字幕檔案檢查失敗: {str(e)}"
+
+    def _should_skip_summarization(self, summary_path: Path) -> tuple[bool, str]:
+        """檢查是否應該跳過摘要生成工作
+
+        Returns:
+            tuple: (should_skip, reason)
+        """
+        if not summary_path.exists():
+            return False, "摘要檔案不存在"
+
+        try:
+            file_size = summary_path.stat().st_size
+            if file_size <= 500:
+                return False, f"摘要檔案過小 ({file_size} bytes)"
+
+            # 檢查檔案內容是否可讀
+            content = summary_path.read_text(encoding='utf-8')
+            if len(content.strip()) == 0:
+                return False, "摘要檔案為空"
+
+            return True, f"找到有效摘要檔案 ({file_size} bytes)"
+
+        except Exception as e:
+            return False, f"摘要檔案檢查失敗: {str(e)}"
 
 
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
@@ -120,9 +171,12 @@ class TaskProcessor:
         if preferred_ai_provider and isinstance(preferred_ai_provider, dict):
             ai_provider = preferred_ai_provider.get('data', {}).get('ai_provider')
 
-        # 創建回調函數
-        def log_callback(message, level='info'):
-            self._log_worker_message(task_id, message, level)
+        # 創建統一的日誌回調
+        log_callback = create_log_callback(
+            module="task_processor",
+            task_id=task_id,
+            socketio_callback=lambda msg, level: self._log_worker_message(task_id, msg, level)
+        )
 
         def progress_callback(progress):
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=progress)
@@ -214,7 +268,12 @@ class TaskProcessor:
 
             if is_auto_task:
                 base_name = f"{video_title}"
-                sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+                if len(uploader) <= 10:
+                    sanitized_title = f"{date_str} - [Auto][{uploader}] " + sanitize_filename(base_name)
+                elif uploader == "All-In Podcast":
+                    sanitized_title = f"{date_str} - [Auto][All-In] " + sanitize_filename(base_name)
+                else:
+                    sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
             else:
                 base_name = f"{date_str} - {video_title}"
                 sanitized_title = sanitize_filename(base_name)
@@ -231,14 +290,18 @@ class TaskProcessor:
                     self._log_worker_message(task_id, f"Found existing file: {audio_file}")
                     break
 
-            # 檢查是否已有字幕檔案
-            if subtitle_path.exists():
+            # 檢查是否應該跳過轉錄
+            should_skip_transcription, skip_reason = self._should_skip_transcription(subtitle_path)
+            if should_skip_transcription:
                 self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=60,
-                    log_message="✅ 找到字幕快取，跳過轉錄"
+                    task_id, TaskStatus.PROCESSING, progress=80,
+                    log_message="✅ 跳過轉錄，使用現有字幕"
                 )
-                self._log_worker_message(task_id, f"找到字幕快取: {subtitle_path}")
+                self._log_worker_message(task_id, f"跳過轉錄: {skip_reason}")
                 skip_transcription = True
+            else:
+                self._log_worker_message(task_id, f"需要轉錄: {skip_reason}")
+                skip_transcription = False
 
             # 尋找是否已下載相同影片
             if not audio_file:
@@ -256,18 +319,28 @@ class TaskProcessor:
             # 生成摘要
             if subtitle_path.exists():
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
-                self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url})
 
-                # 發送摘要郵件
+                # 檢查是否應該跳過摘要生成
+                should_skip_summarization, summary_skip_reason = self._should_skip_summarization(summary_path)
+                if should_skip_summarization:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=100,
+                        log_message="✅ 跳過摘要生成，使用現有摘要"
+                    )
+                    self._log_worker_message(task_id, f"跳過摘要生成: {summary_skip_reason}")
+                else:
+                    self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
+                    self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url})
+
+                # 發送摘要郵件（無論是否跳過摘要生成）
                 self._send_summary_email(task_id, video_title, summary_path)
 
-            # 更新任務結果
+            # 準備任務結果
             result = {
-                'audio_file': str(audio_file),
+                'video_title': video_title,
                 'subtitle_file': str(subtitle_path),
                 'summary_file': str(summary_path),
-                'title': video_title,
-                'url': url
+                'original_file': str(audio_file)
             }
 
             # 發送完成通知
@@ -299,15 +372,36 @@ class TaskProcessor:
             # 發送 Telegram 通知
             self.notification_service(f"🎵 開始處理音訊檔案\n檔案: {title or audio_file.name}")
 
-            # 轉錄音訊
-            self._transcribe_audio(audio_file, subtitle_path, task_id)
+            # 檢查是否應該跳過轉錄
+            should_skip_transcription, skip_reason = self._should_skip_transcription(subtitle_path)
+            if should_skip_transcription:
+                self.task_queue.update_task_status(
+                    task_id, TaskStatus.PROCESSING, progress=60,
+                    log_message="✅ 跳過轉錄，使用現有字幕"
+                )
+                self._log_worker_message(task_id, f"跳過轉錄: {skip_reason}")
+            else:
+                self._log_worker_message(task_id, f"需要轉錄: {skip_reason}")
+                # 轉錄音訊
+                self._transcribe_audio(audio_file, subtitle_path, task_id)
 
             # 生成摘要
             if subtitle_path.exists():
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
-                self._do_summarize(subtitle_content, summary_path, task_id, header_info={'filename': audio_file.name, 'title': title})
 
-            # 更新任務結果
+                # 檢查是否應該跳過摘要生成
+                should_skip_summarization, summary_skip_reason = self._should_skip_summarization(summary_path)
+                if should_skip_summarization:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=100,
+                        log_message="✅ 跳過摘要生成，使用現有摘要"
+                    )
+                    self._log_worker_message(task_id, f"跳過摘要生成: {summary_skip_reason}")
+                else:
+                    self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
+                    self._do_summarize(subtitle_content, summary_path, task_id, header_info={'filename': audio_file.name, 'title': title})
+
+            # 準備任務結果
             result = {
                 'title': title,
                 'subtitle_file': str(subtitle_path),
@@ -315,13 +409,11 @@ class TaskProcessor:
                 'original_file': str(audio_file)
             }
 
-            self.task_queue.update_task_status(
-                task_id, TaskStatus.COMPLETED, progress=100, result=result
-            )
-
             # 發送完成通知
             original_title = title if title else audio_file.name
             self._send_task_notification(task_id, None, None, None, summary_path, original_file_name=original_title)
+
+            return result
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"

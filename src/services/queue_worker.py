@@ -22,12 +22,12 @@ from src.config import get_config
 from src.services.notification_service import send_telegram_notification
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.srt_converter import segments_to_srt
+from src.utils.logger_manager import create_log_callback, get_logger_manager
 from src.utils.time_formatter import get_timestamp
 from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
 from src.services.file_service import FileService
 from src.services.task_processor import TaskProcessor
-
 
 class QueueWorker:
     """任務佇列工作程式"""
@@ -42,6 +42,7 @@ class QueueWorker:
         self.openai_key = openai_key
         self.stop_event = threading.Event()
         self.task_queue = get_task_queue()
+        self.logger_manager = get_logger_manager()
 
         # Initialize TaskProcessor
         self.task_processor = TaskProcessor(
@@ -73,15 +74,18 @@ class QueueWorker:
     def _do_summarize(self, subtitle_content, summary_save_path, task_id, header_info=None):
         """生成摘要（使用統一的摘要服務）"""
         if not self.openai_key:
-            print("[WORKER] OpenAI API key not set, skipping summarization")
+            self.logger_manager.warning("OpenAI API key not set, skipping summarization", "queue_worker")
             return
 
         try:
             from ai_summary_service import get_summary_service
 
-            # 創建回調函數
-            def log_callback(message, level='info'):
-                print(f"[WORKER] {message}")
+            # 創建統一的日誌回調
+            log_callback = create_log_callback(
+                module="queue_worker",
+                task_id=task_id,
+                socketio_callback=lambda msg, level: self.logger_manager.info(f"[Task:{task_id}] {msg}", "queue_worker")
+            )
 
             def progress_callback(progress):
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=progress)
@@ -108,17 +112,17 @@ class QueueWorker:
             )
 
             if not success:
-                print(f"[WORKER] Summary generation failed: {result}")
+                self.logger_manager.error(f"Summary generation failed: {result}", "queue_worker")
 
         except ImportError:
             # 統一摘要服務不可用，直接報錯
-            error_msg = "❌ AI摘要服務模組不可用，請檢查 ai_summary_service.py"
-            print(f"[WORKER] {error_msg}")
+            error_msg = "AI摘要服務模組不可用，請檢查 ai_summary_service.py"
+            self.logger_manager.error(error_msg, "queue_worker")
             raise ImportError(error_msg)
 
         except Exception as e:
-            print(f"[WORKER] Error generating summary: {e}")
-            print(f"[WORKER] Summary error details: {traceback.format_exc()}")
+            self.logger_manager.error(f"Error generating summary: {e}", "queue_worker")
+            self.logger_manager.error(f"Summary error details: {traceback.format_exc()}", "queue_worker")
 
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
         # 配置 yt-dlp 下載
@@ -133,12 +137,12 @@ class QueueWorker:
             task_id, TaskStatus.PROCESSING, progress=15,
             log_message="🔄 開始下載影片..."
         )
-        print(f"[WORKER] 開始下載影片...")
+        self.logger_manager.info("開始下載影片...", "queue_worker")
         with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
 
-        print(f"[WORKER] Downloaded: {filename}")
+        self.logger_manager.info(f"Downloaded: {filename}", "queue_worker")
         audio_file = Path(filename)
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
         return audio_file
@@ -160,7 +164,7 @@ class QueueWorker:
             #     import yt_dlp
             #     self.yt_dlp = yt_dlp
 
-            print(f"[WORKER] Processing YouTube URL: {url}")
+            self.logger_manager.info(f"Processing YouTube URL: {url}", "queue_worker")
 
             # 先獲取影片資訊（不下載）
             info_opts = {
@@ -205,7 +209,7 @@ class QueueWorker:
             for file in self.download_folder.glob('*'):
                 if video_title in file.stem:
                     audio_file = file
-                    print(f"[WORKER] Found existing file: {audio_file}")
+                    self.logger_manager.info(f"Found existing file: {audio_file}", "queue_worker")
                     break
 
             # 檢查是否已有字幕檔案
@@ -214,7 +218,7 @@ class QueueWorker:
                     task_id, TaskStatus.PROCESSING, progress=60,
                     log_message="✅ 找到字幕快取，跳過轉錄"
                 )
-                print(f"[WORKER] 找到字幕快取: {subtitle_path}")
+                self.logger_manager.info(f"找到字幕快取: {subtitle_path}", "queue_worker")
                 skip_transcription = True
 
             # 尋找是否已下載相同影片
@@ -259,15 +263,15 @@ class QueueWorker:
                         summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
                     notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
                 except Exception as e:
-                    print(f"[WORKER] 讀取摘要文件失敗: {e}")
+                    self.logger_manager.error(f"讀取摘要文件失敗: {e}", "queue_worker")
                     notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
 
             send_telegram_notification(notification_msg)
 
         except Exception as e:
             error_msg = f"YouTube 任務處理失敗: {str(e)}"
-            print(f"[WORKER] {error_msg}")
-            print(f"[WORKER] Error details: {traceback.format_exc()}")
+            self.logger_manager.error(error_msg, "queue_worker")
+            self.logger_manager.error(f"Error details: {traceback.format_exc()}", "queue_worker")
             self.task_queue.update_task_status(
                 task_id, TaskStatus.FAILED, error_message=error_msg
             )
@@ -286,7 +290,7 @@ class QueueWorker:
             if not audio_file.exists():
                 raise FileNotFoundError(f"音檔不存在: {audio_file}")
 
-            print(f"[WORKER] Processing uploaded media: {audio_file.name}")
+            self.logger_manager.info(f"Processing uploaded media: {audio_file.name}", "queue_worker")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
             # 發送 Telegram 通知
@@ -320,8 +324,8 @@ class QueueWorker:
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"
-            print(f"[WORKER] {error_msg}")
-            print(f"[WORKER] Error details: {traceback.format_exc()}")
+            self.logger_manager.error(error_msg, "queue_worker")
+            self.logger_manager.error(f"Error details: {traceback.format_exc()}", "queue_worker")
             self.task_queue.update_task_status(
                 task_id, TaskStatus.FAILED,
                 error_message=error_msg
@@ -335,7 +339,7 @@ class QueueWorker:
         if not whisper_manager.is_loaded:
             whisper_manager.load_model()
 
-        print(f"[WORKER] Transcribing audio: {audio_file}")
+        self.logger_manager.info(f"Transcribing audio: {audio_file}", "queue_worker")
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=60)
 
         try:
@@ -344,7 +348,7 @@ class QueueWorker:
             if not success:
                 raise RuntimeError("轉錄失敗")
 
-            print(f"[WORKER] Transcription completed, {len(segments_list)} segments")
+            self.logger_manager.info(f"Transcription completed, {len(segments_list)} segments", "queue_worker")
 
             srt_content = segments_to_srt(segments_list)
 
@@ -353,16 +357,16 @@ class QueueWorker:
             with open(subtitle_path, 'w', encoding='utf-8') as f:
                 f.write(srt_content)
 
-            print(f"[WORKER] Subtitle saved to {subtitle_path}")
+            self.logger_manager.info(f"Subtitle saved to {subtitle_path}", "queue_worker")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=80)
 
         except Exception as e:
-            print(f"[WORKER] Transcription error: {e}")
+            self.logger_manager.error(f"Transcription error: {e}", "queue_worker")
             raise
 
     def _worker_loop(self):
         """工作程式主迴圈"""
-        print("[WORKER] Worker started")
+        self.logger_manager.info("Worker started", "queue_worker")
 
         while not self.stop_event.is_set():
             try:
@@ -374,13 +378,21 @@ class QueueWorker:
                     time.sleep(1)
                     continue
 
-                print(f"[WORKER] Processing task {task.task_id} ({task.task_type})")
+                self.logger_manager.info(f"Processing task {task.task_id} ({task.task_type})", "queue_worker")
 
                 # 根據任務類型處理
                 if task.task_type == 'youtube':
-                    self.task_processor.process_youtube_task(task)
+                    result = self.task_processor.process_youtube_task(task)
+                    # 確保任務狀態正確更新為完成
+                    self.task_queue.update_task_status(
+                        task.task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
                 elif task.task_type == 'upload_media':
-                    self.task_processor.process_upload_media_task(task)
+                    result = self.task_processor.process_upload_media_task(task)
+                    # 確保任務狀態正確更新為完成
+                    self.task_queue.update_task_status(
+                        task.task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
                 elif task.task_type == 'upload_subtitle':
                     # 字幕上傳不需要處理，直接標記為完成
                     self.task_queue.update_task_status(
@@ -394,11 +406,11 @@ class QueueWorker:
                     )
 
             except Exception as e:
-                print(f"[WORKER] Unexpected error in worker loop: {e}")
-                print(f"[WORKER] Error details: {traceback.format_exc()}")
+                self.logger_manager.error(f"Unexpected error in worker loop: {e}", "queue_worker")
+                self.logger_manager.error(f"Error details: {traceback.format_exc()}", "queue_worker")
                 time.sleep(5)  # 發生錯誤時等待一下
 
-        print("[WORKER] Worker stopped")
+        self.logger_manager.info("Worker stopped", "queue_worker")
 
     def start(self):
         """啟動工作程式"""
@@ -409,21 +421,21 @@ class QueueWorker:
         self.stop_event.clear()
         self.worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
         self.worker_thread.start()
-        print("[WORKER] Worker thread started")
+        self.logger_manager.info("Worker thread started", "queue_worker")
 
     def stop(self):
         """停止工作程式"""
         if not self.is_running:
             return
 
-        print("[WORKER] Stopping worker...")
+        self.logger_manager.info("Stopping worker...", "queue_worker")
         self.stop_event.set()
 
         if self.worker_thread and self.worker_thread.is_alive():
             self.worker_thread.join(timeout=10)
 
         self.is_running = False
-        print("[WORKER] Worker stopped")
+        self.logger_manager.info("Worker stopped", "queue_worker")
 
     def is_alive(self):
         """檢查工作程式是否運行中"""
