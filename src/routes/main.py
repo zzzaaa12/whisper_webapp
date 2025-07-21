@@ -1,7 +1,7 @@
-
 from flask import Blueprint, render_template, send_file, request, session, redirect, url_for, flash
 from pathlib import Path
 import os
+import re
 
 from src.config import get_config
 from src.services.auth_service import AuthService
@@ -22,6 +22,27 @@ BOOKMARK_FILE = path_manager.get_bookmark_file()
 auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
 trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
+
+
+def extract_channel_from_summary(file_path):
+    """從摘要文件中提取頻道信息"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # 只讀取前幾行來尋找頻道信息
+            for i, line in enumerate(f):
+                if i > 10:  # 只檢查前10行
+                    break
+                # 尋找 "📺 頻道：" 格式
+                if '📺 頻道：' in line:
+                    channel = line.split('📺 頻道：')[1].strip()
+                    return channel
+                # 也支援其他可能的格式
+                elif '頻道：' in line:
+                    channel = line.split('頻道：')[1].strip()
+                    return channel
+        return "未知頻道"
+    except Exception:
+        return "未知頻道"
 
 
 @main_bp.route('/access', methods=['GET', 'POST'])
@@ -66,14 +87,27 @@ def list_summaries():
         return "摘要資料夾不存在。", 500
     files = sorted(SUMMARY_FOLDER.glob('*.txt'), key=os.path.getmtime, reverse=True)
 
-    summaries_with_bookmark_status = []
+    summaries_with_info = []
+    channels = set()
+
     for f in files:
-        summaries_with_bookmark_status.append({
+        channel = extract_channel_from_summary(f)
+        channels.add(channel)
+
+        summaries_with_info.append({
             'filename': f.name,
-            'is_bookmarked': bookmark_service.is_bookmarked(f.name)
+            'is_bookmarked': bookmark_service.is_bookmarked(f.name),
+            'channel': channel
         })
 
-    return render_template('summaries.html', summaries=summaries_with_bookmark_status)
+    # 將頻道列表排序，"未知頻道" 放在最後
+    sorted_channels = sorted([ch for ch in channels if ch != "未知頻道"])
+    if "未知頻道" in channels:
+        sorted_channels.append("未知頻道")
+
+    return render_template('summaries.html',
+                         summaries=summaries_with_info,
+                         channels=sorted_channels)
 
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
@@ -117,7 +151,7 @@ def download_summary(filename):
         is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
-        
+
         return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500
@@ -129,7 +163,7 @@ def download_subtitle(filename):
         is_valid, error_msg, safe_path = FileValidator.validate_subtitle_file(filename, SUBTITLE_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
-        
+
         return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500

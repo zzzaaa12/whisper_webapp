@@ -40,25 +40,48 @@
             border-bottom: 1px solid #dee2e6;
             display: none;
         }
-        .batch-toolbar.show {
+        .summary-meta {
+            font-size: 0.875rem;
+            color: #6c757d;
+            margin-top: 0.25rem;
+        }
+        .channel-badge {
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            margin-right: 0.5rem;
+        }
+        .filter-section {
+            background-color: white;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        .filter-row {
+            display: flex;
+            gap: 1rem;
+            align-items: end;
+        }
+        .filter-item {
+            flex: 1;
+        }
+        .filter-item label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
             display: block;
         }
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #6c757d;
-        }
-        .empty-state i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
+        .clear-filters {
+            align-self: end;
         }
 
-        /* 自定義按鈕樣式 - 反轉顏色 */
-        .btn-outline-secondary.nav-bookmark-solid {
-            background-color: #8B4513; /* 咖啡色背景 */
+        /* 按鈕顏色調整 */
+        .btn-outline-primary {
+            background-color: #0d6efd; /* 藍色背景 */
             color: #ffffff !important; /* 白色文字 */
-            border-color: #8B4513;
+            border-color: #0d6efd;
         }
 
         .btn-warning {
@@ -105,345 +128,367 @@
             </div>
         </div>
 
-        <!-- 搜尋欄 -->
-        <div class="card mb-3">
-            <div class="card-body">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="bi bi-search"></i>
-                    </span>
-                    <input type="text" class="form-control" id="search-input"
-                           placeholder="搜尋摘要檔案名稱..."
-                           autocomplete="off">
-                    <button class="btn btn-outline-secondary" type="button" id="clear-search">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                    <button class="btn btn-outline-primary" type="button" id="auto-filter-btn">
-                        <i class="bi bi-robot"></i> Auto
+        <!-- 過濾器區域 -->
+        <div class="filter-section">
+            <div class="filter-row">
+                <div class="filter-item">
+                    <label for="search-input">🔍 搜尋摘要</label>
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" class="form-control" id="search-input"
+                               placeholder="搜尋摘要檔案名稱..."
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary" type="button" id="clear-search">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="filter-item">
+                    <label for="channel-filter">📺 頻道過濾</label>
+                    <select class="form-select" id="channel-filter">
+                        <option value="">全部頻道</option>
+                        {% for channel in channels %}
+                        <option value="{{ channel }}">{{ channel }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="clear-filters">
+                    <button class="btn btn-outline-secondary" type="button" id="clear-filters">
+                        <i class="bi bi-arrow-clockwise"></i> 清除過濾
                     </button>
                 </div>
-                <div class="mt-2">
-                    <small class="text-muted" id="search-results">顯示全部 {{ summaries|length }} 個項目</small>
+            </div>
+            <div class="mt-2">
+                <small class="text-muted">
+                    <span id="filter-status">顯示全部 {{ summaries|length }} 個摘要</span>
+                </small>
+            </div>
+        </div>
+
+        <!-- 批量操作工具列 -->
+        <div class="batch-toolbar" id="batch-toolbar">
+            <div class="d-flex justify-content-between align-items-center">
+                <span id="selected-count">已選擇 0 個項目</span>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-primary" id="batch-bookmark">
+                        <i class="bi bi-bookmark-plus"></i> 批量書籤
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" id="batch-delete">
+                        <i class="bi bi-trash"></i> 批量刪除
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" id="cancel-selection">
+                        <i class="bi bi-x"></i> 取消選擇
+                    </button>
                 </div>
             </div>
         </div>
 
+        <!-- 摘要列表 -->
         <div class="card">
-            <!-- 批量操作工具列 -->
-            <div class="batch-toolbar" id="batch-toolbar">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <span id="selected-count">已選擇 0 個項目</span>
-                    </div>
-                    <div class="btn-group btn-group-sm">
-                        <button type="button" class="btn btn-outline-danger" onclick="moveSelectedToTrash()">
-                            <i class="bi bi-trash"></i> 移動到回收桶
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="list-group list-group-flush" id="summaries-list">
-                {% if summaries %}
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush" id="summaries-list">
                     {% for summary in summaries %}
-                    <div class="summary-item" data-filename="{{ summary.filename }}">
-                        <div class="form-check summary-checkbox">
-                            <input class="form-check-input summary-select" type="checkbox"
-                                   value="{{ summary.filename }}" id="check-{{ loop.index }}">
-                        </div>
-                        <div class="summary-content" onclick="viewSummary('{{ summary.filename }}')">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span>{{ summary.filename.replace('.txt', '') }}</span>
-                                <div class="d-flex align-items-center">
-                                    <button type="button"
-                                            class="btn btn-sm btn-outline-secondary btn-bookmark me-2 {{ 'bookmarked' if summary.is_bookmarked else '' }}"
-                                            onclick="event.stopPropagation(); toggleBookmark('{{ summary.filename }}', this)"
-                                            title="{{ '移除書籤' if summary.is_bookmarked else '加入書籤' }}">
+                    <div class="summary-item" data-filename="{{ summary.filename }}" data-channel="{{ summary.channel }}">
+                        <input type="checkbox" class="form-check-input summary-checkbox"
+                               data-filename="{{ summary.filename }}">
+                        <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">{{ summary.filename.replace('.txt', '') }}</h6>
+                                    <div class="summary-meta">
+                                        <span class="channel-badge">📺 {{ summary.channel }}</span>
+                                        {% if summary.is_bookmarked %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-bookmark-fill"></i> 已書籤
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-secondary bookmark-btn"
+                                            data-filename="{{ summary.filename }}"
+                                            data-bookmarked="{{ summary.is_bookmarked|lower }}"
+                                            onclick="event.stopPropagation();">
                                         <i class="bi {{ 'bi-bookmark-fill' if summary.is_bookmarked else 'bi-bookmark' }}"></i>
                                     </button>
-                                    <i class="bi bi-chevron-right text-muted"></i>
+                                    <a href="/download/summary/{{ summary.filename }}"
+                                       class="btn btn-outline-primary"
+                                       onclick="event.stopPropagation();">
+                                        <i class="bi bi-download"></i>
+                                    </a>
+                                    <button class="btn btn-outline-danger delete-btn"
+                                            data-filename="{{ summary.filename }}"
+                                            onclick="event.stopPropagation();">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </div>
                             </div>
                         </div>
                     </div>
                     {% endfor %}
-                {% else %}
-                    <div class="empty-state">
-                        <i class="bi bi-file-text"></i>
-                        <h4>沒有摘要紀錄</h4>
-                        <p>目前沒有任何摘要檔案</p>
-                        <a href="{{ url_for('main.index') }}" class="btn btn-primary">開始處理音訊</a>
-                    </div>
-                {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- 無結果提示 -->
+        <div class="card mt-3" id="no-results" style="display: none;">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-search display-1 text-muted"></i>
+                <h5 class="mt-3">沒有找到符合條件的摘要</h5>
+                <p class="text-muted">請嘗試調整搜尋條件或頻道過濾器</p>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        let selectedItems = new Set();
-
-        // 監聽勾選框變化和搜尋功能
         document.addEventListener('DOMContentLoaded', function() {
-            const checkboxes = document.querySelectorAll('.summary-select');
-            checkboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', updateSelection);
-            });
-
-            // Check for URL filter parameter
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('filter') === 'auto') {
-                const autoFilterBtn = document.getElementById('auto-filter-btn');
-                if (autoFilterBtn) {
-                    autoFilterBtn.click();
-                }
-            }
-
-            // 搜尋功能
             const searchInput = document.getElementById('search-input');
-            const clearButton = document.getElementById('clear-search');
-            const searchResults = document.getElementById('search-results');
+            const channelFilter = document.getElementById('channel-filter');
+            const clearSearchBtn = document.getElementById('clear-search');
+            const clearFiltersBtn = document.getElementById('clear-filters');
+            const summariesList = document.getElementById('summaries-list');
+            const noResults = document.getElementById('no-results');
+            const filterStatus = document.getElementById('filter-status');
+            const summaryItems = document.querySelectorAll('.summary-item');
 
-            if (searchInput) {
-                searchInput.addEventListener('input', performSearch);
-                clearButton.addEventListener('click', clearSearch);
+            // 過濾功能
+            function filterSummaries() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const selectedChannel = channelFilter.value;
+                let visibleCount = 0;
 
-                // 按 ESC 清除搜尋
-                searchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape') {
-                        clearSearch();
+                summaryItems.forEach(item => {
+                    const filename = item.dataset.filename.toLowerCase();
+                    const channel = item.dataset.channel;
+
+                    const matchesSearch = !searchTerm || filename.includes(searchTerm);
+                    const matchesChannel = !selectedChannel || channel === selectedChannel;
+
+                    if (matchesSearch && matchesChannel) {
+                        item.style.display = '';
+                        visibleCount++;
+                    } else {
+                        item.style.display = 'none';
                     }
                 });
-            }
-        });
 
-        function updateSelection() {
-            selectedItems.clear();
-            const checkboxes = document.querySelectorAll('.summary-select:checked');
-            checkboxes.forEach(checkbox => {
-                selectedItems.add(checkbox.value);
+                // 更新狀態顯示
+                updateFilterStatus(visibleCount, searchTerm, selectedChannel);
+
+                // 顯示/隱藏無結果提示
+                if (visibleCount === 0) {
+                    summariesList.style.display = 'none';
+                    noResults.style.display = 'block';
+                } else {
+                    summariesList.style.display = 'block';
+                    noResults.style.display = 'none';
+                }
+            }
+
+            function updateFilterStatus(visibleCount, searchTerm, selectedChannel) {
+                let statusText = `顯示 ${visibleCount} 個摘要`;
+
+                if (searchTerm || selectedChannel) {
+                    statusText += ' (已過濾)';
+                    if (searchTerm) statusText += ` - 搜尋: "${searchTerm}"`;
+                    if (selectedChannel) statusText += ` - 頻道: "${selectedChannel}"`;
+                }
+
+                filterStatus.textContent = statusText;
+            }
+
+            // 清除過濾器
+            function clearFilters() {
+                searchInput.value = '';
+                channelFilter.value = '';
+                filterSummaries();
+            }
+
+            // 事件監聽器
+            searchInput.addEventListener('input', filterSummaries);
+            channelFilter.addEventListener('change', filterSummaries);
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterSummaries();
             });
+            clearFiltersBtn.addEventListener('click', clearFilters);
 
-            const toolbar = document.getElementById('batch-toolbar');
-            const countSpan = document.getElementById('selected-count');
+            // 書籤功能
+            document.querySelectorAll('.bookmark-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const filename = this.dataset.filename;
+                    const isBookmarked = this.dataset.bookmarked === 'true';
 
-            if (selectedItems.size > 0) {
-                toolbar.classList.add('show');
-                countSpan.textContent = `已選擇 ${selectedItems.size} 個項目`;
-            } else {
-                toolbar.classList.remove('show');
-            }
-        }
+                    fetch('/api/bookmark', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filename: filename,
+                            action: isBookmarked ? 'remove' : 'add'
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const icon = this.querySelector('i');
+                            if (isBookmarked) {
+                                icon.className = 'bi bi-bookmark';
+                                this.dataset.bookmarked = 'false';
+                            } else {
+                                icon.className = 'bi bi-bookmark-fill';
+                                this.dataset.bookmarked = 'true';
+                            }
 
-        function viewSummary(filename) {
-            // URL編碼檔案名稱以處理特殊字符
-            const encodedFilename = encodeURIComponent(filename);
-            window.location.href = `/summary/${encodedFilename}`;
-        }
-
-        function moveSelectedToTrash() {
-            if (selectedItems.size === 0) {
-                alert('請先選擇要移動的項目');
-                return;
-            }
-
-            if (!confirm(`確定要將選中的 ${selectedItems.size} 個項目移動到回收桶嗎？`)) {
-                return;
-            }
-
-            const files = Array.from(selectedItems).map(filename => ({
-                path: `summaries/${filename}`,
-                type: 'summary'
-            }));
-
-            fetch('/api/trash/move', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ files: files })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // 移除已移動的項目
-                    selectedItems.forEach(filename => {
-                        const item = document.querySelector(`[data-filename="${filename}"]`);
-                        if (item) {
-                            item.remove();
+                            // 更新摘要項目中的書籤標記
+                            const summaryItem = this.closest('.summary-item');
+                            const bookmarkBadge = summaryItem.querySelector('.badge');
+                            if (isBookmarked && bookmarkBadge) {
+                                bookmarkBadge.remove();
+                            } else if (!isBookmarked && !bookmarkBadge) {
+                                const metaDiv = summaryItem.querySelector('.summary-meta');
+                                const newBadge = document.createElement('span');
+                                newBadge.className = 'badge bg-warning text-dark';
+                                newBadge.innerHTML = '<i class="bi bi-bookmark-fill"></i> 已書籤';
+                                metaDiv.appendChild(newBadge);
+                            }
                         }
+                    })
+                    .catch(error => {
+                        console.error('書籤操作失敗:', error);
+                        alert('書籤操作失敗，請稍後再試');
                     });
+                });
+            });
 
-                    // 重置選擇狀態
-                    selectedItems.clear();
-                    updateSelection();
+            // 刪除功能
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const filename = this.dataset.filename;
 
-                    // 顯示成功訊息
-                    showMessage('檔案已移動到回收桶', 'success');
-
-                    // 檢查是否還有項目
-                    const remainingItems = document.querySelectorAll('.summary-item');
-                    if (remainingItems.length === 0) {
-                        location.reload(); // 重新載入顯示空狀態
+                    if (confirm(`確定要刪除摘要 "${filename}" 嗎？`)) {
+                        fetch('/api/delete', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                filename: filename
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.closest('.summary-item').remove();
+                                filterSummaries(); // 重新計算顯示數量
+                            } else {
+                                alert('刪除失敗：' + data.message);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('刪除失敗:', error);
+                            alert('刪除失敗，請稍後再試');
+                        });
                     }
+                });
+            });
+
+            // 批量選擇功能
+            const checkboxes = document.querySelectorAll('.summary-checkbox');
+            const batchToolbar = document.getElementById('batch-toolbar');
+            const selectedCount = document.getElementById('selected-count');
+
+            function updateBatchToolbar() {
+                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                const count = checkedBoxes.length;
+
+                if (count > 0) {
+                    batchToolbar.style.display = 'block';
+                    selectedCount.textContent = `已選擇 ${count} 個項目`;
                 } else {
-                    showMessage('移動失敗: ' + data.message, 'error');
+                    batchToolbar.style.display = 'none';
                 }
-            })
-            .catch(error => {
-                showMessage('操作失敗: ' + error.message, 'error');
-            });
-        }
-
-        function performSearch() {
-            const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
-            const summaryItems = document.querySelectorAll('.summary-item');
-            const searchResults = document.getElementById('search-results');
-            let visibleCount = 0;
-
-            summaryItems.forEach(item => {
-                const filename = item.getAttribute('data-filename').toLowerCase();
-                const isVisible = filename.includes(searchTerm);
-
-                item.style.display = isVisible ? 'flex' : 'none';
-                if (isVisible) visibleCount++;
-            });
-
-            // 更新搜尋結果文字
-            const totalCount = summaryItems.length;
-            if (searchTerm === '') {
-                searchResults.textContent = `顯示全部 ${totalCount} 個項目`;
-            } else {
-                searchResults.textContent = `找到 ${visibleCount} 個項目，共 ${totalCount} 個`;
             }
 
-            // 重置勾選狀態（隱藏的項目不應該被選中）
-            selectedItems.clear();
-            document.querySelectorAll('.summary-select').forEach(checkbox => {
-                checkbox.checked = false;
+            checkboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', updateBatchToolbar);
             });
-            updateSelection();
-        }
 
-        function clearSearch() {
-            document.getElementById('search-input').value = '';
-            performSearch();
-            document.getElementById('search-input').focus();
-        }
+            // 取消選擇
+            document.getElementById('cancel-selection').addEventListener('click', function() {
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                updateBatchToolbar();
+            });
 
-        function toggleBookmark(filename, buttonElement) {
-            // 檢查當前狀態
-            const isCurrentlyBookmarked = buttonElement.classList.contains('bookmarked');
-            const action = isCurrentlyBookmarked ? 'remove' : 'add';
+            // 批量書籤
+            document.getElementById('batch-bookmark').addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
 
-            // 準備 API 請求
-            const apiUrl = `/api/bookmarks/${action}`;
-            const requestData = { filename: filename };
+                if (filenames.length === 0) return;
 
-            fetch(apiUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    // 更新按鈕樣式
-                    if (action === 'add') {
-                        buttonElement.classList.add('bookmarked');
-                        buttonElement.querySelector('i').classList.remove('bi-bookmark');
-                        buttonElement.querySelector('i').classList.add('bi-bookmark-fill');
-                        buttonElement.title = '移除書籤';
-                        showMessage('書籤已新增', 'success');
+                fetch('/api/batch-bookmark', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filenames: filenames,
+                        action: 'add'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload(); // 簡單重新載入頁面
                     } else {
-                        buttonElement.classList.remove('bookmarked');
-                        buttonElement.querySelector('i').classList.remove('bi-bookmark-fill');
-                        buttonElement.querySelector('i').classList.add('bi-bookmark');
-                        buttonElement.title = '加入書籤';
-                        showMessage('書籤已移除', 'success');
+                        alert('批量書籤操作失敗：' + data.message);
                     }
-                } else {
-                    showMessage(data.message || '操作失敗', 'error');
-                }
-            })
-            .catch(error => {
-                showMessage('網路錯誤: ' + error.message, 'error');
+                })
+                .catch(error => {
+                    console.error('批量書籤操作失敗:', error);
+                    alert('批量書籤操作失敗，請稍後再試');
+                });
             });
-        }
 
-        function showMessage(message, type) {
-            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-            const alertHtml = `
-                <div class="alert ${alertClass} alert-dismissible fade show position-fixed"
-                     style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-            document.body.insertAdjacentHTML('beforeend', alertHtml);
+            // 批量刪除
+            document.getElementById('batch-delete').addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
 
-            setTimeout(() => {
-                const alert = document.querySelector('.alert');
-                if (alert) alert.remove();
-            }, 3000);
-        }
+                if (filenames.length === 0) return;
 
-        // Auto filter functionality
-        const autoFilterBtn = document.getElementById('auto-filter-btn');
-        if (autoFilterBtn) {
-            autoFilterBtn.addEventListener('click', () => {
-                // 1. 先切換狀態
-                autoFilterBtn.classList.toggle('active');
-
-                // 2. 根據新狀態執行搜尋
-                performSearch();
-
-                // 3. 根據新狀態更新按鈕文字
-                if (autoFilterBtn.classList.contains('active')) {
-                    autoFilterBtn.textContent = '顯示全部';
-                } else {
-                    autoFilterBtn.innerHTML = '<i class="bi bi-robot"></i> Auto';
+                if (confirm(`確定要刪除選中的 ${filenames.length} 個摘要嗎？`)) {
+                    fetch('/api/batch-delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filenames: filenames
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            location.reload(); // 簡單重新載入頁面
+                        } else {
+                            alert('批量刪除操作失敗：' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('批量刪除操作失敗:', error);
+                        alert('批量刪除操作失敗，請稍後再試');
+                    });
                 }
             });
-        }
-
-        function performSearch() {
-            const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
-            const isAutoFilterActive = autoFilterBtn ? autoFilterBtn.classList.contains('active') : false;
-            const summaryItems = document.querySelectorAll('.summary-item');
-            const searchResults = document.getElementById('search-results');
-            let visibleCount = 0;
-
-            summaryItems.forEach(item => {
-                const filename = item.getAttribute('data-filename').toLowerCase();
-                let isVisible = filename.includes(searchTerm);
-
-                // 如果 Auto 篩選是啟動的，則增加篩選條件
-                if (isAutoFilterActive) {
-                    isVisible = isVisible && filename.includes('[auto]');
-                }
-
-                item.style.display = isVisible ? 'flex' : 'none';
-                if (isVisible) visibleCount++;
-            });
-
-            // 更新搜尋結果文字
-            const totalCount = summaryItems.length;
-            if (searchTerm === '' && !isAutoFilterActive) {
-                searchResults.textContent = `顯示全部 ${totalCount} 個項目`;
-            } else {
-                searchResults.textContent = `找到 ${visibleCount} 個符合條件的項目，共 ${totalCount} 個`;
-            }
-
-            // 重置勾選狀態
-            selectedItems.clear();
-            document.querySelectorAll('.summary-select').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-            updateSelection();
-        }
+        });
     </script>
 </body>
 </html>
