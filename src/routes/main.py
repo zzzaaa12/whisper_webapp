@@ -88,11 +88,13 @@ def list_summaries():
     files = sorted(SUMMARY_FOLDER.glob('*.txt'), key=os.path.getmtime, reverse=True)
 
     summaries_with_info = []
-    channels = set()
+    channel_counts = {}
 
     for f in files:
         channel = extract_channel_from_summary(f)
-        channels.add(channel)
+
+        # 統計每個頻道的摘要數量
+        channel_counts[channel] = channel_counts.get(channel, 0) + 1
 
         summaries_with_info.append({
             'filename': f.name,
@@ -100,14 +102,42 @@ def list_summaries():
             'channel': channel
         })
 
-    # 將頻道列表排序，"未知頻道" 放在最後
-    sorted_channels = sorted([ch for ch in channels if ch != "未知頻道"])
-    if "未知頻道" in channels:
-        sorted_channels.append("未知頻道")
+    # 更智能的頻道排序方式
+    def sort_channels_smart(channels_dict):
+        """
+        智能排序頻道：
+        1. 按摘要數量降序排列（最多摘要的頻道在前）
+        2. 相同數量時按字母順序排列
+        3. "未知頻道" 始終放在最後
+        """
+        # 分離出 "未知頻道"
+        unknown_channel = "未知頻道"
+        has_unknown = unknown_channel in channels_dict
+
+        # 過濾掉 "未知頻道" 進行排序
+        filtered_channels = {k: v for k, v in channels_dict.items() if k != unknown_channel}
+
+        # 按數量降序，相同數量時按名稱升序
+        sorted_channels = sorted(
+            filtered_channels.items(),
+            key=lambda x: (-x[1], x[0])  # 負號表示降序，然後按名稱升序
+        )
+
+        # 只返回頻道名稱
+        result = [channel for channel, count in sorted_channels]
+
+        # 將 "未知頻道" 放在最後
+        if has_unknown:
+            result.append(unknown_channel)
+
+        return result
+
+    sorted_channels = sort_channels_smart(channel_counts)
 
     return render_template('summaries.html',
                          summaries=summaries_with_info,
-                         channels=sorted_channels)
+                         channels=sorted_channels,
+                         channel_counts=channel_counts)
 
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):

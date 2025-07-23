@@ -148,9 +148,9 @@
                 <div class="filter-item">
                     <label for="channel-filter">📺 頻道過濾</label>
                     <select class="form-select" id="channel-filter">
-                        <option value="">全部頻道</option>
+                        <option value="">全部頻道 ({{ summaries|length }})</option>
                         {% for channel in channels %}
-                        <option value="{{ channel }}">{{ channel }}</option>
+                        <option value="{{ channel }}">{{ channel }} ({{ channel_counts[channel] }})</option>
                         {% endfor %}
                     </select>
                 </div>
