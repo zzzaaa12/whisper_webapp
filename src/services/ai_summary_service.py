@@ -295,6 +295,8 @@ class SummaryService:
             header_lines.append(f"🎬 標題：{header_info['title']}")
         if 'uploader' in header_info:
             header_lines.append(f"📺 頻道：{header_info['uploader']}")
+        if 'duration_string' in header_info:
+            header_lines.append(f"⏱️ 影片長度：{header_info['duration_string']}")
         if 'url' in header_info:
             header_lines.append(f"🔗 網址：{header_info['url']}")
 

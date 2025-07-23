@@ -1,7 +1,7 @@
-
 from flask import Blueprint, render_template, send_file, request, session, redirect, url_for, flash
 from pathlib import Path
 import os
+import re
 
 from src.config import get_config
 from src.services.auth_service import AuthService
@@ -22,6 +22,84 @@ BOOKMARK_FILE = path_manager.get_bookmark_file()
 auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
 trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
+
+
+def extract_channel_from_summary(file_path):
+    """從摘要文件中提取頻道信息"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # 只讀取前幾行來尋找頻道信息
+            for i, line in enumerate(f):
+                if i > 10:  # 只檢查前10行
+                    break
+                # 尋找 "📺 頻道：" 格式
+                if '📺 頻道：' in line:
+                    channel = line.split('📺 頻道：')[1].strip()
+                    return channel
+                # 也支援其他可能的格式
+                elif '頻道：' in line:
+                    channel = line.split('頻道：')[1].strip()
+                    return channel
+        return "未知頻道"
+    except Exception:
+        return "未知頻道"
+
+
+def extract_video_info_from_summary(file_path):
+    """從摘要文件中提取影片信息"""
+    video_info = {
+        'title': None,
+        'channel': None,
+        'duration': None,
+        'url': None,
+        'process_time': None
+    }
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # 讀取前20行來尋找影片信息
+            for i, line in enumerate(f):
+                if i > 20:  # 只檢查前20行
+                    break
+
+                line = line.strip()
+
+                # 提取標題
+                if '🎬 標題：' in line:
+                    video_info['title'] = line.split('🎬 標題：')[1].strip()
+                elif '標題：' in line and not video_info['title']:
+                    video_info['title'] = line.split('標題：')[1].strip()
+
+                # 提取頻道
+                if '📺 頻道：' in line:
+                    video_info['channel'] = line.split('📺 頻道：')[1].strip()
+                elif '頻道：' in line and not video_info['channel']:
+                    video_info['channel'] = line.split('頻道：')[1].strip()
+
+                # 提取影片長度
+                if '⏱️ 影片長度：' in line:
+                    video_info['duration'] = line.split('⏱️ 影片長度：')[1].strip()
+                elif '影片長度：' in line:
+                    video_info['duration'] = line.split('影片長度：')[1].strip()
+                elif '時長：' in line:
+                    video_info['duration'] = line.split('時長：')[1].strip()
+
+                # 提取網址
+                if '🔗 網址：' in line:
+                    video_info['url'] = line.split('🔗 網址：')[1].strip()
+                elif '網址：' in line and not video_info['url']:
+                    video_info['url'] = line.split('網址：')[1].strip()
+
+                # 提取處理時間
+                if '⏰ 處理時間：' in line:
+                    video_info['process_time'] = line.split('⏰ 處理時間：')[1].strip()
+                elif '處理時間：' in line and not video_info['process_time']:
+                    video_info['process_time'] = line.split('處理時間：')[1].strip()
+
+    except Exception as e:
+        print(f"提取影片信息時發生錯誤: {e}")
+
+    return video_info
 
 
 @main_bp.route('/access', methods=['GET', 'POST'])
@@ -66,14 +144,57 @@ def list_summaries():
         return "摘要資料夾不存在。", 500
     files = sorted(SUMMARY_FOLDER.glob('*.txt'), key=os.path.getmtime, reverse=True)
 
-    summaries_with_bookmark_status = []
+    summaries_with_info = []
+    channel_counts = {}
+
     for f in files:
-        summaries_with_bookmark_status.append({
+        channel = extract_channel_from_summary(f)
+
+        # 統計每個頻道的摘要數量
+        channel_counts[channel] = channel_counts.get(channel, 0) + 1
+
+        summaries_with_info.append({
             'filename': f.name,
-            'is_bookmarked': bookmark_service.is_bookmarked(f.name)
+            'is_bookmarked': bookmark_service.is_bookmarked(f.name),
+            'channel': channel
         })
 
-    return render_template('summaries.html', summaries=summaries_with_bookmark_status)
+    # 更智能的頻道排序方式
+    def sort_channels_smart(channels_dict):
+        """
+        智能排序頻道：
+        1. 按摘要數量降序排列（最多摘要的頻道在前）
+        2. 相同數量時按字母順序排列
+        3. "未知頻道" 始終放在最後
+        """
+        # 分離出 "未知頻道"
+        unknown_channel = "未知頻道"
+        has_unknown = unknown_channel in channels_dict
+
+        # 過濾掉 "未知頻道" 進行排序
+        filtered_channels = {k: v for k, v in channels_dict.items() if k != unknown_channel}
+
+        # 按數量降序，相同數量時按名稱升序
+        sorted_channels = sorted(
+            filtered_channels.items(),
+            key=lambda x: (-x[1], x[0])  # 負號表示降序，然後按名稱升序
+        )
+
+        # 只返回頻道名稱
+        result = [channel for channel, count in sorted_channels]
+
+        # 將 "未知頻道" 放在最後
+        if has_unknown:
+            result.append(unknown_channel)
+
+        return result
+
+    sorted_channels = sort_channels_smart(channel_counts)
+
+    return render_template('summaries.html',
+                         summaries=summaries_with_info,
+                         channels=sorted_channels,
+                         channel_counts=channel_counts)
 
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
@@ -104,11 +225,15 @@ def show_summary(filename):
     subtitle_path = SUBTITLE_FOLDER / subtitle_filename
     has_subtitle = subtitle_path.exists()
 
+    # 提取影片信息
+    video_info = extract_video_info_from_summary(safe_path)
+
     return render_template('summary_detail.html',
                          title=safe_path.stem,
                          content=content,
                          filename=safe_path.name,
-                         has_subtitle=has_subtitle)
+                         has_subtitle=has_subtitle,
+                         video_info=video_info)
 
 @main_bp.route('/download/summary/<filename>')
 def download_summary(filename):
@@ -117,7 +242,7 @@ def download_summary(filename):
         is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
-        
+
         return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500
@@ -129,7 +254,7 @@ def download_subtitle(filename):
         is_valid, error_msg, safe_path = FileValidator.validate_subtitle_file(filename, SUBTITLE_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
-        
+
         return send_file(safe_path, as_attachment=True, download_name=safe_path.name)
     except Exception as e:
         return f"下載失敗: {str(e)}", 500

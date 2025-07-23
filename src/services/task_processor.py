@@ -246,12 +246,24 @@ class TaskProcessor:
             info_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': True
+                'extract_flat': False  # 改為 False 以獲取完整信息
             }
             with self.yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 video_title = info.get('title', '')
                 uploader = info.get('uploader', '')
+                duration = info.get('duration', 0)
+
+                # 格式化影片長度
+                duration_string = ""
+                if duration:
+                    hours = duration // 3600
+                    minutes = (duration % 3600) // 60
+                    seconds = duration % 60
+                    if hours > 0:
+                        duration_string = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                    else:
+                        duration_string = f"{minutes:02d}:{seconds:02d}"
 
             # 更新任務資料
             self.task_queue.update_task_status(
@@ -330,7 +342,7 @@ class TaskProcessor:
                     self._log_worker_message(task_id, f"跳過摘要生成: {summary_skip_reason}")
                 else:
                     self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
-                    self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url})
+                    self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url, 'duration_string': duration_string})
 
                 # 發送摘要郵件（無論是否跳過摘要生成）
                 self._send_summary_email(task_id, video_title, summary_path)

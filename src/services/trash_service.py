@@ -62,7 +62,7 @@ class TrashService:
                 'id': str(uuid.uuid4()),
                 'original_path': str(file_path),
                 'trash_path': str(trash_path),
-                'original_name': safe_name,
+                'original_name': file_path.name,
                 'file_type': file_type,
                 'deleted_at': datetime.now().isoformat(),
                 'file_size': trash_path.stat().st_size if trash_path.exists() else 0

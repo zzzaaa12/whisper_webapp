@@ -169,13 +169,13 @@ class TaskQueue:
 
                         if is_auto_task:
                             base_name = f"{title}"
-                            uploader = data.get('uploader', '')
-                            if len(uploader) <= 10:
-                                sanitized_title = f"{date_str} - [Auto][{uploader}] " + sanitize_filename(base_name)
-                            elif uploader == "All-In Podcast":
-                                sanitized_title = f"{date_str} - [Auto][All-In] " + sanitize_filename(base_name)
-                            else:
-                                sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+                            uploader = data.get('uploader', '').strip()
+#                            if len(uploader) <= 10:
+                            sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(base_name)
+#                            elif uploader == "All-In Podcast":
+#                                sanitized_title = f"{date_str} - [All-In] " + sanitize_filename(base_name)
+#                            else:
+#                                sanitized_title = f"{date_str} - " + sanitize_filename(base_name)
                         else:
                             base_name = f"{date_str} - {title}"
                             sanitized_title = sanitize_filename(base_name)
