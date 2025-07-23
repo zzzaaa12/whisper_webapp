@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from src.config import get_config
-from task_queue import get_task_queue
+from task_queue import get_task_queue, TaskStatus
 import re
 import os
 from pathlib import Path
@@ -216,6 +216,23 @@ def api_upload_subtitle():
 
         SUMMARY_FOLDER.mkdir(exist_ok=True)
         file_path.write_text(content, encoding='utf-8')
+
+        # 如果是通過任務佇列處理，需要創建任務並更新結果
+        task_id = data.get('task_id')
+        if task_id:
+            queue_manager = get_task_queue()
+            # 更新任務結果
+            result = {
+                'summary_file': str(file_path),
+                'filename': safe_filename,
+                'file_size': len(content.encode('utf-8'))
+            }
+            queue_manager.update_task_status(
+                task_id,
+                TaskStatus.COMPLETED,
+                progress=100,
+                result=result
+            )
 
         return jsonify({
             'success': True,
