@@ -45,6 +45,63 @@ def extract_channel_from_summary(file_path):
         return "未知頻道"
 
 
+def extract_video_info_from_summary(file_path):
+    """從摘要文件中提取影片信息"""
+    video_info = {
+        'title': None,
+        'channel': None,
+        'duration': None,
+        'url': None,
+        'process_time': None
+    }
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # 讀取前20行來尋找影片信息
+            for i, line in enumerate(f):
+                if i > 20:  # 只檢查前20行
+                    break
+
+                line = line.strip()
+
+                # 提取標題
+                if '🎬 標題：' in line:
+                    video_info['title'] = line.split('🎬 標題：')[1].strip()
+                elif '標題：' in line and not video_info['title']:
+                    video_info['title'] = line.split('標題：')[1].strip()
+
+                # 提取頻道
+                if '📺 頻道：' in line:
+                    video_info['channel'] = line.split('📺 頻道：')[1].strip()
+                elif '頻道：' in line and not video_info['channel']:
+                    video_info['channel'] = line.split('頻道：')[1].strip()
+
+                # 提取影片長度
+                if '⏱️ 影片長度：' in line:
+                    video_info['duration'] = line.split('⏱️ 影片長度：')[1].strip()
+                elif '影片長度：' in line:
+                    video_info['duration'] = line.split('影片長度：')[1].strip()
+                elif '時長：' in line:
+                    video_info['duration'] = line.split('時長：')[1].strip()
+
+                # 提取網址
+                if '🔗 網址：' in line:
+                    video_info['url'] = line.split('🔗 網址：')[1].strip()
+                elif '網址：' in line and not video_info['url']:
+                    video_info['url'] = line.split('網址：')[1].strip()
+
+                # 提取處理時間
+                if '⏰ 處理時間：' in line:
+                    video_info['process_time'] = line.split('⏰ 處理時間：')[1].strip()
+                elif '處理時間：' in line and not video_info['process_time']:
+                    video_info['process_time'] = line.split('處理時間：')[1].strip()
+
+    except Exception as e:
+        print(f"提取影片信息時發生錯誤: {e}")
+
+    return video_info
+
+
 @main_bp.route('/access', methods=['GET', 'POST'])
 def access():
     """處理全站通行碼驗證"""
@@ -168,11 +225,15 @@ def show_summary(filename):
     subtitle_path = SUBTITLE_FOLDER / subtitle_filename
     has_subtitle = subtitle_path.exists()
 
+    # 提取影片信息
+    video_info = extract_video_info_from_summary(safe_path)
+
     return render_template('summary_detail.html',
                          title=safe_path.stem,
                          content=content,
                          filename=safe_path.name,
-                         has_subtitle=has_subtitle)
+                         has_subtitle=has_subtitle,
+                         video_info=video_info)
 
 @main_bp.route('/download/summary/<filename>')
 def download_summary(filename):
