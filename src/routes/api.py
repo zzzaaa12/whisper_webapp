@@ -553,3 +553,88 @@ def api_queue_task_detail(task_id):
             return APIResponse.not_found('任務未找到')
     except Exception as e:
         return APIResponse.internal_error(str(e))
+
+@api_bp.route('/delete', methods=['POST'])
+def api_delete_summary():
+    """刪除摘要檔案（移動到垃圾桶）"""
+    try:
+        data = request.get_json()
+        if not data or 'filename' not in data:
+            return jsonify({'success': False, 'message': '缺少檔案名稱'}), 400
+
+        filename = data['filename']
+
+        # 驗證檔案名稱
+        if not filename or not filename.endswith('.txt'):
+            return jsonify({'success': False, 'message': '無效的檔案名稱'}), 400
+
+        file_path = SUMMARY_FOLDER / filename
+        if not file_path.exists():
+            return jsonify({'success': False, 'message': '檔案不存在'}), 404
+
+        # 移動到垃圾桶
+        success, message = trash_service.move_file_to_trash(file_path, 'summary')
+
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'success': False, 'message': message}), 500
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'刪除失敗: {str(e)}'}), 500
+
+@api_bp.route('/batch-delete', methods=['POST'])
+def api_batch_delete_summaries():
+    """批量刪除摘要檔案（移動到垃圾桶）"""
+    try:
+        data = request.get_json()
+        if not data or 'filenames' not in data:
+            return jsonify({'success': False, 'message': '缺少檔案列表'}), 400
+
+        filenames = data['filenames']
+        if not isinstance(filenames, list) or not filenames:
+            return jsonify({'success': False, 'message': '檔案列表格式錯誤'}), 400
+
+        results = []
+        success_count = 0
+
+        for filename in filenames:
+            try:
+                # 驗證檔案名稱
+                if not filename or not filename.endswith('.txt'):
+                    results.append({'filename': filename, 'success': False, 'message': '無效的檔案名稱'})
+                    continue
+
+                file_path = SUMMARY_FOLDER / filename
+                if not file_path.exists():
+                    results.append({'filename': filename, 'success': False, 'message': '檔案不存在'})
+                    continue
+
+                # 移動到垃圾桶
+                success, message = trash_service.move_file_to_trash(file_path, 'summary')
+                results.append({
+                    'filename': filename,
+                    'success': success,
+                    'message': message
+                })
+
+                if success:
+                    success_count += 1
+
+            except Exception as e:
+                results.append({
+                    'filename': filename,
+                    'success': False,
+                    'message': f'處理失敗: {str(e)}'
+                })
+
+        return jsonify({
+            'success': True,
+            'message': f'批量刪除完成，成功處理 {success_count}/{len(filenames)} 個檔案',
+            'results': results,
+            'success_count': success_count,
+            'total_count': len(filenames)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'批量刪除失敗: {str(e)}'}), 500
