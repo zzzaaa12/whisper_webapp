@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' wss: ws:;">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.socket.io; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' wss: ws:;">
     <title>Whisper 語音轉文字工具</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -14,6 +16,7 @@
         .card-header.with-button {
             position: relative;
         }
+
         .btn-header-right {
             position: absolute;
             top: 50%;
@@ -31,41 +34,56 @@
                 margin-left: auto;
                 margin-bottom: 0.5rem;
             }
+
             .card-header.with-button h3 {
-                margin-top: 0.5rem; /* Add some space so button doesn't touch title */
+                margin-top: 0.5rem;
+                /* Add some space so button doesn't touch title */
             }
         }
 
-        html, body {
+        html,
+        body {
             height: 100%;
         }
+
         body {
             background-color: #f8f9fa;
             display: flex;
             flex-direction: column;
         }
+
         .container {
             max-width: 1000px;
             display: flex;
             flex-direction: column;
-            flex-grow: 1; /* Allow container to grow */
-            padding-bottom: 1.25rem; /* Add some space at the bottom */
+            flex-grow: 1;
+            /* Allow container to grow */
+            padding-bottom: 1.25rem;
+            /* Add some space at the bottom */
         }
+
         .log-card {
-            flex-grow: 1; /* This card will take up the remaining space */
+            flex-grow: 1;
+            /* This card will take up the remaining space */
             display: flex;
             flex-direction: column;
-            min-height: 375px; /* 設定最小高度 */
+            min-height: 375px;
+            /* 設定最小高度 */
         }
+
         .log-card .card-body {
-            flex: 1; /* 讓 card-body 填滿剩餘空間 */
+            flex: 1;
+            /* 讓 card-body 填滿剩餘空間 */
             display: flex;
             flex-direction: column;
             overflow: hidden;
-            padding: 0; /* 移除預設內邊距 */
+            padding: 0;
+            /* 移除預設內邊距 */
         }
+
         #log-container {
-            flex: 1; /* The log container itself will grow */
+            flex: 1;
+            /* The log container itself will grow */
             background-color: #fff;
             border: 1px solid #dee2e6;
             border-radius: 0.375rem;
@@ -73,18 +91,25 @@
             font-size: 0.9rem;
             white-space: pre-wrap;
             word-wrap: break-word;
-            overflow-y: scroll; /* 強制顯示垂直滾動條 */
-            overflow-x: auto; /* 允許水平滾動 */
-            scrollbar-width: thin; /* 顯示卷軸 */
+            overflow-y: scroll;
+            /* 強制顯示垂直滾動條 */
+            overflow-x: auto;
+            /* 允許水平滾動 */
+            scrollbar-width: thin;
+            /* 顯示卷軸 */
             scrollbar-color: #6c757d #f8f9fa;
-            min-height: 250px; /* 設定最小高度 */
-            margin: 1.25rem; /* 添加外邊距 */
+            min-height: 250px;
+            /* 設定最小高度 */
+            margin: 1.25rem;
+            /* 添加外邊距 */
         }
 
         /* 自定義滾動條樣式 (Webkit 瀏覽器) */
         #log-container::-webkit-scrollbar {
-            width: 15px; /* 增加卷軸寬度 */
-            height: 15px; /* 水平卷軸高度 */
+            width: 15px;
+            /* 增加卷軸寬度 */
+            height: 15px;
+            /* 水平卷軸高度 */
         }
 
         #log-container::-webkit-scrollbar-track {
@@ -167,11 +192,11 @@
 
         /* 佇列狀態卡片樣式 */
         @media (max-width: 767.98px) {
-            #queue-status-card .row.text-center > div {
+            #queue-status-card .row.text-center>div {
                 margin-bottom: 1rem;
             }
 
-            #queue-status-card .row.text-center > div:last-child {
+            #queue-status-card .row.text-center>div:last-child {
                 margin-bottom: 0;
             }
         }
@@ -186,11 +211,16 @@
 
         .btn-container .btn {
             white-space: nowrap;
-            font-size: 1rem; /* 稍微增大字體 */
-            padding: 0.46875rem 0.9375rem; /* 調整內邊距 */
-            overflow: hidden; /* 防止文字溢出 */
-            text-overflow: ellipsis; /* 文字過長時顯示省略號 */
-            max-width: 100%; /* 確保不超出容器 */
+            font-size: 1rem;
+            /* 稍微增大字體 */
+            padding: 0.46875rem 0.9375rem;
+            /* 調整內邊距 */
+            overflow: hidden;
+            /* 防止文字溢出 */
+            text-overflow: ellipsis;
+            /* 文字過長時顯示省略號 */
+            max-width: 100%;
+            /* 確保不超出容器 */
         }
 
         /* 手機版按鈕佈局 */
@@ -203,7 +233,8 @@
             .btn-container .btn {
                 width: 100%;
                 margin-bottom: 0.3125rem;
-                font-size: 1rem; /* 手機版也增大字體 */
+                font-size: 1rem;
+                /* 手機版也增大字體 */
             }
 
             .btn-container .btn:last-child {
@@ -212,6 +243,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container py-2">
         <!-- 安全警告區域 -->
@@ -219,22 +251,25 @@
         </div>
         <div class="container mt-4">
             <!-- Button for mobile view -->
-                            <div class="d-md-none d-flex justify-content-start mb-2">
-                        <a href="/queue" class="btn btn-outline-success btn-sm me-2">任務佇列</a>
-                                    <a href="{{ url_for('main.list_summaries', filter='auto') }}" class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
-                        <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
-                        <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
+            <div class="d-md-none d-flex justify-content-start mb-2">
+                <a href="/queue" class="btn btn-outline-success btn-sm me-2">任務佇列</a>
+                <a href="{{ url_for('main.list_summaries', filter='auto') }}"
+                    class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
+                <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
+                <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
             </div>
             <div class="card">
-                 <!-- Header for desktop view -->
+                <!-- Header for desktop view -->
                 <div class="card-header text-center d-none d-md-block" style="position: relative;">
                     <div style="position: absolute; top: 50%; left: 1rem; transform: translateY(-50%);">
                         <a href="/queue" class="btn btn-outline-success btn-sm">任務佇列</a>
                     </div>
                     <h3>Whisper 語音轉文字工具</h3>
                     <div style="position: absolute; top: 50%; right: 1rem; transform: translateY(-50%);">
-                        <a href="{{ url_for('main.list_summaries', filter='auto') }}" class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
-                        <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
+                        <a href="{{ url_for('main.list_summaries', filter='auto') }}"
+                            class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
+                        <a href="{{ url_for('main.list_summaries') }}"
+                            class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
                         <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
                     </div>
                 </div>
@@ -246,18 +281,25 @@
                     <!-- YouTube 網址處理表單 -->
                     <form id="process-form">
                         <div class="row align-items-end mb-3">
-                            <div class="col-md-6">
+                            <div
+                                class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-8{% else %}col-md-6{% endif %}">
                                 <label for="audio_url" class="form-label">音訊來源網址</label>
-                                <input type="url" class="form-control" id="audio_url" name="audio_url" placeholder="請貼上音訊來源網址...">
+                                <input type="url" class="form-control" id="audio_url" name="audio_url"
+                                    placeholder="請貼上音訊來源網址...">
                             </div>
-                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
+                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE',
+                                False) %}style="display: none;" {% endif %}>
                                 <label for="access_code" class="form-label">通行碼</label>
-                                <input type="password" class="form-control" id="access_code" name="access_code" placeholder="請輸入通行碼...">
+                                <input type="password" class="form-control" id="access_code" name="access_code"
+                                    placeholder="請輸入通行碼...">
                             </div>
-                            <div class="col-md-3">
+                            <div
+                                class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-4{% else %}col-md-3{% endif %}">
                                 <div class="btn-container">
-                                    <button type="submit" id="submit-btn" class="btn btn-primary" style="flex: 1; min-width: 0;">開始處理</button>
-                                    <button type="button" id="cancel-btn" class="btn btn-danger" style="display: none; flex-shrink: 0;">取消</button>
+                                    <button type="submit" id="submit-btn" class="btn btn-primary"
+                                        style="flex: 1; min-width: 0;">開始處理</button>
+                                    <button type="button" id="cancel-btn" class="btn btn-danger"
+                                        style="display: none; flex-shrink: 0;">取消</button>
                                 </div>
                             </div>
                         </div>
@@ -273,23 +315,30 @@
                     <!-- 影音檔案上傳表單 -->
                     <form id="upload-form" enctype="multipart/form-data">
                         <div class="row align-items-end mb-3">
-                            <div class="col-md-6">
+                            <div
+                                class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-8{% else %}col-md-6{% endif %}">
                                 <label for="media_file" class="form-label">上傳影音檔案</label>
                                 <input type="file" class="form-control" id="media_file" name="media_file"
-                                       accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg"
-                                       placeholder="選擇影音檔案...">
+                                    accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg"
+                                    placeholder="選擇影音檔案...">
                             </div>
-                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}style="display: none;"{% endif %}>
+                            <div class="col-md-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE',
+                                False) %}style="display: none;" {% endif %}>
                                 <label for="upload_access_code" class="form-label">通行碼</label>
-                                <input type="password" class="form-control" id="upload_access_code" name="upload_access_code" placeholder="請輸入通行碼...">
+                                <input type="password" class="form-control" id="upload_access_code"
+                                    name="upload_access_code" placeholder="請輸入通行碼...">
                             </div>
-                            <div class="col-md-3">
+                            <div
+                                class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-4{% else %}col-md-3{% endif %}">
                                 <div class="btn-container">
-                                    <button type="submit" id="upload-btn" class="btn btn-success" style="flex: 1; min-width: 0;">
+                                    <button type="submit" id="upload-btn" class="btn btn-success"
+                                        style="flex: 1; min-width: 0;">
                                         <span id="upload-btn-text">上傳處理</span>
-                                        <span id="upload-spinner" class="spinner-border spinner-border-sm ms-2" style="display: none;"></span>
+                                        <span id="upload-spinner" class="spinner-border spinner-border-sm ms-2"
+                                            style="display: none;"></span>
                                     </button>
-                                    <button type="button" id="upload-cancel-btn" class="btn btn-danger" style="display: none; flex-shrink: 0;">取消上傳</button>
+                                    <button type="button" id="upload-cancel-btn" class="btn btn-danger"
+                                        style="display: none; flex-shrink: 0;">取消上傳</button>
                                 </div>
                             </div>
                         </div>
@@ -299,7 +348,7 @@
                             <div class="col-12">
                                 <div class="progress">
                                     <div class="progress-bar progress-bar-striped progress-bar-animated"
-                                         id="upload-progress-bar" role="progressbar" style="width: 0%">
+                                        id="upload-progress-bar" role="progressbar" style="width: 0%">
                                         <span id="upload-progress-text">0%</span>
                                     </div>
                                 </div>
@@ -330,7 +379,8 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>佇列狀態總覽</span>
                     <div>
-                        <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="refreshQueueStatus()" title="重新整理佇列狀態">
+                        <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="refreshQueueStatus()"
+                            title="重新整理佇列狀態">
                             重新整理
                         </button>
                         <a href="/queue" class="btn btn-outline-secondary btn-sm" title="查看詳細佇列">
@@ -380,12 +430,15 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>操作日誌</span>
                     <div>
-                        <button type="button" class="btn btn-outline-primary btn-sm me-2" id="scroll-bottom-btn" onclick="scrollToBottom()" title="滾動到底部">
+                        <button type="button" class="btn btn-outline-primary btn-sm me-2" id="scroll-bottom-btn"
+                            onclick="scrollToBottom()" title="滾動到底部">
                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/>
+                                <path
+                                    d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z" />
                             </svg>
                         </button>
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-log-btn" onclick="clearLog()">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-log-btn"
+                            onclick="clearLog()">
                             清除日誌
                         </button>
                     </div>
@@ -481,18 +534,18 @@
                     console.error('載入佇列狀態失敗:', result.message);
                     // 顯示錯誤狀態
                     ['index-total-tasks', 'index-queued-tasks', 'index-processing-tasks',
-                     'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
-                        document.getElementById(id).textContent = '?';
-                    });
+                        'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
+                            document.getElementById(id).textContent = '?';
+                        });
                     document.getElementById('index-current-task').textContent = '載入失敗';
                 }
             } catch (error) {
                 console.error('載入佇列狀態失敗:', error);
                 // 顯示錯誤狀態
                 ['index-total-tasks', 'index-queued-tasks', 'index-processing-tasks',
-                 'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
-                    document.getElementById(id).textContent = '?';
-                });
+                    'index-completed-tasks', 'index-failed-tasks', 'index-cancelled-tasks'].forEach(id => {
+                        document.getElementById(id).textContent = '?';
+                    });
                 document.getElementById('index-current-task').textContent = '連線錯誤';
             }
         }
@@ -631,16 +684,17 @@
         }
 
         // 頁面載入完成時檢查配置
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             checkSystemConfig();
             // 啟動佇列狀態自動更新
             startQueueStatusAutoUpdate();
         });
 
         // 頁面即將關閉時停止自動更新
-        window.addEventListener('beforeunload', function() {
+        window.addEventListener('beforeunload', function () {
             stopQueueStatusAutoUpdate();
         });
     </script>
 </body>
+
 </html>
