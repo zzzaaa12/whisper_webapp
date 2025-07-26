@@ -221,7 +221,8 @@ class TaskProcessor:
                 # 限制摘要長度，避免telegram訊息過長
                 if len(summary_content) > 3000:
                     summary_content = summary_content[:3000] + "...\n\n[摘要已截斷，完整內容請查看檔案]"
-                notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
+                #notification_msg += f"\n\n📝 摘要內容：\n{summary_content}"
+                notification_msg = f"📝 摘要內容：\n{summary_content}"
             except Exception as e:
                 self._log_worker_message(task_id, f"讀取摘要文件失敗: {e}", 'error')
                 notification_msg += f"\n\n❌ 摘要生成完成，但讀取失敗: {e}"
