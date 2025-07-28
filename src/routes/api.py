@@ -11,6 +11,7 @@ from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
 from src.services.url_service import URLService
 from src.services.file_service import file_service
+from src.services.summary_api_service import get_summary_api_service
 from src.utils.time_formatter import get_timestamp
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.path_manager import get_path_manager
@@ -638,3 +639,106 @@ def api_batch_delete_summaries():
 
     except Exception as e:
         return jsonify({'success': False, 'message': f'批量刪除失敗: {str(e)}'}), 500
+
+@api_bp.route('/last_5_summary', methods=['POST'])
+def api_last_5_summary():
+    """獲取最新 5 個摘要的標題列表"""
+    try:
+        # 檢查請求格式
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'invalid_request',
+                'message': '請求格式錯誤，需要 JSON 格式'
+            }), 400
+
+        data = request.get_json()
+        access_code = data.get('access_code', '').strip()
+
+        # 驗證通行碼
+        if not auth_service.verify_access_code(access_code):
+            return jsonify({
+                'success': False,
+                'error': 'auth_error',
+                'message': '通行碼錯誤'
+            }), 401
+
+        # 獲取摘要服務
+        summary_service = get_summary_api_service()
+        summaries = summary_service.get_latest_summaries(5)
+
+        return jsonify({
+            'success': True,
+            'data': summaries,
+            'count': len(summaries)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'internal_error',
+            'message': f'獲取摘要列表失敗: {str(e)}'
+        }), 500
+
+@api_bp.route('/get_summary', methods=['POST'])
+def api_get_summary():
+    """根據索引獲取摘要內容"""
+    try:
+        # 檢查請求格式
+        if not request.is_json:
+            return jsonify({
+                'success': False,
+                'error': 'invalid_request',
+                'message': '請求格式錯誤，需要 JSON 格式'
+            }), 400
+
+        data = request.get_json()
+        access_code = data.get('access_code', '').strip()
+        index = data.get('index')
+
+        # 驗證通行碼
+        if not auth_service.verify_access_code(access_code):
+            return jsonify({
+                'success': False,
+                'error': 'auth_error',
+                'message': '通行碼錯誤'
+            }), 401
+
+        # 驗證索引參數
+        if index is None:
+            return jsonify({
+                'success': False,
+                'error': 'missing_parameter',
+                'message': '缺少 index 參數'
+            }), 400
+
+        # 檢查索引類型和範圍
+        if not isinstance(index, int) or index < 1 or index > 5:
+            return jsonify({
+                'success': False,
+                'error': 'invalid_index',
+                'message': 'index 必須是 1-5 之間的整數'
+            }), 400
+
+        # 獲取摘要服務
+        summary_service = get_summary_api_service()
+        summary = summary_service.get_summary_by_index(index)
+
+        if summary is None:
+            return jsonify({
+                'success': False,
+                'error': 'not_found',
+                'message': f'找不到第 {index} 個摘要'
+            }), 404
+
+        return jsonify({
+            'success': True,
+            'data': summary
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': 'internal_error',
+            'message': f'獲取摘要內容失敗: {str(e)}'
+        }), 500
