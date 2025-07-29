@@ -43,6 +43,10 @@ class FileNameSanitizer:
             else:
                 filename = filename.encode('utf-8')[:max_length].decode('utf-8', errors='ignore')
 
+        if '_-_' in filename:
+            filename = filename.replace('_-_', ' - ')
+            print("name fixed")
+
         result = filename if filename else "unknown"
         return result
 
