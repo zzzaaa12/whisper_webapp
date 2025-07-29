@@ -203,23 +203,44 @@ class QueueWorker:
             subtitle_path = self.subtitle_folder / f"{sanitized_title}.srt"
             summary_path = self.summary_folder / f"{sanitized_title}.txt"
 
-            # 檢查是否已有相同檔名的影片
-            audio_file = None
+            # 檢查是否已有相同內容的影片檔案（使用新的檔名比對邏輯）
+            from src.utils.filename_matcher import FilenameMatcher
+
+            audio_file = FilenameMatcher.find_existing_audio_file(video_title, self.download_folder)
             skip_transcription = False
-            for file in self.download_folder.glob('*'):
-                if video_title in file.stem:
-                    audio_file = file
-                    self.logger_manager.info(f"Found existing file: {audio_file}", "queue_worker")
+
+            if audio_file:
+                self.logger_manager.info(f"Found existing file: {audio_file}", "queue_worker")
+
+            # 檢查是否已有相同內容的字幕檔案
+            matching_subtitles = FilenameMatcher.find_matching_files(
+                f"{sanitized_title}.srt", self.subtitle_folder, ['.srt']
+            )
+
+            for subtitle_file in matching_subtitles:
+                if subtitle_file.stat().st_size > 500:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=60,
+                        log_message="✅ 找到相同內容的字幕快取，跳過轉錄"
+                    )
+                    self.logger_manager.info(f"找到相同內容的字幕快取: {subtitle_file}", "queue_worker")
+                    skip_transcription = True
+                    # 將找到的字幕檔案複製到目標位置（如果路徑不同）
+                    if subtitle_file != subtitle_path:
+                        import shutil
+                        shutil.copy2(subtitle_file, subtitle_path)
+                        self.logger_manager.info(f"複製字幕檔案: {subtitle_file} -> {subtitle_path}", "queue_worker")
                     break
 
-            # 檢查是否已有字幕檔案
-            if subtitle_path.exists():
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=60,
-                    log_message="✅ 找到字幕快取，跳過轉錄"
-                )
-                self.logger_manager.info(f"找到字幕快取: {subtitle_path}", "queue_worker")
-                skip_transcription = True
+            # 如果沒有找到相同內容的字幕，檢查目標路徑是否已有字幕檔案
+            if not skip_transcription and subtitle_path.exists():
+                if subtitle_path.stat().st_size > 500:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=60,
+                        log_message="✅ 找到目標路徑字幕檔案，跳過轉錄"
+                    )
+                    self.logger_manager.info(f"找到目標路徑字幕檔案: {subtitle_path}", "queue_worker")
+                    skip_transcription = True
 
             # 尋找是否已下載相同影片
             if not audio_file:
@@ -237,7 +258,27 @@ class QueueWorker:
             # 生成摘要
             if subtitle_path.exists():
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
-                self._do_summarize(subtitle_content, summary_path, task_id)
+
+                # 檢查是否已有相同內容的摘要檔案
+                skip_summarization = False
+                matching_summaries = FilenameMatcher.find_matching_files(
+                    f"{sanitized_title}.txt", self.summary_folder, ['.txt']
+                )
+
+                for summary_file in matching_summaries:
+                    if summary_file.stat().st_size > 500:
+                        self.logger_manager.info(f"找到相同內容的摘要快取: {summary_file}", "queue_worker")
+                        skip_summarization = True
+                        # 將找到的摘要檔案複製到目標位置（如果路徑不同）
+                        if summary_file != summary_path:
+                            import shutil
+                            shutil.copy2(summary_file, summary_path)
+                            self.logger_manager.info(f"複製摘要檔案: {summary_file} -> {summary_path}", "queue_worker")
+                        break
+
+                # 如果沒有找到相同內容的摘要，才生成新摘要
+                if not skip_summarization:
+                    self._do_summarize(subtitle_content, summary_path, task_id)
 
             # 更新任務結果
             result = {
@@ -304,7 +345,27 @@ class QueueWorker:
             # 生成摘要
             if subtitle_path.exists():
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
-                self._do_summarize(subtitle_content, summary_path, task_id)
+
+                # 檢查是否已有相同內容的摘要檔案
+                skip_summarization = False
+                matching_summaries = FilenameMatcher.find_matching_files(
+                    summary_path.name, self.summary_folder, ['.txt']
+                )
+
+                for summary_file in matching_summaries:
+                    if summary_file.stat().st_size > 500:
+                        self.logger_manager.info(f"找到相同內容的摘要快取: {summary_file}", "queue_worker")
+                        skip_summarization = True
+                        # 將找到的摘要檔案複製到目標位置（如果路徑不同）
+                        if summary_file != summary_path:
+                            import shutil
+                            shutil.copy2(summary_file, summary_path)
+                            self.logger_manager.info(f"複製摘要檔案: {summary_file} -> {summary_path}", "queue_worker")
+                        break
+
+                # 如果沒有找到相同內容的摘要，才生成新摘要
+                if not skip_summarization:
+                    self._do_summarize(subtitle_content, summary_path, task_id)
 
             # 更新任務結果
             result = {
