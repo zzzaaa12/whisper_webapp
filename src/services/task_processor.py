@@ -236,7 +236,8 @@ class TaskProcessor:
 
         try:
             url = data.get('url')
-            title = data.get('title', '')
+            user_title = data.get('title', '')
+            user_uploader = data.get('uploader', '')
 
             if not url:
                 raise ValueError("缺少 YouTube URL")
@@ -251,20 +252,24 @@ class TaskProcessor:
             }
             with self.yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                video_title = info.get('title', '')
-                uploader = info.get('uploader', '')
+                auto_video_title = info.get('title', '')
+                auto_uploader = info.get('uploader', '')
                 duration = info.get('duration', 0)
 
-                # 格式化影片長度
-                duration_string = ""
-                if duration:
-                    hours = duration // 3600
-                    minutes = (duration % 3600) // 60
-                    seconds = duration % 60
-                    if hours > 0:
-                        duration_string = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                    else:
-                        duration_string = f"{minutes:02d}:{seconds:02d}"
+            # 優先使用用戶提供的metadata，否則使用自動獲取的
+            video_title = user_title if user_title else auto_video_title
+            uploader = user_uploader if user_uploader else auto_uploader
+
+            # 格式化影片長度
+            duration_string = ""
+            if duration:
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                if hours > 0:
+                    duration_string = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    duration_string = f"{minutes:02d}:{seconds:02d}"
 
             # 更新任務資料
             self.task_queue.update_task_status(

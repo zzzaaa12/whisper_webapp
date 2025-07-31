@@ -452,12 +452,17 @@ def api_process_youtube():
             return jsonify({'status': 'error', 'message': '請求格式錯誤，需要 JSON 格式'}), 400
 
         data = request.get_json()
-        youtube_url = data.get('youtube_url', '').strip()
+        # 支援兩種參數名稱以保持向後相容性
+        audio_url = data.get('youtube_url', '').strip() or data.get('audio_url', '').strip()
         auto_process = data.get('auto', 0) == 1
         access_code = data.get('access_code', '').strip()
 
-        if not youtube_url:
-            return jsonify({'status': 'error', 'message': '缺少 youtube_url 參數'}), 400
+        # 可選的metadata參數
+        user_title = data.get('title', '').strip()
+        user_uploader = data.get('uploader', '').strip()
+
+        if not audio_url:
+            return jsonify({'status': 'error', 'message': '缺少 youtube_url 或 audio_url 參數'}), 400
 
         # 檢查是否需要通行碼驗證
         from flask import session
@@ -469,42 +474,74 @@ def api_process_youtube():
             if not auth_service.verify_access_code(access_code):
                 return jsonify({'status': 'error', 'message': '通行碼錯誤'}), 401
 
-        if not url_service.validate_youtube_url(youtube_url):
-            return jsonify({'status': 'error', 'message': '請輸入有效的 YouTube 網址 (必須包含 https:// 或 http://)'}), 400
+        # 基本URL格式驗證（不限制特定網站）
+        if not audio_url.startswith(('http://', 'https://')):
+            return jsonify({'status': 'error', 'message': '請輸入有效的網址 (必須包含 https:// 或 http://)'}), 400
 
-        if len(youtube_url) > 500:
+        if len(audio_url) > 500:
             return jsonify({'status': 'error', 'message': 'URL 長度超過限制'}), 400
 
-        # 檢測是否為 live 直播
-        is_live, live_message = url_service.is_youtube_live(youtube_url)
-        if is_live:
-            return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
+        # 只對YouTube URL進行直播檢測
+        if url_service.detect_url_type(audio_url) == 'youtube':
+            is_live, live_message = url_service.is_youtube_live(audio_url)
+            if is_live:
+                return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
 
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()
 
         task_data = {
-            'url': youtube_url,
+            'url': audio_url,
             'auto': auto_process
         }
 
-        try:
-            from urllib.parse import urlparse, parse_qs
-            parsed_url = urlparse(youtube_url)
+        # 如果用戶提供了metadata，優先使用
+        if user_title:
+            task_data['title'] = user_title
+        if user_uploader:
+            task_data['uploader'] = user_uploader
 
-            if 'youtube.com' in parsed_url.netloc:
-                video_id = parse_qs(parsed_url.query).get('v', [None])[0]
-                if video_id:
-                    task_data['video_id'] = video_id
-                    task_data['display_name'] = f"YouTube 影片 ({video_id})"
-            elif 'youtu.be' in parsed_url.netloc:
-                video_id = parsed_url.path.lstrip('/')
-                if video_id:
-                    task_data['video_id'] = video_id
-                    task_data['display_name'] = f"YouTube 影片 ({video_id})"
-        except Exception as e:
-            print(f"無法解析YouTube URL: {e}")
-            task_data['display_name'] = "YouTube 影片"
+        # 只對YouTube URL進行詳細解析
+        if url_service.detect_url_type(audio_url) == 'youtube':
+            try:
+                from urllib.parse import urlparse, parse_qs
+                parsed_url = urlparse(audio_url)
+
+                if 'youtube.com' in parsed_url.netloc:
+                    video_id = parse_qs(parsed_url.query).get('v', [None])[0]
+                    if video_id:
+                        task_data['video_id'] = video_id
+                        # 如果用戶提供了標題，使用用戶標題，否則使用預設格式
+                        if not user_title:
+                            task_data['display_name'] = f"YouTube 影片 ({video_id})"
+                        else:
+                            task_data['display_name'] = user_title
+                elif 'youtu.be' in parsed_url.netloc:
+                    video_id = parsed_url.path.lstrip('/')
+                    if video_id:
+                        task_data['video_id'] = video_id
+                        if not user_title:
+                            task_data['display_name'] = f"YouTube 影片 ({video_id})"
+                        else:
+                            task_data['display_name'] = user_title
+            except Exception as e:
+                print(f"無法解析YouTube URL: {e}")
+                task_data['display_name'] = user_title if user_title else "YouTube 影片"
+        else:
+            # 對於非YouTube URL，優先使用用戶提供的標題
+            if user_title:
+                task_data['display_name'] = user_title
+            else:
+                # 根據URL類型設定預設顯示名稱
+                url_type = url_service.detect_url_type(audio_url)
+                if url_type == 'podcast':
+                    task_data['display_name'] = "Podcast 音訊"
+                elif url_type == 'media':
+                    task_data['display_name'] = "媒體平台音訊"
+                elif url_type == 'direct_audio':
+                    task_data['display_name'] = "直接音訊檔案"
+                else:
+                    task_data['display_name'] = "音訊來源"
 
         queue_task_id = queue_manager.add_task('youtube', task_data, priority=5, user_ip=user_ip)
         queue_position = queue_manager.get_user_queue_position(queue_task_id)
@@ -513,10 +550,10 @@ def api_process_youtube():
         base_url = URLBuilder.build_base_url()
 
         return LegacyAPIResponse.processing(
-            f'YouTube任務已加入佇列，目前排隊位置: {queue_position}',
+            f'音訊處理任務已加入佇列，目前排隊位置: {queue_position}',
             queue_task_id,
             queue_position,
-            youtube_url=youtube_url,
+            youtube_url=audio_url,
             base_url=base_url
         )
 

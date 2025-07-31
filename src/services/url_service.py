@@ -9,8 +9,71 @@ class URLService:
     def detect_url_type(url: str) -> str:
         """檢測 URL 類型並返回相應的處理器"""
         url_lower = url.lower()
+
+        # YouTube
         if 'youtube.com' in url_lower or 'youtu.be' in url_lower:
             return 'youtube'
+
+        # 常見的podcast和音訊平台
+        podcast_domains = [
+            'spotify.com',
+            'soundcloud.com',
+            'anchor.fm',
+            'buzzsprout.com',
+            'libsyn.com',
+            'podbean.com',
+            'spreaker.com',
+            'castbox.fm',
+            'overcast.fm',
+            'pocketcasts.com',
+            'apple.com/podcasts',
+            'podcasts.apple.com',
+            'google.com/podcasts',
+            'podcasts.google.com',
+            'stitcher.com',
+            'tunein.com',
+            'iheart.com',
+            'iheartradio.com',
+            'audioboom.com',
+            'simplecast.com',
+            'megaphone.fm',
+            'acast.com',
+            'whooshkaa.com',
+            'podcast.co',
+            'rss.com',
+            'transistor.fm',
+            'captivate.fm',
+            'redcircle.com',
+            'zencastr.com'
+        ]
+
+        for domain in podcast_domains:
+            if domain in url_lower:
+                return 'podcast'
+
+        # 其他音訊/影片平台
+        media_domains = [
+            'vimeo.com',
+            'dailymotion.com',
+            'twitch.tv',
+            'facebook.com',
+            'instagram.com',
+            'twitter.com',
+            'x.com',
+            'tiktok.com',
+            'bilibili.com',
+            'youku.com'
+        ]
+
+        for domain in media_domains:
+            if domain in url_lower:
+                return 'media'
+
+        # 直接音訊檔案
+        audio_extensions = ['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.wma']
+        if any(ext in url_lower for ext in audio_extensions):
+            return 'direct_audio'
+
         return 'unknown'
 
     @staticmethod
@@ -23,7 +86,7 @@ class URLService:
     def is_youtube_live(url: str) -> tuple[bool, str]:
         """
         檢測 YouTube URL 是否為 live 直播
-        
+
         Returns:
             tuple: (is_live, message)
                 - is_live: True 如果是直播，False 如果不是
@@ -37,15 +100,15 @@ class URLService:
                 'extract_flat': False,  # 需要詳細資訊來檢測直播狀態
                 'skip_download': True,
             }
-            
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                
+
                 # 檢查是否為直播
                 is_live = info.get('is_live', False)
                 was_live = info.get('was_live', False)
                 live_status = info.get('live_status', '')
-                
+
                 if is_live:
                     return True, "這是一個正在進行的直播"
                 elif was_live:
@@ -54,7 +117,7 @@ class URLService:
                     return True, f"這是一個直播 (狀態: {live_status})"
                 else:
                     return False, "這是一般影片"
-                    
+
         except Exception as e:
             # 如果無法獲取資訊，保守起見假設可能是直播
             return True, f"無法確定影片類型，為安全起見視為直播: {str(e)}"
