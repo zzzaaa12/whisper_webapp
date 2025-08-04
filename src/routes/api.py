@@ -1,6 +1,6 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from src.config import get_config
-from task_queue import get_task_queue, TaskStatus
+from src.core.task_queue import get_task_queue, TaskStatus
 import re
 import os
 from pathlib import Path
@@ -152,28 +152,21 @@ def api_get_bookmarks():
 def api_check_bookmark(filename):
     try:
         is_bookmarked_result = bookmark_service.is_bookmarked(filename)
-        return jsonify({
-            'success': True,
-            'is_bookmarked': is_bookmarked_result
-        })
+        return APIResponse.success({'is_bookmarked': is_bookmarked_result})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)})
+        return APIResponse.internal_error(str(e))
 
 @api_bp.route('/system/config-status')
 def api_get_config_status():
     try:
         access_code = get_config("ACCESS_CODE")
         openai_key = get_config("OPENAI_API_KEY")
-        return jsonify({
-            'success': True,
+        return APIResponse.success({
             'has_access_code': bool(access_code),
             'has_openai_key': bool(openai_key)
         })
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'message': f'獲取配置狀態失敗: {str(e)}'
-        }), 500
+        return APIResponse.internal_error(f'獲取配置狀態失敗: {str(e)}')
 
 @api_bp.route('/verify_access_code', methods=['POST'])
 def api_verify_access_code():
@@ -189,31 +182,32 @@ def api_verify_access_code():
 def api_upload_subtitle():
     try:
         if not request.is_json:
-            return jsonify({'success': False, 'message': '請求格式錯誤，需要 JSON 格式'}), 400
+            return APIResponse.validation_error('請求格式錯誤，需要 JSON 格式')
+
         data = request.get_json()
         filename = data.get('filename', '').strip()
         content = data.get('content', '')
         access_code = data.get('access_code', '').strip()
 
         if not filename:
-            return jsonify({'success': False, 'message': '缺少檔案名稱參數'}), 400
+            return APIResponse.validation_error('缺少檔案名稱參數')
         if not content:
-            return jsonify({'success': False, 'message': '缺少檔案內容參數'}), 400
+            return APIResponse.validation_error('缺少檔案內容參數')
         if not auth_service.verify_access_code(access_code):
-            return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+            return APIResponse.auth_error('通行碼錯誤')
 
         safe_filename = filename
         if not safe_filename:
-            return jsonify({'success': False, 'message': '檔案名稱無效'}), 400
+            return APIResponse.validation_error('檔案名稱無效')
         if not safe_filename.lower().endswith('.txt'):
             safe_filename += '.txt'
 
         file_path = SUMMARY_FOLDER / safe_filename
         if file_path.exists():
-            return jsonify({'success': False, 'message': f'檔案 {safe_filename} 已存在'}), 409
+            return APIResponse.conflict(f'檔案 {safe_filename} 已存在')
 
         if len(content.encode('utf-8')) > 10 * 1024 * 1024:
-            return jsonify({'success': False, 'message': '檔案內容過大，最大限制 10MB'}), 413
+            return APIResponse.payload_too_large('檔案內容過大，最大限制 10MB')
 
         SUMMARY_FOLDER.mkdir(exist_ok=True)
         file_path.write_text(content, encoding='utf-8')
@@ -235,15 +229,13 @@ def api_upload_subtitle():
                 result=result
             )
 
-        return jsonify({
-            'success': True,
-            'message': '檔案上傳成功',
+        return APIResponse.success({
             'filename': safe_filename,
             'path': str(file_path),
             'size': len(content.encode('utf-8'))
-        })
+        }, '檔案上傳成功')
     except Exception as e:
-        return jsonify({'success': False, 'message': f'上傳檔案時發生錯誤：{str(e)}'}), 500
+        return APIResponse.internal_error(f'上傳檔案時發生錯誤：{str(e)}')
 
 @api_bp.route('/upload_media', methods=['POST'])
 def api_upload_media():
@@ -258,10 +250,10 @@ def api_upload_media():
         else:
             # 需要驗證通行碼
             if not auth_service.verify_access_code(access_code):
-                return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+                return APIResponse.auth_error('通行碼錯誤')
 
         if 'media_file' not in request.files:
-            return jsonify({'success': False, 'message': '沒有選擇檔案'}), 400
+            return APIResponse.validation_error('沒有選擇檔案')
 
         file = request.files['media_file']
         user_ip = auth_service.get_client_ip()
@@ -270,36 +262,47 @@ def api_upload_media():
 
         if not result.get('success'):
             status_code = result.pop('status_code', 500)
-            return jsonify(result), status_code
+            message = result.get('message', '上傳失敗')
+            if status_code == 400:
+                return APIResponse.validation_error(message)
+            elif status_code == 413:
+                return APIResponse.payload_too_large(message)
+            else:
+                return APIResponse.internal_error(message)
 
-        return jsonify(result)
+        return APIResponse.success({
+            'task_id': result.get('task_id'),
+            'queue_position': result.get('queue_position'),
+            'filename': result.get('filename'),
+            'title': result.get('title'),
+            'file_size': result.get('file_size')
+        }, result.get('message', '檔案上傳成功'))
 
     except Exception as e:
-        # Consider logging the exception e for debugging
-        return jsonify({'success': False, 'message': f'上傳檔案時發生未預期的錯誤：{str(e)}'}), 500
+        return APIResponse.internal_error(f'上傳檔案時發生未預期的錯誤：{str(e)}')
 
 @api_bp.route('/queue/cancel', methods=['POST'])
 def api_cancel_queue_task():
     try:
         data = request.get_json()
         if not data or 'task_id' not in data:
-            return jsonify({'success': False, 'message': '缺少任務ID'}), 400
+            return APIResponse.validation_error('缺少任務ID')
 
         task_id = data['task_id']
         access_code = data.get('access_code', '').strip()
 
         if not auth_service.verify_access_code(access_code):
-            return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+            return APIResponse.auth_error('通行碼錯誤')
 
         queue_manager = get_task_queue()
         success, message = queue_manager.cancel_task(task_id, access_code)
 
-        return jsonify({
-            'success': success,
-            'message': message
-        })
+        if success:
+            return APIResponse.success(message=message)
+        else:
+            return APIResponse.error(message, 400)
     except Exception as e:
-        return jsonify({'success': False, 'message': f'取消任務失敗: {str(e)}'}), 500
+        return APIResponse.internal_error(f'取消任務失敗: {str(e)}')
 
 @api_bp.route('/queue/cleanup', methods=['POST'])
 def api_cleanup_queue():
@@ -309,18 +312,16 @@ def api_cleanup_queue():
         older_than_days = data.get('older_than_days', 7) if data else 7
 
         if not auth_service.verify_access_code(access_code):
-            return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+            return APIResponse.auth_error('通行碼錯誤')
 
         queue_manager = get_task_queue()
         deleted_count = queue_manager.cleanup_completed_tasks(older_than_days)
 
-        return jsonify({
-            'success': True,
-            'message': f'已清理 {deleted_count} 個已完成的任務',
+        return APIResponse.success({
             'deleted_count': deleted_count
-        })
+        }, f'已清理 {deleted_count} 個已完成的任務')
     except Exception as e:
-        return jsonify({'success': False, 'message': f'清理任務失敗: {str(e)}'}), 500
+        return APIResponse.internal_error(f'清理任務失敗: {str(e)}')
 
 @api_bp.route('/queue/delete', methods=['POST'])
 @require_access_code
@@ -393,7 +394,7 @@ def api_add_queue_task():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'success': False, 'message': '缺少請求資料'}), 400
+            return APIResponse.validation_error('缺少請求資料')
 
         task_type = data.get('task_type')
         task_data = data.get('data', {})
@@ -401,7 +402,7 @@ def api_add_queue_task():
         access_code = data.get('access_code', '').strip()
 
         if not task_type:
-            return jsonify({'success': False, 'message': '缺少任務類型'}), 400
+            return APIResponse.validation_error('缺少任務類型')
 
         # 檢查是否需要通行碼驗證
         from flask import session
@@ -411,22 +412,22 @@ def api_add_queue_task():
         else:
             # 需要驗證通行碼
             if not auth_service.verify_access_code(access_code):
-                return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
+                return APIResponse.auth_error('通行碼錯誤')
 
         valid_types = ['youtube', 'upload_media', 'upload_subtitle']
         if task_type not in valid_types:
-            return jsonify({'success': False, 'message': f'無效的任務類型。支援類型: {", ".join(valid_types)}'}), 400
+            return APIResponse.validation_error(f'無效的任務類型。支援類型: {", ".join(valid_types)}')
 
         # 如果是 YouTube 任務，檢測是否為 live 直播
         if task_type == 'youtube':
             youtube_url = task_data.get('url', '')
             if youtube_url:
                 if not url_service.validate_youtube_url(youtube_url):
-                    return jsonify({'success': False, 'message': '請輸入有效的 YouTube 網址'}), 400
+                    return APIResponse.validation_error('請輸入有效的 YouTube 網址')
 
                 is_live, live_message = url_service.is_youtube_live(youtube_url)
                 if is_live:
-                    return jsonify({'success': False, 'message': f'不支援處理直播影片。{live_message}'}), 400
+                    return APIResponse.validation_error(f'不支援處理直播影片。{live_message}')
 
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()
@@ -449,7 +450,7 @@ def api_add_queue_task():
 def api_process_youtube():
     try:
         if not request.is_json:
-            return jsonify({'status': 'error', 'message': '請求格式錯誤，需要 JSON 格式'}), 400
+            return LegacyAPIResponse.error('請求格式錯誤，需要 JSON 格式', 400)
 
         data = request.get_json()
         # 支援兩種參數名稱以保持向後相容性
@@ -462,7 +463,7 @@ def api_process_youtube():
         user_uploader = data.get('uploader', '').strip()
 
         if not audio_url:
-            return jsonify({'status': 'error', 'message': '缺少 youtube_url 或 audio_url 參數'}), 400
+            return LegacyAPIResponse.error('缺少 youtube_url 或 audio_url 參數', 400)
 
         # 檢查是否需要通行碼驗證
         from flask import session
@@ -472,20 +473,20 @@ def api_process_youtube():
         else:
             # 需要驗證通行碼
             if not auth_service.verify_access_code(access_code):
-                return jsonify({'status': 'error', 'message': '通行碼錯誤'}), 401
+                return LegacyAPIResponse.error('通行碼錯誤', 401)
 
         # 基本URL格式驗證（不限制特定網站）
         if not audio_url.startswith(('http://', 'https://')):
-            return jsonify({'status': 'error', 'message': '請輸入有效的網址 (必須包含 https:// 或 http://)'}), 400
+            return LegacyAPIResponse.error('請輸入有效的網址 (必須包含 https:// 或 http://)', 400)
 
         if len(audio_url) > 500:
-            return jsonify({'status': 'error', 'message': 'URL 長度超過限制'}), 400
+            return LegacyAPIResponse.error('URL 長度超過限制', 400)
 
         # 只對YouTube URL進行直播檢測
         if url_service.detect_url_type(audio_url) == 'youtube':
             is_live, live_message = url_service.is_youtube_live(audio_url)
             if is_live:
-                return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
+                return LegacyAPIResponse.error(f'不支援處理直播影片。{live_message}', 400)
 
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()
@@ -598,28 +599,28 @@ def api_delete_summary():
     try:
         data = request.get_json()
         if not data or 'filename' not in data:
-            return jsonify({'success': False, 'message': '缺少檔案名稱'}), 400
+            return APIResponse.validation_error('缺少檔案名稱')
 
         filename = data['filename']
 
         # 驗證檔案名稱
         if not filename or not filename.endswith('.txt'):
-            return jsonify({'success': False, 'message': '無效的檔案名稱'}), 400
+            return APIResponse.validation_error('無效的檔案名稱')
 
         file_path = SUMMARY_FOLDER / filename
         if not file_path.exists():
-            return jsonify({'success': False, 'message': '檔案不存在'}), 404
+            return APIResponse.not_found('檔案不存在')
 
         # 移動到垃圾桶
         success, message = trash_service.move_file_to_trash(file_path, 'summary')
 
         if success:
-            return jsonify({'success': True, 'message': message})
+            return APIResponse.success(message=message)
         else:
-            return jsonify({'success': False, 'message': message}), 500
+            return APIResponse.internal_error(message)
 
     except Exception as e:
-        return jsonify({'success': False, 'message': f'刪除失敗: {str(e)}'}), 500
+        return APIResponse.internal_error(f'刪除失敗: {str(e)}')
 
 @api_bp.route('/batch-delete', methods=['POST'])
 def api_batch_delete_summaries():
@@ -627,11 +628,11 @@ def api_batch_delete_summaries():
     try:
         data = request.get_json()
         if not data or 'filenames' not in data:
-            return jsonify({'success': False, 'message': '缺少檔案列表'}), 400
+            return APIResponse.validation_error('缺少檔案列表')
 
         filenames = data['filenames']
         if not isinstance(filenames, list) or not filenames:
-            return jsonify({'success': False, 'message': '檔案列表格式錯誤'}), 400
+            return APIResponse.validation_error('檔案列表格式錯誤')
 
         results = []
         success_count = 0
@@ -666,16 +667,14 @@ def api_batch_delete_summaries():
                     'message': f'處理失敗: {str(e)}'
                 })
 
-        return jsonify({
-            'success': True,
-            'message': f'批量刪除完成，成功處理 {success_count}/{len(filenames)} 個檔案',
+        return APIResponse.success({
             'results': results,
             'success_count': success_count,
             'total_count': len(filenames)
-        })
+        }, f'批量刪除完成，成功處理 {success_count}/{len(filenames)} 個檔案')
 
     except Exception as e:
-        return jsonify({'success': False, 'message': f'批量刪除失敗: {str(e)}'}), 500
+        return APIResponse.internal_error(f'批量刪除失敗: {str(e)}')
 
 @api_bp.route('/last_5_summary', methods=['POST'])
 def api_last_5_summary():
@@ -683,39 +682,26 @@ def api_last_5_summary():
     try:
         # 檢查請求格式
         if not request.is_json:
-            return jsonify({
-                'success': False,
-                'error': 'invalid_request',
-                'message': '請求格式錯誤，需要 JSON 格式'
-            }), 400
+            return APIResponse.validation_error('請求格式錯誤，需要 JSON 格式')
 
         data = request.get_json()
         access_code = data.get('access_code', '').strip()
 
         # 驗證通行碼
         if not auth_service.verify_access_code(access_code):
-            return jsonify({
-                'success': False,
-                'error': 'auth_error',
-                'message': '通行碼錯誤'
-            }), 401
+            return APIResponse.auth_error('通行碼錯誤')
 
         # 獲取摘要服務
         summary_service = get_summary_api_service()
         summaries = summary_service.get_latest_summaries(5)
 
-        return jsonify({
-            'success': True,
+        return APIResponse.success({
             'data': summaries,
             'count': len(summaries)
         })
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': 'internal_error',
-            'message': f'獲取摘要列表失敗: {str(e)}'
-        }), 500
+        return APIResponse.internal_error(f'獲取摘要列表失敗: {str(e)}')
 
 @api_bp.route('/get_summary', methods=['POST'])
 def api_get_summary():
@@ -723,11 +709,7 @@ def api_get_summary():
     try:
         # 檢查請求格式
         if not request.is_json:
-            return jsonify({
-                'success': False,
-                'error': 'invalid_request',
-                'message': '請求格式錯誤，需要 JSON 格式'
-            }), 400
+            return APIResponse.validation_error('請求格式錯誤，需要 JSON 格式')
 
         data = request.get_json()
         access_code = data.get('access_code', '').strip()
@@ -735,47 +717,24 @@ def api_get_summary():
 
         # 驗證通行碼
         if not auth_service.verify_access_code(access_code):
-            return jsonify({
-                'success': False,
-                'error': 'auth_error',
-                'message': '通行碼錯誤'
-            }), 401
+            return APIResponse.auth_error('通行碼錯誤')
 
         # 驗證索引參數
         if index is None:
-            return jsonify({
-                'success': False,
-                'error': 'missing_parameter',
-                'message': '缺少 index 參數'
-            }), 400
+            return APIResponse.validation_error('缺少 index 參數')
 
         # 檢查索引類型和範圍
         if not isinstance(index, int) or index < 1 or index > 5:
-            return jsonify({
-                'success': False,
-                'error': 'invalid_index',
-                'message': 'index 必須是 1-5 之間的整數'
-            }), 400
+            return APIResponse.validation_error('index 必須是 1-5 之間的整數')
 
         # 獲取摘要服務
         summary_service = get_summary_api_service()
         summary = summary_service.get_summary_by_index(index)
 
         if summary is None:
-            return jsonify({
-                'success': False,
-                'error': 'not_found',
-                'message': f'找不到第 {index} 個摘要'
-            }), 404
+            return APIResponse.not_found(f'找不到第 {index} 個摘要')
 
-        return jsonify({
-            'success': True,
-            'data': summary
-        })
+        return APIResponse.success({'data': summary})
 
     except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': 'internal_error',
-            'message': f'獲取摘要內容失敗: {str(e)}'
-        }), 500
+        return APIResponse.internal_error(f'獲取摘要內容失敗: {str(e)}')

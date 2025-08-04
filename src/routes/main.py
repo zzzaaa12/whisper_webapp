@@ -2,13 +2,14 @@ from flask import Blueprint, render_template, send_file, request, session, redir
 from pathlib import Path
 import os
 import re
+from typing import Tuple, Optional
+from urllib.parse import unquote
 
 from src.config import get_config
 from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
 from src.utils.path_manager import get_path_manager
-from src.utils.file_validator import FileValidator
 
 main_bp = Blueprint('main', __name__)
 
@@ -22,6 +23,61 @@ BOOKMARK_FILE = path_manager.get_bookmark_file()
 auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
 trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
+
+
+def validate_safe_path(filename: str, allowed_folder: Path,
+                      allowed_extensions: Optional[set] = None) -> Tuple[bool, str, Optional[Path]]:
+    """
+    統一的檔案路徑安全驗證
+
+    Args:
+        filename: 檔案名稱
+        allowed_folder: 允許的資料夾路徑
+        allowed_extensions: 允許的副檔名集合（可選）
+
+    Returns:
+        tuple: (是否有效, 錯誤訊息, 安全路徑)
+    """
+    try:
+        # URL 解碼檔案名稱
+        decoded_filename = unquote(filename)
+
+        # 構建安全路徑
+        safe_path = (allowed_folder / decoded_filename).resolve()
+        allowed_folder_resolved = allowed_folder.resolve()
+
+        # 檢查路徑是否在允許的資料夾內
+        if not str(safe_path).startswith(str(allowed_folder_resolved)):
+            return False, "檔案路徑無效", None
+
+        # 檢查檔案是否存在
+        if not safe_path.exists():
+            return False, "檔案不存在", None
+
+        # 檢查副檔名（如果指定）
+        if allowed_extensions and safe_path.suffix.lower() not in allowed_extensions:
+            return False, "檔案類型不支援", None
+
+        return True, "", safe_path
+
+    except Exception as e:
+        return False, f"檔案路徑驗證失敗: {str(e)}", None
+
+
+def validate_summary_file(filename: str, summary_folder: Path) -> Tuple[bool, str, Optional[Path]]:
+    """驗證摘要檔案"""
+    return validate_safe_path(filename, summary_folder, allowed_extensions={'.txt'})
+
+
+def validate_subtitle_file(filename: str, subtitle_folder: Path) -> Tuple[bool, str, Optional[Path]]:
+    """驗證字幕檔案"""
+    # 處理檔案名稱轉換（.txt -> .srt）
+    if filename.endswith('.txt'):
+        filename = filename[:-4] + '.srt'
+    elif not filename.endswith('.srt'):
+        filename += '.srt'
+
+    return validate_safe_path(filename, subtitle_folder, allowed_extensions={'.srt'})
 
 
 def extract_channel_from_summary(file_path):
@@ -199,7 +255,7 @@ def list_summaries():
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
     from flask import request
-    from task_queue import get_task_queue
+    from src.core.task_queue import get_task_queue
 
     # New logic to handle task_id
     task_id = request.args.get('task_id')
@@ -216,7 +272,7 @@ def show_summary(filename):
             return "任務或摘要檔案資訊不完整", 404
 
     # 使用統一的檔案驗證
-    is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
+    is_valid, error_msg, safe_path = validate_summary_file(filename, SUMMARY_FOLDER)
     if not is_valid:
         return error_msg, 400 if "無效" in error_msg else 404
 
@@ -239,7 +295,7 @@ def show_summary(filename):
 def download_summary(filename):
     try:
         # 使用統一的檔案驗證
-        is_valid, error_msg, safe_path = FileValidator.validate_summary_file(filename, SUMMARY_FOLDER)
+        is_valid, error_msg, safe_path = validate_summary_file(filename, SUMMARY_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
 
@@ -251,7 +307,7 @@ def download_summary(filename):
 def download_subtitle(filename):
     try:
         # 使用統一的檔案驗證
-        is_valid, error_msg, safe_path = FileValidator.validate_subtitle_file(filename, SUBTITLE_FOLDER)
+        is_valid, error_msg, safe_path = validate_subtitle_file(filename, SUBTITLE_FOLDER)
         if not is_valid:
             return error_msg, 400 if "無效" in error_msg else 404
 

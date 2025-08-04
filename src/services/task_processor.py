@@ -13,7 +13,7 @@ import requests
 from urllib.parse import unquote
 import yt_dlp
 
-from task_queue import get_task_queue, TaskStatus
+from src.core.task_queue import get_task_queue, TaskStatus
 from src.config import get_config
 from src.services.notification_service import send_telegram_notification
 from src.utils.file_sanitizer import sanitize_filename

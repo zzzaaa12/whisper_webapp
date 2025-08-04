@@ -1,14 +1,14 @@
 import os
 import uuid
+import logging
 from pathlib import Path
 from werkzeug.datastructures import FileStorage
 
 from src.config import get_config
-from task_queue import get_task_queue
+from src.core.task_queue import get_task_queue
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.time_formatter import get_timestamp
 from src.utils.path_manager import get_path_manager
-from src.utils.directory_manager import DirectoryManager
 
 class FileService:
     """統一檔案操作工具"""
@@ -23,6 +23,42 @@ class FileService:
             '.mp3', '.mp4', '.wav', '.m4a', '.flv', '.avi', '.mov',
             '.mkv', '.webm', '.ogg', '.aac', '.wma', '.wmv', '.3gp'
         }
+        self.logger = logging.getLogger(__name__)
+
+    @staticmethod
+    def ensure_dir(dir_path: Path) -> bool:
+        """
+        確保目錄存在
+
+        Args:
+            dir_path: 目錄路徑
+
+        Returns:
+            bool: 是否成功創建或目錄已存在
+        """
+        try:
+            dir_path.mkdir(parents=True, exist_ok=True)
+            return True
+        except Exception as e:
+            logging.getLogger(__name__).error(f"創建目錄失敗 {dir_path}: {e}")
+            return False
+
+    @staticmethod
+    def ensure_parent_dir(file_path: Path) -> bool:
+        """
+        確保檔案的父目錄存在
+
+        Args:
+            file_path: 檔案路徑
+
+        Returns:
+            bool: 是否成功
+        """
+        try:
+            return FileService.ensure_dir(file_path.parent)
+        except Exception as e:
+            logging.getLogger(__name__).error(f"創建父目錄失敗 {file_path}: {e}")
+            return False
 
     def save_uploaded_media(self, file: FileStorage, user_ip: str) -> dict:
         """
@@ -52,7 +88,7 @@ class FileService:
         task_id_short = str(uuid.uuid4())[:8]
         safe_filename = f"{timestamp}_{task_id_short}_{safe_title}{file_ext}"
 
-        DirectoryManager.ensure_dir(self.upload_folder)
+        self.ensure_dir(self.upload_folder)
         file_path = self.upload_folder / safe_filename
         file.save(str(file_path))
 
@@ -98,17 +134,12 @@ class FileService:
     def safe_write_text(file_path: Path, content: str, encoding: str = "utf-8") -> bool:
         """安全寫入文字檔案"""
         try:
-            # 使用統一的目錄管理器
-            DirectoryManager.ensure_parent_dir(file_path)
+            # 確保父目錄存在
+            FileService.ensure_parent_dir(file_path)
             file_path.write_text(content, encoding=encoding)
             return True
         except Exception as e:
             raise IOError(f"寫入檔案失敗 {file_path}: {e}")
-
-    @staticmethod
-    def ensure_dir(dir_path: Path) -> None:
-        """確保目錄存在（向後兼容）"""
-        DirectoryManager.ensure_dir(dir_path)
 
 # 便捷函數導出
 file_service = FileService()

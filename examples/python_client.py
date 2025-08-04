@@ -136,12 +136,12 @@ def main():
     """主函數 - 命令列介面"""
     if len(sys.argv) < 2:
         print("使用方法：")
-        print("  python client.py <YouTube_URL>")
-        print("  python client.py <YouTube_URL> --server <SERVER_URL>")
+        print("  python python_client.py <YouTube_URL>")
+        print("  python python_client.py <YouTube_URL> --server <SERVER_URL>")
         print("")
         print("範例：")
-        print("  python client.py https://www.youtube.com/watch?v=example")
-        print("  python client.py https://www.youtube.com/watch?v=example --server http://192.168.1.100:5000")
+        print("  python python_client.py https://www.youtube.com/watch?v=example")
+        print("  python python_client.py https://www.youtube.com/watch?v=example --server http://192.168.1.100:5000")
         sys.exit(1)
 
     # 解析命令列參數

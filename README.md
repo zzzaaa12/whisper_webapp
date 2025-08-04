@@ -123,7 +123,8 @@ python app.py
 
 **Python Client 範例**：
 ```python
-from client import WhisperClient
+# 將 examples/python_client.py 複製到你的專案中
+from examples.python_client import WhisperClient
 
 client = WhisperClient("http://localhost:5000")
 result = client.send_youtube_url("https://www.youtube.com/watch?v=xxxx")
