@@ -42,8 +42,12 @@ def create_app(base_dir: Path = None):
     setup_logging(base_dir / "logs", enable_console=True)
     logger_manager = get_logger_manager()
 
-    # 創建 Flask 應用程式
-    app = Flask(__name__)
+    # 創建 Flask 應用程式，指定正確的模板和靜態檔案路徑
+    app = Flask(
+        __name__,
+        template_folder=str(base_dir / 'templates'),
+        static_folder=str(base_dir / 'static')
+    )
     app.config['SECRET_KEY'] = get_config('SECRET_KEY', os.urandom(24))
 
     # 確保路徑管理器在配置初始化後才被使用
