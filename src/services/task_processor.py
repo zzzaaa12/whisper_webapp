@@ -236,7 +236,8 @@ class TaskProcessor:
 
         try:
             url = data.get('url')
-            title = data.get('title', '')
+            user_title = data.get('title', '')
+            user_uploader = data.get('uploader', '')
 
             if not url:
                 raise ValueError("缺少 YouTube URL")
@@ -251,20 +252,24 @@ class TaskProcessor:
             }
             with self.yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                video_title = info.get('title', '')
-                uploader = info.get('uploader', '')
+                auto_video_title = info.get('title', '')
+                auto_uploader = info.get('uploader', '')
                 duration = info.get('duration', 0)
 
-                # 格式化影片長度
-                duration_string = ""
-                if duration:
-                    hours = duration // 3600
-                    minutes = (duration % 3600) // 60
-                    seconds = duration % 60
-                    if hours > 0:
-                        duration_string = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-                    else:
-                        duration_string = f"{minutes:02d}:{seconds:02d}"
+            # 優先使用用戶提供的metadata，否則使用自動獲取的
+            video_title = user_title if user_title else auto_video_title
+            uploader = user_uploader if user_uploader else auto_uploader
+
+            # 格式化影片長度
+            duration_string = ""
+            if duration:
+                hours = duration // 3600
+                minutes = (duration % 3600) // 60
+                seconds = duration % 60
+                if hours > 0:
+                    duration_string = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                else:
+                    duration_string = f"{minutes:02d}:{seconds:02d}"
 
             # 更新任務資料
             self.task_queue.update_task_status(
@@ -294,27 +299,48 @@ class TaskProcessor:
             subtitle_path = self.subtitle_folder / f"{sanitized_title}.srt"
             summary_path = self.summary_folder / f"{sanitized_title}.txt"
 
-            # 檢查是否已有相同檔名的影片
-            audio_file = None
+            # 檢查是否已有相同內容的影片檔案（使用新的檔名比對邏輯）
+            from src.utils.filename_matcher import FilenameMatcher
+
+            audio_file = FilenameMatcher.find_existing_audio_file(video_title, self.download_folder)
             skip_transcription = False
-            for file in self.download_folder.glob('*'):
-                if video_title in file.stem:
-                    audio_file = file
-                    self._log_worker_message(task_id, f"Found existing file: {audio_file}")
+
+            if audio_file:
+                self._log_worker_message(task_id, f"Found existing file: {audio_file}")
+
+            # 檢查是否已有相同內容的字幕檔案
+            matching_subtitles = FilenameMatcher.find_matching_files(
+                f"{sanitized_title}.srt", self.subtitle_folder, ['.srt']
+            )
+
+            for subtitle_file in matching_subtitles:
+                if subtitle_file.stat().st_size > 500:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=80,
+                        log_message="✅ 找到相同內容的字幕快取，跳過轉錄"
+                    )
+                    self._log_worker_message(task_id, f"找到相同內容的字幕快取: {subtitle_file}")
+                    skip_transcription = True
+                    # 將找到的字幕檔案複製到目標位置（如果路徑不同）
+                    if subtitle_file != subtitle_path:
+                        import shutil
+                        shutil.copy2(subtitle_file, subtitle_path)
+                        self._log_worker_message(task_id, f"複製字幕檔案: {subtitle_file} -> {subtitle_path}")
                     break
 
-            # 檢查是否應該跳過轉錄
-            should_skip_transcription, skip_reason = self._should_skip_transcription(subtitle_path)
-            if should_skip_transcription:
-                self.task_queue.update_task_status(
-                    task_id, TaskStatus.PROCESSING, progress=80,
-                    log_message="✅ 跳過轉錄，使用現有字幕"
-                )
-                self._log_worker_message(task_id, f"跳過轉錄: {skip_reason}")
-                skip_transcription = True
-            else:
-                self._log_worker_message(task_id, f"需要轉錄: {skip_reason}")
-                skip_transcription = False
+            # 如果沒有找到相同內容的字幕，檢查目標路徑是否已有字幕檔案
+            if not skip_transcription:
+                should_skip_transcription, skip_reason = self._should_skip_transcription(subtitle_path)
+                if should_skip_transcription:
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.PROCESSING, progress=80,
+                        log_message="✅ 跳過轉錄，使用目標路徑現有字幕"
+                    )
+                    self._log_worker_message(task_id, f"跳過轉錄: {skip_reason}")
+                    skip_transcription = True
+                else:
+                    self._log_worker_message(task_id, f"需要轉錄: {skip_reason}")
+                    skip_transcription = False
 
             # 尋找是否已下載相同影片
             if not audio_file:
@@ -333,17 +359,39 @@ class TaskProcessor:
             if subtitle_path.exists():
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
 
-                # 檢查是否應該跳過摘要生成
-                should_skip_summarization, summary_skip_reason = self._should_skip_summarization(summary_path)
-                if should_skip_summarization:
-                    self.task_queue.update_task_status(
-                        task_id, TaskStatus.PROCESSING, progress=100,
-                        log_message="✅ 跳過摘要生成，使用現有摘要"
-                    )
-                    self._log_worker_message(task_id, f"跳過摘要生成: {summary_skip_reason}")
-                else:
-                    self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
-                    self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url, 'duration_string': duration_string})
+                # 檢查是否已有相同內容的摘要檔案
+                skip_summarization = False
+                matching_summaries = FilenameMatcher.find_matching_files(
+                    f"{sanitized_title}.txt", self.summary_folder, ['.txt']
+                )
+
+                for summary_file in matching_summaries:
+                    if summary_file.stat().st_size > 500:
+                        self.task_queue.update_task_status(
+                            task_id, TaskStatus.PROCESSING, progress=100,
+                            log_message="✅ 找到相同內容的摘要快取，跳過摘要生成"
+                        )
+                        self._log_worker_message(task_id, f"找到相同內容的摘要快取: {summary_file}")
+                        skip_summarization = True
+                        # 將找到的摘要檔案複製到目標位置（如果路徑不同）
+                        if summary_file != summary_path:
+                            import shutil
+                            shutil.copy2(summary_file, summary_path)
+                            self._log_worker_message(task_id, f"複製摘要檔案: {summary_file} -> {summary_path}")
+                        break
+
+                # 如果沒有找到相同內容的摘要，檢查目標路徑是否已有摘要檔案
+                if not skip_summarization:
+                    should_skip_summarization, summary_skip_reason = self._should_skip_summarization(summary_path)
+                    if should_skip_summarization:
+                        self.task_queue.update_task_status(
+                            task_id, TaskStatus.PROCESSING, progress=100,
+                            log_message="✅ 跳過摘要生成，使用目標路徑現有摘要"
+                        )
+                        self._log_worker_message(task_id, f"跳過摘要生成: {summary_skip_reason}")
+                    else:
+                        self._log_worker_message(task_id, f"需要生成摘要: {summary_skip_reason}")
+                        self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url, 'duration_string': duration_string})
 
                 # 發送摘要郵件（無論是否跳過摘要生成）
                 self._send_summary_email(task_id, video_title, summary_path)

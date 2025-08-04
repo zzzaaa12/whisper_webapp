@@ -180,15 +180,27 @@ class TaskQueue:
                             base_name = f"{date_str} - {title}"
                             sanitized_title = sanitize_filename(base_name)
 
-                        # 檢查摘要文件是否存在
-                        summary_path = self.data_dir.parent / "summaries" / f"{sanitized_title}.txt"
-                        if summary_path.exists() and summary_path.stat().st_size > 500:
-                            return True
+                        # 使用新的檔名比對邏輯檢查是否有相同內容的檔案
+                        from src.utils.filename_matcher import FilenameMatcher
 
-                        # 檢查字幕文件是否存在
-                        subtitle_path = self.data_dir.parent / "subtitles" / f"{sanitized_title}.srt"
-                        if subtitle_path.exists() and subtitle_path.stat().st_size > 500:
-                            return True
+                        summaries_dir = self.data_dir.parent / "summaries"
+                        subtitles_dir = self.data_dir.parent / "subtitles"
+
+                        # 檢查摘要目錄中是否有相同內容的檔案
+                        matching_summaries = FilenameMatcher.find_matching_files(
+                            f"{sanitized_title}.txt", summaries_dir, ['.txt']
+                        )
+                        for summary_file in matching_summaries:
+                            if summary_file.stat().st_size > 500:
+                                return True
+
+                        # 檢查字幕目錄中是否有相同內容的檔案
+                        matching_subtitles = FilenameMatcher.find_matching_files(
+                            f"{sanitized_title}.srt", subtitles_dir, ['.srt']
+                        )
+                        for subtitle_file in matching_subtitles:
+                            if subtitle_file.stat().st_size > 500:
+                                return True
 
                 elif task.task_type == 'upload_media':
                     # 上傳媒體任務：檢查結果中的文件路徑
