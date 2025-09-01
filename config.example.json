@@ -62,6 +62,13 @@
   "AI_FALLBACK_ENABLED": true,
   "AI_FALLBACK_ORDER": ["openai", "claude", "gemini", "deepseek", "ollama"],
 
+  "_comment_subtitle": "=== YouTube 字幕擷取配置 ===",
+  "SUBTITLE_EXTRACTION": {
+    "enabled": true,
+    "preferred_languages": ["zh-TW", "zh-CN", "zh", "en"],
+    "quality_threshold": 7
+  },
+
   "_comment_other": "=== 其他配置 ===",
   "PUBLIC_PORT": 0,
   "_comment_public_port": "0 表示使用 SERVER_PORT，大於 0 時將作為公開訪問埠號",

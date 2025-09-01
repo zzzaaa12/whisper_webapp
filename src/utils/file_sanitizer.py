@@ -1,6 +1,7 @@
 
 
 import re
+from src.utils.traditional_converter import to_traditional
 
 class FileNameSanitizer:
     """統一檔案名清理器"""
@@ -12,6 +13,9 @@ class FileNameSanitizer:
             return "unknown"
 
         original = filename
+
+        # 0. 轉換為繁體中文
+        filename = to_traditional(filename)
 
         # 1. 移除 Windows 禁用字元
         filename = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename)
@@ -45,7 +49,6 @@ class FileNameSanitizer:
 
         if '_-_' in filename:
             filename = filename.replace('_-_', ' - ')
-            print("name fixed")
 
         result = filename if filename else "unknown"
         return result

@@ -122,8 +122,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 監聽任務日誌事件（從worker傳來的日誌）
     socket.on('task_log', (data) => {
-        const cleanMessage = data.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        appendLog(cleanMessage, 'info');
+        if (data.message) {
+            const cleanMessage = data.message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            appendLog(cleanMessage, 'info');
+        }
     });
 
     socket.on('update_video_info', (data) => {
@@ -505,11 +507,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // 監聽任務日誌事件（用於顯示YouTube影片標題等）
-    socket.on('task_log', (data) => {
-        if (data.message) {
-            appendLog(`[${data.timestamp}] ${data.message}`, 'info');
-        }
-    });
+
 
 });

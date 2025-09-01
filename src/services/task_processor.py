@@ -277,8 +277,14 @@ class TaskProcessor:
                 data_update={'title': video_title, 'uploader': uploader}
             )
 
+            # 獲取佇列位置（在任務開始處理前）
+            queue_position = self.task_queue.get_user_queue_position(task_id)
+
             # 發送 Telegram 通知
-            self.notification_service(f"🎬 開始處理影片\n標題: {video_title}\n上傳者: {uploader}")
+            notification_msg = f"🎬 開始處理影片\n標題: {video_title}\n上傳者: {uploader}"
+            if queue_position > 0:
+                notification_msg += f"\n📍 佇列位置: 第 {queue_position} 位"
+            self.notification_service(notification_msg)
 
             # 準備檔案路徑
             date_str = get_timestamp('date')
@@ -430,8 +436,14 @@ class TaskProcessor:
             self._log_worker_message(task_id, f"Processing uploaded media: {audio_file.name}")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=10)
 
+            # 獲取佇列位置（在任務開始處理前）
+            queue_position = self.task_queue.get_user_queue_position(task_id)
+
             # 發送 Telegram 通知
-            self.notification_service(f"🎵 開始處理音訊檔案\n檔案: {title or audio_file.name}")
+            notification_msg = f"🎵 開始處理音訊檔案\n檔案: {title or audio_file.name}"
+            if queue_position > 0:
+                notification_msg += f"\n📍 佇列位置: 第 {queue_position} 位"
+            self.notification_service(notification_msg)
 
             # 檢查是否應該跳過轉錄
             should_skip_transcription, skip_reason = self._should_skip_transcription(subtitle_path)
