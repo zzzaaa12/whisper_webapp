@@ -302,12 +302,11 @@ def handle_start_processing(data):
             base_url = f"{protocol}://{website_base_url}"
         else:
             base_url = f"{protocol}://{website_base_url}:{effective_port}"
-        summary_url = f"{base_url}/summaries/{task_id}"
 
         if queue_position > 1:
-            socket_service.log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}。預計摘要網址：{summary_url}", 'warning', sid)
+            socket_service.log_and_emit(f"⏳ 任務已加入佇列，目前排隊位置：第 {queue_position} 位，任務ID：{task_id[:8]}。", 'warning', sid)
         else:
-            socket_service.log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}。預計摘要網址：{summary_url}', 'success', sid)
+            socket_service.log_and_emit(f'✅ 任務已接收並開始處理，任務ID：{task_id[:8]}。', 'success', sid)
 
     except Exception as e:
         socket_service.log_and_emit(f"❌ 加入佇列失敗：{str(e)}", 'error', sid)
