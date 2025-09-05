@@ -206,22 +206,39 @@ class QueueWorker:
 
             self.logger_manager.info(f"Processing YouTube URL: {url}", "queue_worker")
 
-            # 先獲取影片資訊（不下載）
+            # 先獲取影片資訊（不下載）- 優化版本
             self._emit_log_to_frontend(task_id, "📋 獲取影片資訊...")
             info_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': False  # 改為 False 以獲取完整資訊
+                'extract_flat': False,
+                'socket_timeout': 15,  # 減少超時時間
+                'retries': 1,  # 減少重試次數
+                'fragment_retries': 1,
+                'skip_download': True,
+                'no_check_certificate': True  # 加速 SSL 驗證
             }
-            with self.yt_dlp.YoutubeDL(info_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                video_title = info.get('title', '')
-                uploader = info.get('uploader', '')
-                duration = info.get('duration', 0)
-                view_count = info.get('view_count', 0)
-                upload_date = info.get('upload_date', '')
-                description = info.get('description', '')
-                thumbnail = info.get('thumbnail', '')
+
+            # 使用 try-except 包裝以避免阻塞
+            try:
+                with self.yt_dlp.YoutubeDL(info_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                    video_title = info.get('title', '')
+                    uploader = info.get('uploader', '')
+                    duration = info.get('duration', 0)
+                    view_count = info.get('view_count', 0)
+                    upload_date = info.get('upload_date', '')
+                    description = info.get('description', '')
+                    thumbnail = info.get('thumbnail', '')
+            except Exception as e:
+                self.logger_manager.warning(f"獲取影片資訊失敗，使用預設值: {e}", "queue_worker")
+                video_title = f"YouTube 影片 ({url[-11:] if len(url) > 11 else 'unknown'})"
+                uploader = "未知上傳者"
+                duration = 0
+                view_count = 0
+                upload_date = ""
+                description = ""
+                thumbnail = ""
 
             # 更新任務資料，包含完整的影片資訊
             video_info_update = {

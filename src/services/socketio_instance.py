@@ -11,7 +11,17 @@ socketio = None
 def init_socketio(app):
     """初始化 SocketIO 實例"""
     global socketio
-    socketio = SocketIO(app, async_mode='threading')
+    socketio = SocketIO(
+        app,
+        async_mode='threading',
+        logger=False,
+        engineio_logger=False,
+        ping_timeout=60,
+        ping_interval=25,
+        max_http_buffer_size=1024 * 1024,  # 1MB
+        allow_upgrades=True,
+        compression=True
+    )
     return socketio
 
 def get_socketio():

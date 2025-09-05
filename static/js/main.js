@@ -84,13 +84,13 @@ document.addEventListener('DOMContentLoaded', () => {
             appendLog('重新連接成功！', 'success');
         }
 
-        // 定期更新 GPU 狀態（每 30 秒）
+        // 定期更新 GPU 狀態（每 60 秒）- 優化版本
         if (window.gpuUpdateInterval) {
             clearInterval(window.gpuUpdateInterval);
         }
         window.gpuUpdateInterval = setInterval(() => {
             socket.emit('request_gpu_status');
-        }, 30000); // 30 秒更新一次
+        }, 60000); // 60 秒更新一次，減少頻繁請求
     });
 
     socket.on('disconnect', () => {
