@@ -3,6 +3,7 @@
 from typing import Dict, Any
 
 import json
+import re
 from pathlib import Path
 from datetime import datetime
 
@@ -15,6 +16,40 @@ class BookmarkService:
     def __init__(self, bookmark_file: Path, summary_folder: Path):
         self.bookmark_file = bookmark_file
         self.summary_folder = summary_folder
+
+    def _extract_title_from_summary(self, file_path: Path) -> str:
+        """從摘要文件中提取標題"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # 讀取前20行來尋找標題
+                for i, line in enumerate(f):
+                    if i > 20:  # 只檢查前20行
+                        break
+
+                    line = line.strip()
+
+                    # 提取標題
+                    if '🎬 標題：' in line:
+                        return line.split('🎬 標題：')[1].strip()
+                    elif '標題：' in line:
+                        return line.split('標題：')[1].strip()
+
+            # 如果沒有找到標題，處理檔名作為標題
+            filename_title = file_path.stem
+            # 移除常見的前綴模式
+            filename_title = re.sub(r'^var_www_html_yt_sub_\d{8}_', '', filename_title)
+            filename_title = re.sub(r'_summary$', '', filename_title)
+            filename_title = filename_title.replace('_', ' ')
+            return filename_title
+
+        except Exception as e:
+            print(f"提取標題時發生錯誤: {e}")
+            # 作為fallback，處理檔名
+            filename_title = file_path.stem
+            filename_title = re.sub(r'^var_www_html_yt_sub_\d{8}_', '', filename_title)
+            filename_title = re.sub(r'_summary$', '', filename_title)
+            filename_title = filename_title.replace('_', ' ')
+            return filename_title
 
     def _load_bookmarks_data(self) -> dict:
         """載入書籤資料"""
@@ -57,7 +92,11 @@ class BookmarkService:
                 if bookmark['filename'] == filename:
                     return False, "此摘要已在書籤中"
             if not title:
-                title = filename.replace('.txt', '').replace('_', ' ')
+                summary_path = self.summary_folder / filename
+                if summary_path.exists():
+                    title = self._extract_title_from_summary(summary_path)
+                else:
+                    title = filename.replace('.txt', '').replace('_', ' ')
             bookmark = {
                 'filename': filename,
                 'title': title,

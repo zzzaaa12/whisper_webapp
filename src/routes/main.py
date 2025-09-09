@@ -149,12 +149,26 @@ def list_summaries():
 
     for f in files:
         channel = extract_channel_from_summary(f)
+        video_info = extract_video_info_from_summary(f)
+
+        # 使用文件內容中的標題，如果沒有則處理檔名作為標題
+        if video_info.get('title'):
+            display_title = video_info.get('title')
+        else:
+            # 從檔名提取更好的標題
+            filename_title = f.stem
+            # 移除常見的前綴模式，例如日期、Auto標記等
+            filename_title = re.sub(r'^var_www_html_yt_sub_\d{8}_', '', filename_title)  # 移除路徑前綴和日期
+            filename_title = re.sub(r'_summary$', '', filename_title)  # 移除結尾的_summary
+            filename_title = filename_title.replace('_', ' ')  # 將底線替換為空格
+            display_title = filename_title
 
         # 統計每個頻道的摘要數量
         channel_counts[channel] = channel_counts.get(channel, 0) + 1
 
         summaries_with_info.append({
             'filename': f.name,
+            'title': display_title,
             'is_bookmarked': bookmark_service.is_bookmarked(f.name),
             'channel': channel
         })
@@ -229,8 +243,20 @@ def show_summary(filename):
     # 提取影片信息
     video_info = extract_video_info_from_summary(safe_path)
 
+    # 使用文件內容中的標題，如果沒有則處理檔名作為標題
+    if video_info.get('title'):
+        page_title = video_info.get('title')
+    else:
+        # 從檔名提取更好的標題
+        filename_title = safe_path.stem
+        # 移除常見的前綴模式，例如日期、Auto標記等
+        filename_title = re.sub(r'^var_www_html_yt_sub_\d{8}_', '', filename_title)  # 移除路徑前綴和日期
+        filename_title = re.sub(r'_summary$', '', filename_title)  # 移除結尾的_summary
+        filename_title = filename_title.replace('_', ' ')  # 將底線替換為空格
+        page_title = filename_title
+
     return render_template('summary_detail.html',
-                         title=safe_path.stem,
+                         title=page_title,
                          content=content,
                          filename=safe_path.name,
                          has_subtitle=has_subtitle,

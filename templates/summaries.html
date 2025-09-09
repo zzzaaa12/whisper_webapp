@@ -383,7 +383,7 @@
                             <span class="input-group-text">
                                 <i class="bi bi-search"></i>
                             </span>
-                            <input type="text" class="form-control" id="desktop-search-input" placeholder="搜尋摘要檔案名稱...">
+                            <input type="text" class="form-control" id="desktop-search-input" placeholder="搜尋摘要標題...">
                             <button class="btn btn-outline-secondary" type="button" id="desktop-clear-search">
                                 <i class="bi bi-x-lg"></i>
                             </button>
@@ -408,10 +408,10 @@
                 <div class="card-body p-0">
                     <div class="list-group list-group-flush" id="desktop-summaries-list">
                         {% for summary in summaries %}
-                        <div class="summary-item" data-filename="{{ summary.filename }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
+                        <div class="summary-item" data-filename="{{ summary.filename }}" data-title="{{ summary.title }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
                             <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
                             <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
-                                <h6 class="mb-1">{{ summary.filename.replace('.txt', '') }}</h6>
+                                <h6 class="mb-1">{{ summary.title }}</h6>
                                 <div class="summary-meta">
                                     <span class="channel-badge">{{ summary.channel }}</span>
                                     {% if summary.is_bookmarked %}
@@ -486,7 +486,7 @@
                     <span class="input-group-text">
                         <i class="bi bi-search"></i>
                     </span>
-                    <input type="text" class="form-control" id="mobile-search-input" placeholder="搜尋摘要檔案名稱...">
+                    <input type="text" class="form-control" id="mobile-search-input" placeholder="搜尋摘要標題...">
                     <button class="btn btn-outline-secondary" type="button" id="mobile-clear-search">
                         <i class="bi bi-x-lg"></i>
                     </button>
@@ -507,7 +507,7 @@
                         <div class="summary-item{{ ' bookmarked' if summary.is_bookmarked else '' }}" data-filename="{{ summary.filename }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
                             <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
                             <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
-                                <h6 class="mb-1">{{ summary.filename.replace('.txt', '') }}</h6>
+                                <h6 class="mb-1">{{ summary.title }}</h6>
                                 <div class="summary-meta">
                                     <span class="channel-badge">📺 {{ summary.channel }}</span>
                                 </div>
@@ -581,22 +581,7 @@
 
             // Mobile-specific elements
             if (isMobile) {
-                // Clean up mobile titles - remove date and [Auto] prefixes
-                window.cleanMobileTitles = function() {
-                    document.querySelectorAll('.mobile-view .summary-content h6').forEach(titleElement => {
-                        let title = titleElement.textContent;
-                        // Remove date patterns like "2025.09.08 - " or "2025-09-08 - "
-                        title = title.replace(/^\d{4}[.\-]\d{2}[.\-]\d{2}\s*[-–]\s*/g, '');
-                        // Remove [Auto] patterns
-                        title = title.replace(/\[Auto\]\s*/gi, '');
-                        // Remove any remaining leading/trailing whitespace and dashes
-                        title = title.replace(/^[\s\-–]+|[\s\-–]+$/g, '');
-                        titleElement.textContent = title;
-                    });
-                }
-
-                // Apply title cleaning
-                window.cleanMobileTitles();
+                // Titles are now cleaned on the server side, no need for client-side processing
 
                 const hiddenSearch = document.getElementById('mobile-hidden-search');
                 const hiddenNav = document.getElementById('mobile-hidden-nav');
@@ -662,10 +647,10 @@
                 const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
 
                 summaryItems.forEach(item => {
-                    const filename = item.dataset.filename.toLowerCase();
+                    const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
                     const channel = item.dataset.channel;
 
-                    const matchesSearch = !searchTerm || filename.includes(searchTerm);
+                    const matchesSearch = !searchTerm || title.includes(searchTerm);
                     const matchesChannel = !selectedChannel || channel === selectedChannel;
 
                     if (matchesSearch && matchesChannel) {
@@ -694,10 +679,7 @@
                         summariesList.style.display = 'block';
                         noResults.style.display = 'none';
 
-                        // Reapply mobile title cleaning after filtering
-                        if (isMobile && window.cleanMobileTitles) {
-                            window.cleanMobileTitles();
-                        }
+                        // No need for title cleaning - handled server-side
                     }
                 }
             }
