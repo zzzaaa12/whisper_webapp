@@ -11,6 +11,155 @@
     <style>
         body { background-color: #f8f9fa; }
 
+        /* Desktop View - Show all desktop actions */
+        .desktop-actions {
+            display: block;
+        }
+
+        /* Mobile View - Hide mobile actions by default */
+        .mobile-actions {
+            display: none;
+        }
+
+        /* Floating Action Button for Mobile */
+        .floating-actions {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: #007bff;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .fab:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+
+        .fab-main {
+            position: relative;
+            z-index: 10;
+        }
+
+        .fab-actions {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        .fab-menu.active .fab-actions {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(-68px);
+        }
+
+        .fab-menu.active .fab-main {
+            background: #dc3545;
+            transform: rotate(45deg);
+        }
+
+        .fab-menu.active .fab-main i::before {
+            content: "\f62a"; /* X icon */
+        }
+
+        .fab-action {
+            width: 48px;
+            height: 48px;
+            font-size: 1rem;
+            background: #6c757d;
+            transform: scale(0);
+            animation: fabScale 0.3s ease forwards;
+            text-decoration: none;
+            color: white;
+        }
+
+        .fab-action:hover {
+            color: white;
+            background: #495057;
+        }
+
+        .fab-action:nth-child(1) { animation-delay: 0.1s; }
+        .fab-action:nth-child(2) { animation-delay: 0.2s; }
+        .fab-action:nth-child(3) { animation-delay: 0.3s; }
+        .fab-action:nth-child(4) { animation-delay: 0.4s; }
+
+        @keyframes fabScale {
+            to {
+                transform: scale(1);
+            }
+        }
+
+        /* Mobile-specific styles */
+        @media (max-width: 768px) {
+            .desktop-actions {
+                display: none !important;
+            }
+            .mobile-actions {
+                display: block;
+            }
+            .floating-actions {
+                display: block;
+            }
+
+            /* Clean up mobile title */
+            .mobile-title {
+                font-size: 1.3rem;
+                line-height: 1.4;
+            }
+
+            /* Ensure card header buttons are hidden on mobile */
+            .card-header .desktop-actions {
+                display: none !important;
+            }
+
+            /* Mobile back button full width */
+            .mobile-actions {
+                width: 100% !important;
+                flex: 1 !important;
+            }
+
+            .mobile-actions .button-container {
+                width: 100% !important;
+            }
+
+            .mobile-actions .button-container .btn {
+                width: 100% !important;
+            }
+
+            /* Override the header-row flex layout for mobile */
+            .header-row {
+                flex-direction: column !important;
+                align-items: stretch !important;
+            }
+
+            .title-container {
+                width: 100% !important;
+                margin-bottom: 1rem;
+            }
+        }
+
         /* 原有的摘要樣式改進 */
         .summary-content {
             background-color: #fff;
@@ -198,10 +347,15 @@
 
         /* 響應式布局 */
         @media (max-width: 768px) {
+            .container {
+                padding: 0.5rem;
+            }
+
             .header-row {
                 flex-direction: column !important;
                 align-items: flex-start !important;
                 gap: 1rem;
+                margin-bottom: 1.5rem !important;
             }
 
             .title-container {
@@ -209,25 +363,122 @@
                 width: 100%;
             }
 
-            .button-container {
-                align-self: flex-end;
+            .page-title {
+                font-size: 1.5rem !important;
+                line-height: 1.4 !important;
+                word-break: break-word;
+                white-space: normal !important;
+                max-width: none !important;
             }
 
-            .markdown-content {
+            .button-container {
+                width: 100%;
+                align-self: stretch;
+            }
+
+            .btn-group.button-container {
+                flex-direction: column;
+                gap: 0.5rem;
+                width: 100%;
+            }
+
+            .btn-group.button-container .btn {
+                width: 100%;
+                min-height: 48px;
+                font-size: 1.1rem;
+            }
+
+            /* 卡片頭部優化 */
+            .card-header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 0.75rem;
+            }
+
+            .card-header .d-flex {
+                flex-direction: column !important;
+                align-items: stretch !important;
+                gap: 0.75rem;
+            }
+
+            .card-header .btn-group,
+            .card-header .render-toggle {
+                width: 100%;
+            }
+
+            .render-toggle .btn,
+            .card-header .btn-group .btn {
+                min-height: 44px;
                 font-size: 1rem;
+            }
+
+            /* 內容區域優化 */
+            .card-body {
                 padding: 1rem;
             }
 
+            .markdown-content,
+            .raw-content {
+                font-size: 1.1rem;
+                line-height: 1.7;
+                padding: 1.5rem;
+            }
+
             .markdown-content h1 {
-                font-size: 1.5rem;
+                font-size: 1.6rem;
+                margin-top: 1.5rem;
             }
 
             .markdown-content h2 {
-                font-size: 1.3rem;
+                font-size: 1.4rem;
+                margin-top: 1.25rem;
             }
 
             .markdown-content h3 {
-                font-size: 1.1rem;
+                font-size: 1.2rem;
+                margin-top: 1rem;
+            }
+
+            .markdown-content p {
+                margin: 1.25rem 0;
+            }
+
+            .markdown-content ul,
+            .markdown-content ol {
+                margin: 1.25rem 0;
+                padding-left: 1.5rem;
+            }
+
+            .markdown-content li {
+                margin: 0.75rem 0;
+                line-height: 1.6;
+            }
+
+            /* 代碼區塊優化 */
+            .markdown-content pre {
+                font-size: 0.9rem;
+                overflow-x: auto;
+                padding: 1rem;
+                border-radius: 0.5rem;
+            }
+
+            .markdown-content code {
+                font-size: 0.9rem;
+                padding: 0.3rem 0.5rem;
+            }
+
+            /* 表格響應式處理 */
+            .markdown-content table {
+                font-size: 0.9rem;
+                display: block;
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .markdown-content th,
+            .markdown-content td {
+                padding: 0.5rem;
+                min-width: 100px;
             }
         }
 
@@ -249,6 +500,34 @@
                 position: relative;
                 z-index: 10;
             }
+
+            /* 桌面版卡片頭部佈局 */
+            .card-header .d-flex {
+                flex-direction: row !important;
+                justify-content: space-between !important;
+                align-items: center !important;
+            }
+        }
+
+        /* 額外的通用優化 */
+        .card {
+            border-radius: 0.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .btn {
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .btn:active {
+            transform: translateY(0);
         }
     </style>
 </head>
@@ -258,18 +537,31 @@
             <div class="title-container">
                 <h1 class="h3 page-title" title="{{ title }}">{{ title }}</h1>
             </div>
-            <div class="btn-group button-container">
-                <button id="back-button" class="btn btn-primary">
-                    <i class="bi bi-arrow-left"></i> 回上一頁
-                </button>
-                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">回到主頁</a>
+            <!-- Desktop Actions -->
+            <div class="desktop-actions">
+                <div class="btn-group button-container">
+                    <button id="back-button" class="btn btn-primary">
+                        <i class="bi bi-arrow-left"></i> 回上一頁
+                    </button>
+                    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">回到主頁</a>
+                </div>
+            </div>
+
+            <!-- Mobile Actions - Only Back Button -->
+            <div class="mobile-actions">
+                <div class="btn-group button-container mb-3">
+                    <button id="mobile-back-button" class="btn btn-primary">
+                        <i class="bi bi-arrow-left"></i> 回上一頁
+                    </button>
+                </div>
             </div>
         </div>
 
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>摘要內容</span>
-                <div class="d-flex gap-2">
+                <!-- Desktop Header Actions -->
+                <div class="desktop-actions d-flex gap-2">
                     <!-- 切換顯示模式按鈕 -->
                     <div class="btn-group render-toggle">
                         <button type="button" class="btn btn-outline-info btn-sm" id="toggleRender" onclick="toggleRenderMode()">
@@ -289,12 +581,44 @@
                         {% endif %}
                     </div>
                 </div>
+                <!-- Mobile Header - Only shows title, no actions -->
+                <div class="mobile-actions">
+                    <!-- 手機版不顯示任何按鈕 -->
+                </div>
             </div>
             <div class="card-body">
                 <!-- 原始文本顯示 -->
                 <div id="raw-content" class="raw-content">{{ content }}</div>
                 <!-- Markdown 渲染顯示 -->
                 <div id="markdown-content" class="markdown-content summary-content" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Floating Actions -->
+    <div class="floating-actions">
+        <div class="fab-menu" id="fab-menu">
+            <!-- 主按鈕 -->
+            <button class="fab fab-main" id="fab-main" title="更多功能">
+                <i class="bi bi-three-dots"></i>
+            </button>
+
+            <!-- 功能按鈕組 -->
+            <div class="fab-actions">
+                <a href="{{ url_for('main.index') }}" class="fab fab-action" title="回到主頁">
+                    <i class="bi bi-house"></i>
+                </a>
+                <button class="fab fab-action" id="mobile-toggle-render" title="原始文本">
+                    <i class="bi bi-eye"></i>
+                </button>
+                <a href="{{ url_for('main.download_summary', filename=filename) }}" class="fab fab-action" title="下載摘要">
+                    <i class="bi bi-download"></i>
+                </a>
+                {% if has_subtitle %}
+                <a href="{{ url_for('main.download_subtitle', filename=filename) }}" class="fab fab-action" title="下載字幕">
+                    <i class="bi bi-file-earmark-text"></i>
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -337,7 +661,23 @@
 
         // 初始化 Markdown 內容
         document.addEventListener('DOMContentLoaded', function() {
-            // 新增：處理返回按鈕的邏輯
+            // 處理視窗大小變化
+            function handleResize() {
+                // 手機版時確保標題正常顯示
+                if (window.innerWidth <= 768) {
+                    const pageTitle = document.querySelector('.page-title');
+                    if (pageTitle) {
+                        pageTitle.style.whiteSpace = 'normal';
+                        pageTitle.style.overflow = 'visible';
+                        pageTitle.style.textOverflow = 'initial';
+                    }
+                }
+            }
+
+            window.addEventListener('resize', handleResize);
+            handleResize(); // 初始執行
+
+            // 處理桌面版返回按鈕的邏輯
             const backButton = document.getElementById('back-button');
             if (backButton) {
                 const urlParams = new URLSearchParams(window.location.search);
@@ -349,6 +689,77 @@
                     // 如果沒有 back_to 參數，則連結到摘要列表
                     backButton.onclick = () => { window.location.href = "{{ url_for('main.list_summaries') }}"; };
                 }
+            }
+
+            // 處理手機版返回按鈕的邏輯
+            const mobileBackButton = document.getElementById('mobile-back-button');
+            if (mobileBackButton) {
+                const urlParams = new URLSearchParams(window.location.search);
+                const backTo = urlParams.get('back_to');
+
+                if (backTo) {
+                    mobileBackButton.onclick = () => { window.location.href = backTo; };
+                } else {
+                    // 如果沒有 back_to 參數，則連結到摘要列表
+                    mobileBackButton.onclick = () => { window.location.href = "{{ url_for('main.list_summaries') }}"; };
+                }
+            }
+
+            // 手機版懸浮按鈕功能
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                const fabMenu = document.getElementById('fab-menu');
+                const fabMain = document.getElementById('fab-main');
+                const mobileToggleRender = document.getElementById('mobile-toggle-render');
+
+                let isMenuOpen = false;
+
+                // FAB 主按鈕點擊
+                if (fabMain) {
+                    fabMain.addEventListener('click', function() {
+                        isMenuOpen = !isMenuOpen;
+                        fabMenu.classList.toggle('active', isMenuOpen);
+                    });
+                }
+
+                // 手機版切換渲染模式
+                if (mobileToggleRender) {
+                    mobileToggleRender.addEventListener('click', function() {
+                        toggleRenderMode();
+                        closeFabMenu();
+                    });
+                }
+
+                function closeFabMenu() {
+                    isMenuOpen = false;
+                    fabMenu.classList.remove('active');
+                }
+
+                // 點擊外部區域關閉選單
+                document.addEventListener('click', function(e) {
+                    if (fabMenu && !fabMenu.contains(e.target) && isMenuOpen) {
+                        closeFabMenu();
+                    }
+                });
+
+                // 清理手機版標題
+                function cleanMobileTitle() {
+                    const titleElement = document.querySelector('.page-title');
+                    if (titleElement) {
+                        let title = titleElement.textContent;
+                        // Remove date patterns like "2025.09.08 - " or "2025-09-08 - "
+                        title = title.replace(/^\d{4}[.\-]\d{2}[.\-]\d{2}\s*[-–]\s*/g, '');
+                        // Remove [Auto] patterns
+                        title = title.replace(/\[Auto\]\s*/gi, '');
+                        // Remove any remaining leading/trailing whitespace and dashes
+                        title = title.replace(/^[\s\-–]+|[\s\-–]+$/g, '');
+                        titleElement.textContent = title;
+                        titleElement.classList.add('mobile-title');
+                    }
+                }
+
+                // 應用手機版標題清理
+                cleanMobileTitle();
             }
 
             const rawText = document.getElementById('raw-content').textContent;

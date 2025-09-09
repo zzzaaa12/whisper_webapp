@@ -4,9 +4,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const form = document.getElementById('process-form');
     const urlInput = document.getElementById('audio_url');
+    const urlInputMobile = document.getElementById('audio_url_mobile');
     const accessCodeInput = document.getElementById('access_code');
+    const accessCodeInputMobile = document.getElementById('access_code_mobile');
     const submitBtn = document.getElementById('submit-btn');
+    const submitBtnMobile = document.getElementById('submit-btn-mobile');
     const cancelBtn = document.getElementById('cancel-btn');
+    const cancelBtnMobile = document.getElementById('cancel-btn-mobile');
     const logContainer = document.getElementById('log-container');
     const statusBar = document.getElementById('status-footer');
     const videoInfoCard = document.getElementById('video-info-card');
@@ -69,13 +73,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // 同步桌面版和手機版輸入框
+    function syncInputs(source, target) {
+        if (source && target) {
+            source.addEventListener('input', () => {
+                target.value = source.value;
+            });
+        }
+    }
+
+    // 雙向同步輸入框
+    syncInputs(urlInput, urlInputMobile);
+    syncInputs(urlInputMobile, urlInput);
+    syncInputs(accessCodeInput, accessCodeInputMobile);
+    syncInputs(accessCodeInputMobile, accessCodeInput);
+
     // 取消處理功能 - 現在主要用於取消當前處理中的任務
-    cancelBtn.addEventListener('click', () => {
+    function handleCancel() {
         if (confirm('確定要取消目前的處理任務嗎？')) {
             appendLog('🛑 使用者取消處理任務', 'info');
             socket.emit('cancel_processing');
         }
-    });
+    }
+
+    if (cancelBtn) cancelBtn.addEventListener('click', handleCancel);
+    if (cancelBtnMobile) cancelBtnMobile.addEventListener('click', handleCancel);
 
     socket.on('connect', () => {
         const wasDisconnected = (statusBar.textContent === '與後端伺服器斷線。');
@@ -98,9 +120,16 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBar.classList.remove('text-success');
         statusBar.classList.add('text-danger');
         appendLog('🔌 與後端伺服器斷線。', 'error');
-        submitBtn.disabled = true;
-        submitBtn.textContent = '連線中斷';
-        cancelBtn.style.display = 'none';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.textContent = '連線中斷';
+        }
+        if (submitBtnMobile) {
+            submitBtnMobile.disabled = true;
+            submitBtnMobile.textContent = '連線中斷';
+        }
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        if (cancelBtnMobile) cancelBtnMobile.style.display = 'none';
 
         videoInfoCard.style.display = 'none';
 
@@ -146,12 +175,24 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.is_busy) {
             statusBar.textContent = `狀態：伺服器忙碌中 (${data.current_task})`;
             // 不再禁用按鈕，而是改變文字提示會加入佇列
-            submitBtn.disabled = false;
-            submitBtn.textContent = '加入佇列';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '加入佇列';
+            }
+            if (submitBtnMobile) {
+                submitBtnMobile.disabled = false;
+                submitBtnMobile.textContent = '加入佇列';
+            }
         } else {
             statusBar.textContent = '狀態：伺服器空閒';
-            submitBtn.disabled = false;
-            submitBtn.textContent = '開始處理';
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = '開始處理';
+            }
+            if (submitBtnMobile) {
+                submitBtnMobile.disabled = false;
+                submitBtnMobile.textContent = '開始處理';
+            }
         }
     });
 
@@ -228,17 +269,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    form.addEventListener('submit', (e) => {
+    function handleFormSubmit(e) {
         e.preventDefault();
-        const url = urlInput.value.trim();
+        // 獲取當前活動的輸入框值
+        const url = (urlInput ? urlInput.value.trim() : '') || (urlInputMobile ? urlInputMobile.value.trim() : '');
 
         // 檢查是否需要通行碼
-        const accessCodeDiv = document.querySelector('#access_code').closest('div');
-        const isAccessCodeRequired = !accessCodeDiv.style.display.includes('none');
+        const accessCodeDiv = document.querySelector('#access_code, #access_code_mobile');
+        const isAccessCodeRequired = accessCodeDiv && !accessCodeDiv.closest('div').style.display.includes('none');
         let accessCode = '';
 
         if (isAccessCodeRequired) {
-            accessCode = accessCodeInput.value.trim();
+            accessCode = (accessCodeInput ? accessCodeInput.value.trim() : '') || (accessCodeInputMobile ? accessCodeInputMobile.value.trim() : '');
             if (!accessCode) {
                 appendLog('請輸入通行碼。', 'error');
                 return;
@@ -250,17 +292,32 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        videoInfoCard.style.display = 'none';
+        // 同步輸入框值
+        if (urlInput && urlInputMobile) {
+            urlInput.value = url;
+            urlInputMobile.value = url;
+        }
+        if (accessCodeInput && accessCodeInputMobile && accessCode) {
+            accessCodeInput.value = accessCode;
+            accessCodeInputMobile.value = accessCode;
+        }
+
+        if (videoInfoCard) videoInfoCard.style.display = 'none';
 
         socket.emit('start_processing', {
             'audio_url': url,
             'access_code': accessCode
         });
 
-        // 清空表單，讓用戶可以繼續添加新任務
-        urlInput.value = '';
-        accessCodeInput.value = '';
-    });
+        // 清空所有表單，讓用戶可以繼續添加新任務
+        if (urlInput) urlInput.value = '';
+        if (urlInputMobile) urlInputMobile.value = '';
+        if (accessCodeInput) accessCodeInput.value = '';
+        if (accessCodeInputMobile) accessCodeInputMobile.value = '';
+    }
+
+    // 綁定表單提交事件
+    form.addEventListener('submit', handleFormSubmit);
 
     // 檔案上傳功能
     const uploadForm = document.getElementById('upload-form');

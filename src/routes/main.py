@@ -196,6 +196,7 @@ def list_summaries():
                          channels=sorted_channels,
                          channel_counts=channel_counts)
 
+
 @main_bp.route('/summary/<filename>')
 def show_summary(filename):
     from flask import request

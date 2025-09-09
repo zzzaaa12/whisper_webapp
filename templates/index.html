@@ -199,6 +199,26 @@
             #queue-status-card .row.text-center>div:last-child {
                 margin-bottom: 0;
             }
+
+            /* 手機版佇列狀態優化 */
+            #queue-status-card .row.text-center {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 1rem;
+            }
+
+            #queue-status-card .row.text-center>div {
+                margin-bottom: 0;
+            }
+
+            #queue-status-card h6 {
+                font-size: 1.5rem;
+                font-weight: bold;
+            }
+
+            #queue-status-card small {
+                font-size: 0.875rem;
+            }
         }
 
         /* 按鈕容器響應式樣式 */
@@ -240,6 +260,29 @@
             .btn-container .btn:last-child {
                 margin-bottom: 0;
             }
+
+            /* 手機版表單優化 */
+            .form-control-lg {
+                font-size: 1.1rem;
+                padding: 0.75rem 1rem;
+                min-height: 48px; /* 觸控友好的最小高度 */
+            }
+
+            .btn-lg {
+                min-height: 48px;
+                font-size: 1.1rem;
+                font-weight: 500;
+            }
+
+            /* 手機版導航卡片樣式 */
+            .card-body.p-2 {
+                padding: 0.75rem !important;
+            }
+
+            .d-grid.gap-2 > .btn {
+                min-height: 44px;
+                font-size: 1rem;
+            }
         }
     </style>
 </head>
@@ -250,13 +293,26 @@
         <div id="security-warnings" style="display: none;">
         </div>
         <div class="container mt-4">
-            <!-- Button for mobile view -->
-            <div class="d-md-none d-flex justify-content-start mb-2">
-                <a href="/queue" class="btn btn-outline-success btn-sm me-2">任務佇列</a>
-                <a href="{{ url_for('main.list_summaries', filter='auto') }}"
-                    class="btn btn-outline-info btn-sm me-2">Auto 摘要</a>
-                <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm me-2">所有摘要</a>
-                <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
+            <!-- Mobile Navigation Menu -->
+            <div class="d-md-none mb-3">
+                <div class="card">
+                    <div class="card-body p-2">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="mb-0">快速導航</h5>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#mobileNavMenu">
+                                <i class="bi bi-list"></i>
+                            </button>
+                        </div>
+                        <div class="collapse" id="mobileNavMenu">
+                            <div class="d-grid gap-2">
+                                <a href="/queue" class="btn btn-outline-success btn-sm">任務佇列</a>
+                                <a href="{{ url_for('main.list_summaries', filter='auto') }}" class="btn btn-outline-info btn-sm">Auto 摘要</a>
+                                <a href="{{ url_for('main.list_summaries') }}" class="btn btn-outline-primary btn-sm">所有摘要</a>
+                                <a href="/bookmarks" class="btn btn-outline-secondary btn-sm nav-bookmark">書籤</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="card">
                 <!-- Header for desktop view -->
@@ -280,7 +336,8 @@
                 <div class="card-body">
                     <!-- YouTube 網址處理表單 -->
                     <form id="process-form">
-                        <div class="row align-items-end mb-3">
+                        <!-- Desktop Layout -->
+                        <div class="row align-items-end mb-3 d-none d-md-flex">
                             <div
                                 class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-8{% else %}col-md-6{% endif %}">
                                 <label for="audio_url" class="form-label">音訊來源網址</label>
@@ -303,6 +360,26 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Mobile Layout -->
+                        <div class="d-md-none mb-3">
+                            <div class="mb-3">
+                                <label for="audio_url_mobile" class="form-label">音訊來源網址</label>
+                                <input type="url" class="form-control form-control-lg" id="audio_url_mobile" name="audio_url"
+                                    placeholder="請貼上音訊來源網址...">
+                            </div>
+                            <div class="mb-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE',
+                                False) %}style="display: none;" {% endif %}>
+                                <label for="access_code_mobile" class="form-label">通行碼</label>
+                                <input type="password" class="form-control form-control-lg" id="access_code_mobile" name="access_code"
+                                    placeholder="請輸入通行碼...">
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="submit" id="submit-btn-mobile" class="btn btn-primary btn-lg">開始處理</button>
+                                <button type="button" id="cancel-btn-mobile" class="btn btn-danger btn-lg"
+                                    style="display: none;">取消</button>
+                            </div>
+                        </div>
                     </form>
 
                     <!-- 分隔線 -->
@@ -314,7 +391,8 @@
 
                     <!-- 影音檔案上傳表單 -->
                     <form id="upload-form" enctype="multipart/form-data">
-                        <div class="row align-items-end mb-3">
+                        <!-- Desktop Layout -->
+                        <div class="row align-items-end mb-3 d-none d-md-flex">
                             <div
                                 class="{% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE', False) %}col-md-8{% else %}col-md-6{% endif %}">
                                 <label for="media_file" class="form-label">上傳影音檔案</label>
@@ -340,6 +418,30 @@
                                     <button type="button" id="upload-cancel-btn" class="btn btn-danger"
                                         style="display: none; flex-shrink: 0;">取消上傳</button>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Mobile Layout -->
+                        <div class="d-md-none mb-3">
+                            <div class="mb-3">
+                                <label for="media_file_mobile" class="form-label">上傳影音檔案</label>
+                                <input type="file" class="form-control form-control-lg" id="media_file_mobile" name="media_file"
+                                    accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg">
+                            </div>
+                            <div class="mb-3" {% if session.get('is_authorized') and config('ACCESS_CODE_ALL_PAGE',
+                                False) %}style="display: none;" {% endif %}>
+                                <label for="upload_access_code_mobile" class="form-label">通行碼</label>
+                                <input type="password" class="form-control form-control-lg" id="upload_access_code_mobile"
+                                    name="upload_access_code" placeholder="請輸入通行碼...">
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button type="submit" id="upload-btn-mobile" class="btn btn-success btn-lg">
+                                    <span id="upload-btn-text-mobile">上傳處理</span>
+                                    <span id="upload-spinner-mobile" class="spinner-border spinner-border-sm ms-2"
+                                        style="display: none;"></span>
+                                </button>
+                                <button type="button" id="upload-cancel-btn-mobile" class="btn btn-danger btn-lg"
+                                    style="display: none;">取消上傳</button>
                             </div>
                         </div>
 
