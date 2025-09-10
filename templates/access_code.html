@@ -32,23 +32,48 @@
 
 {% block content %}
 <div class="access-container text-center">
-    <h1 class="h3 mb-3 fw-normal">需要授權</h1>
-    <p>請輸入通行碼以繼續訪問。</p>
-
-    {% if error %}
-        <div class="alert alert-danger" role="alert">
-            {{ error }}
+    {% if is_locked %}
+        <!-- 鎖定狀態頁面 -->
+        <div class="text-danger mb-4">
+            <i class="bi bi-lock-fill" style="font-size: 3rem;"></i>
         </div>
+        <h1 class="h3 mb-3 fw-normal text-danger">存取被鎖定</h1>
+        <p class="mb-3">您的 IP 位址因多次輸入錯誤通行碼而被暫時鎖定。</p>
+
+        <div class="alert alert-warning" role="alert">
+            <strong>剩餘鎖定時間:</strong><br>
+            <span class="fs-4" id="lockdown-timer">{{ lock_minutes }} 分 {{ lock_seconds }} 秒</span>
+        </div>
+
+        <p class="text-muted small">
+            <i class="bi bi-info-circle"></i>
+            為了保護系統安全，連續輸入錯誤通行碼 3 次後將被鎖定 30 分鐘。<br>
+            鎖定時間結束後，您可以重新嘗試輸入通行碼。
+        </p>
+
+        <button class="w-100 btn btn-secondary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> 重新整理頁面
+        </button>
+    {% else %}
+        <!-- 正常登入頁面 -->
+        <h1 class="h3 mb-3 fw-normal">需要授權</h1>
+        <p>請輸入通行碼以繼續訪問。</p>
+
+        {% if error %}
+            <div class="alert alert-danger" role="alert">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('main.access') }}">
+            <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
+            <div class="form-floating mb-3">
+                <input type="password" class="form-control" id="access_code" name="access_code" placeholder="通行碼" required autofocus>
+                <label for="access_code">通行碼</label>
+            </div>
+            <button class="w-100 btn btn-lg btn-primary" type="submit">進入</button>
+        </form>
     {% endif %}
-
-    <form method="POST" action="{{ url_for('main.access') }}">
-        <input type="hidden" name="next" value="{{ request.args.get('next', '') }}">
-        <div class="form-floating mb-3">
-            <input type="password" class="form-control" id="access_code" name="access_code" placeholder="通行碼" required autofocus>
-            <label for="access_code">通行碼</label>
-        </div>
-        <button class="w-100 btn btn-lg btn-primary" type="submit">進入</button>
-    </form>
 </div>
 {% endblock %}
 
@@ -65,6 +90,31 @@
         if(mainContainer) {
             mainContainer.classList.remove('mt-4');
         }
+
+        {% if is_locked %}
+        // 鎖定倒數計時器
+        let totalSeconds = {{ lock_minutes * 60 + lock_seconds }};
+        const timerElement = document.getElementById('lockdown-timer');
+
+        function updateTimer() {
+            if (totalSeconds <= 0) {
+                timerElement.textContent = '鎖定已解除';
+                timerElement.parentElement.classList.remove('alert-warning');
+                timerElement.parentElement.classList.add('alert-success');
+                timerElement.parentElement.innerHTML = '<strong><i class="bi bi-check-circle"></i> 鎖定已解除！</strong><br>您現在可以重新輸入通行碼。<br><button class="btn btn-success btn-sm mt-2" onclick="location.reload()">重新載入頁面</button>';
+                return;
+            }
+
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            timerElement.textContent = `${minutes} 分 ${seconds} 秒`;
+            totalSeconds--;
+        }
+
+        // 立即更新一次，然後每秒更新
+        updateTimer();
+        setInterval(updateTimer, 1000);
+        {% endif %}
     });
 </script>
 {% endblock %}

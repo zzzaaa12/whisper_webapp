@@ -115,12 +115,27 @@ def access():
     if session.get('is_authorized'):
         return redirect(url_for('main.index'))
 
+    # 檢查 IP 是否被鎖定（GET 和 POST 都要檢查）
+    client_ip = request.environ.get('REMOTE_ADDR', 'Unknown IP')
+    if auth_service.is_locked(client_ip):
+        lock_remaining = auth_service.get_lock_remaining_time(client_ip)
+        lock_minutes = lock_remaining // 60
+        lock_seconds = lock_remaining % 60
+
+        # 對於被鎖定的 IP，直接渲染特殊的鎖定頁面
+        return render_template('access_code.html',
+                             is_locked=True,
+                             lock_minutes=lock_minutes,
+                             lock_seconds=lock_seconds)
+
     if request.method == 'POST':
         code = request.form.get('access_code')
-        client_ip = request.environ.get('REMOTE_ADDR', 'Unknown IP')
         user_agent = request.headers.get('User-Agent', 'Unknown User Agent')
 
         if auth_service.verify_access_code(code):
+            # 登入成功，重置該 IP 的錯誤計數
+            auth_service.reset_attempts(client_ip)
+
             session['is_authorized'] = True
             # 讓 session 在瀏覽器關閉時過期
             session.permanent = False
@@ -141,17 +156,39 @@ def access():
                 return redirect(next_url)
             return redirect(url_for('main.index'))
         else:
-            flash('通行碼不正確', 'danger')
+            # 記錄失敗嘗試，檢查是否觸發鎖定
+            is_locked = auth_service.track_failed_attempt(client_ip)
+            failed_count = auth_service.get_failed_attempts_count(client_ip)
+            remaining_attempts = auth_service.get_remaining_attempts(client_ip)
 
-            # 發送通行碼驗證失敗的 Telegram 通知
-            failure_message = (
-                f"🔴 **通行碼驗證失敗**\n\n"
-                f"❌ **輸入的通行碼**: `{code}`\n"
-                f"📧 **IP 位址**: `{client_ip}`\n"
-                f"🖥️ **使用者代理**: `{user_agent}`\n"
-                f"⏰ **時間**: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
-            )
-            send_telegram_notification(failure_message)
+            if is_locked:
+                flash('通行碼錯誤次數過多，您的 IP 已被鎖定 30 分鐘', 'danger')
+
+                # 發送 IP 被鎖定的通知
+                locked_message = (
+                    f"🔴 **IP 已被鎖定**\n\n"
+                    f"❌ **最後輸入的通行碼**: `{code}`\n"
+                    f"📧 **IP 位址**: `{client_ip}`\n"
+                    f"🖥️ **使用者代理**: `{user_agent}`\n"
+                    f"⏰ **時間**: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
+                    f"🔢 **失敗次數**: `{failed_count}次`\n"
+                    f"🔒 **鎖定時間**: `30分鐘`"
+                )
+                send_telegram_notification(locked_message)
+            else:
+                flash(f'通行碼不正確，還剩 {remaining_attempts} 次嘗試機會', 'danger')
+
+                # 發送通行碼驗證失敗的 Telegram 通知
+                failure_message = (
+                    f"🔴 **通行碼驗證失敗**\n\n"
+                    f"❌ **輸入的通行碼**: `{code}`\n"
+                    f"📧 **IP 位址**: `{client_ip}`\n"
+                    f"🖥️ **使用者代理**: `{user_agent}`\n"
+                    f"⏰ **時間**: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`\n"
+                    f"🔢 **累計失敗**: `{failed_count}次`\n"
+                    f"⚠️ **剩餘嘗試**: `{remaining_attempts}次`"
+                )
+                send_telegram_notification(failure_message)
 
             return render_template('access_code.html')
 
