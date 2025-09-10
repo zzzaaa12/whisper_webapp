@@ -2,11 +2,13 @@ from flask import Blueprint, render_template, send_file, request, session, redir
 from pathlib import Path
 import os
 import re
+from datetime import datetime
 
 from src.config import get_config
 from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
+from src.services.notification_service import send_telegram_notification
 from src.utils.path_manager import get_path_manager
 from src.utils.file_validator import FileValidator
 
@@ -115,11 +117,23 @@ def access():
 
     if request.method == 'POST':
         code = request.form.get('access_code')
+        client_ip = request.environ.get('REMOTE_ADDR', 'Unknown IP')
+        user_agent = request.headers.get('User-Agent', 'Unknown User Agent')
+
         if auth_service.verify_access_code(code):
             session['is_authorized'] = True
             # 讓 session 在瀏覽器關閉時過期
             session.permanent = False
             flash('登入成功！', 'success')
+
+            # 發送通行碼驗證成功的 Telegram 通知
+            success_message = (
+                f"🟢 **通行碼驗證成功**\n\n"
+                f"📧 **IP 位址**: `{client_ip}`\n"
+                f"🖥️ **使用者代理**: `{user_agent}`\n"
+                f"⏰ **時間**: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
+            )
+            send_telegram_notification(success_message)
 
             next_url = request.form.get('next')
             # 安全性檢查：確保 next_url 是相對路徑
@@ -128,6 +142,17 @@ def access():
             return redirect(url_for('main.index'))
         else:
             flash('通行碼不正確', 'danger')
+
+            # 發送通行碼驗證失敗的 Telegram 通知
+            failure_message = (
+                f"🔴 **通行碼驗證失敗**\n\n"
+                f"❌ **輸入的通行碼**: `{code}`\n"
+                f"📧 **IP 位址**: `{client_ip}`\n"
+                f"🖥️ **使用者代理**: `{user_agent}`\n"
+                f"⏰ **時間**: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`"
+            )
+            send_telegram_notification(failure_message)
+
             return render_template('access_code.html')
 
     return render_template('access_code.html')
