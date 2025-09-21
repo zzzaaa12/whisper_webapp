@@ -249,8 +249,8 @@ def handle_start_processing(data):
     if not (isinstance(data, dict) and data.get('audio_url') and data.get('access_code') is not None):
         return socket_service.log_and_emit("🔴 錯誤：請求格式不正確。", 'error', sid)
 
-    if auth_service.is_ip_blocked(client_ip):
-        remaining_time = auth_service.get_block_remaining_time(client_ip)
+    if auth_service.is_locked(client_ip):
+        remaining_time = auth_service.get_lock_remaining_time(client_ip)
         minutes = remaining_time // 60
         seconds = remaining_time % 60
         return socket_service.log_and_emit(f"🔒 您的 IP 已被暫時封鎖，請等待 {minutes} 分 {seconds} 秒後再試。", 'error', sid)
@@ -273,7 +273,7 @@ def handle_start_processing(data):
             socket_service.emit_access_code_error(sid)
             return
 
-    auth_service.record_successful_attempt(client_ip)
+    auth_service.reset_attempts(client_ip)
 
     try:
         url = data.get('audio_url')
