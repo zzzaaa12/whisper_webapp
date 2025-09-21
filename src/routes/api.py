@@ -159,6 +159,64 @@ def api_check_bookmark(filename):
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
 
+@api_bp.route('/bookmark', methods=['POST'])
+def api_toggle_bookmark():
+    """切換書籤狀態（添加或移除）"""
+    try:
+        data = request.get_json()
+        filename = data.get('filename')
+
+        if not filename:
+            return APIResponse.validation_error('檔案名稱不能為空')
+
+        if bookmark_service.is_bookmarked(filename):
+            success, message = bookmark_service.remove_bookmark(filename)
+        else:
+            title = data.get('title')
+            success, message = bookmark_service.add_bookmark(filename, title)
+
+        if success:
+            return APIResponse.success(message=message)
+        else:
+            return APIResponse.error(message, 400)
+    except Exception as e:
+        return APIResponse.internal_error(str(e))
+
+@api_bp.route('/batch-bookmark', methods=['POST'])
+def api_batch_bookmark():
+    """批量添加書籤"""
+    try:
+        data = request.get_json()
+        filenames = data.get('filenames', [])
+
+        if not filenames:
+            return APIResponse.validation_error('檔案名稱列表不能為空')
+
+        results = []
+        success_count = 0
+
+        for filename in filenames:
+            try:
+                if not bookmark_service.is_bookmarked(filename):
+                    success, message = bookmark_service.add_bookmark(filename)
+                    if success:
+                        success_count += 1
+                    results.append({'filename': filename, 'success': success, 'message': message})
+                else:
+                    results.append({'filename': filename, 'success': True, 'message': '已在書籤中'})
+                    success_count += 1
+            except Exception as e:
+                results.append({'filename': filename, 'success': False, 'message': str(e)})
+
+        return APIResponse.success({
+            'message': f'成功添加 {success_count} 個書籤',
+            'results': results,
+            'success_count': success_count,
+            'total_count': len(filenames)
+        })
+    except Exception as e:
+        return APIResponse.internal_error(str(e))
+
 @api_bp.route('/system/config-status')
 def api_get_config_status():
     try:
