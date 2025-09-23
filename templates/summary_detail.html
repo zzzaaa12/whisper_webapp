@@ -606,7 +606,7 @@
                             <span id="toggleText">美化顯示</span>
                         </button>
                     </div>
-                    <!-- 下載按鈕 -->
+                    <!-- 下載和刪除按鈕 -->
                     <div class="btn-group">
                         <a href="{{ url_for('main.download_summary', filename=filename) }}" class="btn btn-outline-primary btn-sm">
                             <i class="bi bi-download"></i> 下載摘要
@@ -616,6 +616,9 @@
                             <i class="bi bi-download"></i> 下載字幕
                         </a>
                         {% endif %}
+                        <button id="delete-summary-btn" class="btn btn-outline-danger btn-sm" data-filename="{{ filename }}">
+                            <i class="bi bi-trash"></i> 刪除摘要
+                        </button>
                     </div>
                 </div>
                 <!-- Mobile Header - Only shows title, no actions -->
@@ -656,6 +659,9 @@
                     <i class="bi bi-file-earmark-text"></i>
                 </a>
                 {% endif %}
+                <button class="fab fab-action" id="mobile-delete-btn" data-filename="{{ filename }}" title="刪除摘要">
+                    <i class="bi bi-trash"></i>
+                </button>
             </div>
         </div>
     </div>
@@ -839,6 +845,69 @@
             // 重新渲染語法高亮
             Prism.highlightAllUnder(document.getElementById('markdown-content'));
         }
+
+        // 刪除摘要功能
+        function deleteSummary(filename) {
+            const confirmMessage = `確定要刪除摘要檔案「${filename}」嗎？\n\n檔案將被移動到回收桶，可以稍後還原。`;
+            if (!confirm(confirmMessage)) return;
+
+            // 發送刪除請求
+            fetch('/api/delete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    filename: filename
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('摘要已成功刪除並移動到回收桶');
+                    // 檢查是否有back_to參數，如果有則回到指定頁面，否則回到摘要列表
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const backTo = urlParams.get('back_to');
+                    if (backTo) {
+                        window.location.href = backTo;
+                    } else {
+                        window.location.href = "{{ url_for('main.list_summaries') }}";
+                    }
+                } else {
+                    alert('刪除失敗：' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('刪除操作失敗:', error);
+                alert('刪除操作失敗，請稍後再試');
+            });
+        }
+
+        // 添加事件監聽器
+        document.addEventListener('DOMContentLoaded', function() {
+            // 桌面版刪除按鈕
+            const deleteBtn = document.getElementById('delete-summary-btn');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', function() {
+                    const filename = this.dataset.filename;
+                    deleteSummary(filename);
+                });
+            }
+
+            // 手機版刪除按鈕
+            const mobileDeleteBtn = document.getElementById('mobile-delete-btn');
+            if (mobileDeleteBtn) {
+                mobileDeleteBtn.addEventListener('click', function() {
+                    const filename = this.dataset.filename;
+                    deleteSummary(filename);
+                    // 關閉懸浮選單
+                    const fabMenu = document.getElementById('fab-menu');
+                    if (fabMenu) {
+                        fabMenu.classList.remove('active');
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>

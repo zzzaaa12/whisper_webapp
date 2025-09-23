@@ -788,6 +788,7 @@
             const selectedCount = document.getElementById(prefix + '-selected-count');
             const cancelSelection = document.getElementById(prefix + '-cancel-selection');
             const batchBookmark = document.getElementById(prefix + '-batch-bookmark');
+            const batchDelete = document.getElementById(prefix + '-batch-delete');
 
             function updateBatchToolbar() {
                 const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
@@ -892,6 +893,53 @@
                     .catch(error => {
                         console.error('批量書籤操作失敗:', error);
                         alert('批量書籤操作失敗，請稍後再試');
+                    });
+                });
+            }
+
+            // Batch delete functionality
+            if (batchDelete) {
+                batchDelete.addEventListener('click', function() {
+                    const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                    const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
+
+                    if (filenames.length === 0) return;
+
+                    // 確認對話框
+                    const confirmMessage = `確定要刪除選中的 ${filenames.length} 個摘要檔案嗎？\n\n檔案將被移動到回收桶，可以稍後還原。`;
+                    if (!confirm(confirmMessage)) return;
+
+                    // 顯示載入狀態
+                    const originalText = batchDelete.innerHTML;
+                    batchDelete.innerHTML = '<i class="bi bi-hourglass-split"></i> 處理中...';
+                    batchDelete.disabled = true;
+
+                    fetch('/api/batch-delete', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filenames: filenames
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // 重新載入頁面以更新列表
+                            location.reload();
+                        } else {
+                            alert('批量刪除操作失敗：' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('批量刪除操作失敗:', error);
+                        alert('批量刪除操作失敗，請稍後再試');
+                    })
+                    .finally(() => {
+                        // 恢復按鈕狀態
+                        batchDelete.innerHTML = originalText;
+                        batchDelete.disabled = false;
                     });
                 });
             }
