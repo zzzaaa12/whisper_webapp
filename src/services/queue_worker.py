@@ -164,9 +164,12 @@ class QueueWorker:
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
         # 配置 yt-dlp 下載
         ydl_opts = {
-            'format': 'best[ext=mp4]/best',
+            'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=720]/best',
             'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
             'noplaylist': True,
+            'extract_flat': False,
+            'writeinfojson': False,
+            'ignoreerrors': False,
         }
 
         # 下載影片
@@ -175,9 +178,26 @@ class QueueWorker:
         self._emit_log_to_frontend(task_id, download_msg)
         self.logger_manager.info("開始下載影片...", "queue_worker")
 
-        with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                with self.yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=True)
+                    filename = ydl.prepare_filename(info)
+                    break
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    # 如果是格式問題，嘗試更簡單的格式
+                    if "format" in str(e).lower() or "not available" in str(e).lower():
+                        ydl_opts['format'] = 'best/worst' if attempt == 0 else 'worst'
+                        retry_msg = f"🔄 格式不可用，重試第 {attempt + 1} 次..."
+                        self._emit_log_to_frontend(task_id, retry_msg)
+                        self.logger_manager.info(f"Retrying with different format: {ydl_opts['format']}", "queue_worker")
+                        continue
+                    else:
+                        raise
+                else:
+                    raise
 
         download_complete_msg = "✅ 影片下載完成"
         self.logger_manager.info(f"Downloaded: {filename}", "queue_worker")

@@ -4,5 +4,9 @@ summaries
 subtitles
 logs
 trash
+tasks
 __pycache__
-trash/metadata.json
+*.log
+*.swp
+downloads/
+certs/
