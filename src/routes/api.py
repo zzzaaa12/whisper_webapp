@@ -545,6 +545,46 @@ def api_process_youtube():
             if is_live:
                 return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
 
+        # 🆕 檢查是否已有現成的摘要 - 先獲取影片資訊
+        video_title = user_title  # 優先使用用戶提供的標題
+
+        # 如果沒有用戶提供標題且是 YouTube URL，嘗試獲取實際標題
+        if not video_title and url_service.detect_url_type(audio_url) == 'youtube':
+            try:
+                import yt_dlp
+                info_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False
+                }
+                with yt_dlp.YoutubeDL(info_opts) as ydl:
+                    info = ydl.extract_info(audio_url, download=False)
+                    video_title = info.get('title', '')
+            except Exception as e:
+                # 如果無法獲取標題，繼續處理
+                print(f"無法獲取 YouTube 標題: {e}")
+
+        # 檢查是否已有摘要
+        if video_title:
+            summary_service = get_summary_api_service()
+            existing_summary = summary_service.search_summary_by_title(video_title)
+
+            if existing_summary:
+                # 找到現成的摘要，直接回傳
+                return jsonify({
+                    'status': 'completed',
+                    'message': '找到現有摘要，直接回傳',
+                    'has_existing_summary': True,
+                    'summary': {
+                        'title': existing_summary['title'],
+                        'content': existing_summary['content'],
+                        'created_at': existing_summary['created_at'],
+                        'file_name': existing_summary['file_name'],
+                        'file_size': existing_summary['file_size']
+                    },
+                    'youtube_url': audio_url
+                }), 200
+
         user_ip = auth_service.get_client_ip()
         queue_manager = get_task_queue()
 

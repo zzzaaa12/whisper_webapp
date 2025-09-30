@@ -136,10 +136,10 @@ class SummaryAPIService:
     def _read_file_content(self, file_path: Path) -> Optional[str]:
         """
         讀取文件完整內容
-        
+
         Args:
             file_path: 文件路徑
-            
+
         Returns:
             Optional[str]: 文件內容，失敗時返回 None
         """
@@ -148,6 +148,80 @@ class SummaryAPIService:
                 return f.read().strip()
         except Exception as e:
             print(f"Error reading file {file_path}: {e}")
+            return None
+
+    def search_summary_by_title(self, search_title: str) -> Optional[Dict]:
+        """
+        根據標題搜尋摘要檔案，使用與處理佇列相同的檔名比對邏輯
+
+        Args:
+            search_title: 要搜尋的影片標題
+
+        Returns:
+            Optional[Dict]: 找到的摘要詳細信息，包含 title, content, created_at, file_name
+        """
+        try:
+            if not search_title.strip():
+                return None
+
+            # 使用與 queue_worker 相同的檔名生成邏輯
+            from src.utils.file_sanitizer import sanitize_filename
+            from src.utils.time_formatter import get_timestamp
+            from src.utils.filename_matcher import FilenameMatcher
+            from datetime import datetime
+
+            # 生成當日的標題格式 (因為我們不知道確切的處理日期)
+            date_str = datetime.now().strftime('%Y.%m.%d')
+            base_name = f"{date_str} - {search_title}"
+            sanitized_title = sanitize_filename(base_name)
+
+            # 也嘗試 Auto 模式的格式
+            auto_sanitized_title = f"{date_str} - [Auto] " + sanitize_filename(search_title)
+
+            # 使用 FilenameMatcher 搜尋相同內容的檔案
+            matching_files = []
+
+            # 搜尋一般格式
+            matching_files.extend(FilenameMatcher.find_matching_files(
+                f"{sanitized_title}.txt", self.summary_folder, ['.txt']
+            ))
+
+            # 搜尋 Auto 格式
+            matching_files.extend(FilenameMatcher.find_matching_files(
+                f"{auto_sanitized_title}.txt", self.summary_folder, ['.txt']
+            ))
+
+            # 找到最新的有效摘要檔案
+            valid_files = []
+            for file_path in matching_files:
+                if file_path.is_file() and file_path.stat().st_size > 500:
+                    valid_files.append((file_path, file_path.stat().st_mtime))
+
+            if not valid_files:
+                return None
+
+            # 選擇最新的檔案
+            latest_file_path, _ = max(valid_files, key=lambda x: x[1])
+
+            # 讀取摘要內容
+            content = self._read_file_content(latest_file_path)
+            if content is None:
+                return None
+
+            title = self._extract_title(latest_file_path)
+            mtime = latest_file_path.stat().st_mtime
+
+            return {
+                'title': title,
+                'content': content,
+                'created_at': datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                'file_name': latest_file_path.stem,
+                'file_path': str(latest_file_path),
+                'file_size': latest_file_path.stat().st_size
+            }
+
+        except Exception as e:
+            print(f"Error searching summary by title '{search_title}': {e}")
             return None
 
 
