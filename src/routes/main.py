@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 
 from src.config import get_config
+from src.utils.channel_mapping import get_display_name
 from src.services.auth_service import AuthService
 from src.services.bookmark_service import BookmarkService
 from src.services.trash_service import TrashService
@@ -208,9 +209,11 @@ def list_summaries():
 
     summaries_with_info = []
     channel_counts = {}
+    channel_original_names = {}  # 儲存顯示名稱對應的原始名稱
 
     for f in files:
         channel = extract_channel_from_summary(f)
+        channel_display = get_display_name(channel)  # 取得顯示名稱
         video_info = extract_video_info_from_summary(f)
 
         # 使用文件內容中的標題，如果沒有則處理檔名作為標題
@@ -225,14 +228,17 @@ def list_summaries():
             filename_title = filename_title.replace('_', ' ')  # 將底線替換為空格
             display_title = filename_title
 
-        # 統計每個頻道的摘要數量
-        channel_counts[channel] = channel_counts.get(channel, 0) + 1
+        # 統計每個頻道的摘要數量（使用顯示名稱）
+        channel_counts[channel_display] = channel_counts.get(channel_display, 0) + 1
+        # 記錄原始名稱
+        channel_original_names[channel_display] = channel
 
         summaries_with_info.append({
             'filename': f.name,
             'title': display_title,
             'is_bookmarked': bookmark_service.is_bookmarked(f.name),
-            'channel': channel
+            'channel': channel,  # 保留原始名稱用於後端篩選
+            'channel_display': channel_display  # 顯示名稱
         })
 
     # 更智能的頻道排序方式
@@ -267,10 +273,15 @@ def list_summaries():
 
     sorted_channels = sort_channels_smart(channel_counts)
 
+    # 只顯示前20個頻道用於快速篩選
+    top_channels = sorted_channels[:20]
+
     return render_template('summaries.html',
                          summaries=summaries_with_info,
                          channels=sorted_channels,
-                         channel_counts=channel_counts)
+                         top_channels=top_channels,
+                         channel_counts=channel_counts,
+                         channel_original_names=channel_original_names)
 
 
 @main_bp.route('/summary/<filename>')

@@ -80,6 +80,43 @@
             margin-left: 0.5rem;
         }
 
+        /* 快速頻道過濾標籤樣式 */
+        .channel-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .channel-chip {
+            border: 2px solid #dee2e6;
+            background-color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 1.5rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+        .channel-chip:hover {
+            border-color: #0d6efd;
+            background-color: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .channel-chip.active {
+            border-color: #0d6efd;
+            background-color: #0d6efd;
+            color: white;
+        }
+        .channel-chip .badge {
+            font-size: 0.75rem;
+        }
+        .channel-chip.active .badge {
+            background-color: rgba(255,255,255,0.3) !important;
+        }
+
         /* Mobile Styles */
         .mobile-view {
             display: none;
@@ -369,6 +406,21 @@
 
             <!-- 過濾器區域 -->
             <div class="filter-section">
+                <!-- 快速頻道過濾標籤 -->
+                <div class="mb-3">
+                    <label class="form-label">快速頻道篩選 (前20個熱門頻道)</label>
+                    <div class="channel-chips d-flex flex-wrap gap-2">
+                        <button class="channel-chip active" data-channel="">
+                            📺 全部頻道 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
+                        </button>
+                        {% for channel in top_channels %}
+                        <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
+                            {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label for="desktop-channel-filter" class="form-label">頻道過濾</label>
@@ -415,7 +467,7 @@
                             <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
                                 <h6 class="mb-1">{{ summary.title }}</h6>
                                 <div class="summary-meta">
-                                    <span class="channel-badge">{{ summary.channel }}</span>
+                                    <span class="channel-badge">{{ summary.channel_display }}</span>
                                     {% if summary.is_bookmarked %}
                                     <span class="bookmark-badge">
                                         <i class="bi bi-bookmark-fill"></i> 已書籤
@@ -472,8 +524,22 @@
                 </div>
             </div>
 
+            <!-- 快速頻道過濾標籤 (手機版) -->
+            <div class="mb-3">
+                <div class="channel-chips d-flex flex-wrap gap-2">
+                    <button class="channel-chip active" data-channel="">
+                        📺 全部 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
+                    </button>
+                    {% for channel in top_channels %}
+                    <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
+                        {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+            </div>
+
             <!-- 簡化的過濾器 -->
-            <div class="simple-filter mb-3">
+            <div class="simple-filter mb-3" style="display: none;">
                 <select class="form-select" id="mobile-channel-filter">
                     <option value="">📺 全部頻道 ({{ summaries|length }})</option>
                     {% for channel in channels %}
@@ -511,7 +577,7 @@
                             <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
                                 <h6 class="mb-1">{{ summary.title }}</h6>
                                 <div class="summary-meta">
-                                    <span class="channel-badge">📺 {{ summary.channel }}</span>
+                                    <span class="channel-badge">📺 {{ summary.channel_display }}</span>
                                 </div>
                             </div>
                         </div>
@@ -763,9 +829,79 @@
                 }
             }
 
+            // 頻道標籤點擊事件
+            document.querySelectorAll('.channel-chip').forEach(chip => {
+                chip.addEventListener('click', function() {
+                    const channel = this.dataset.channel;
+
+                    // 更新標籤狀態
+                    document.querySelectorAll('.channel-chip').forEach(c => c.classList.remove('active'));
+                    this.classList.add('active');
+
+                    // 同步更新下拉選單 (如果存在)
+                    if (channelFilter) {
+                        channelFilter.value = channel;
+                    }
+
+                    // 執行篩選
+                    let visibleCount = 0;
+                    const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+                    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+                    summaryItems.forEach(item => {
+                        const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
+                        const itemChannel = item.dataset.channel;
+
+                        const matchesSearch = !searchTerm || title.includes(searchTerm);
+                        const matchesChannel = !channel || itemChannel === channel;
+
+                        if (matchesSearch && matchesChannel) {
+                            item.style.display = '';
+                            visibleCount++;
+                        } else {
+                            item.style.display = 'none';
+                        }
+                    });
+
+                    // 更新狀態文字
+                    if (filterStatus) {
+                        let statusText = `顯示 ${visibleCount} 個摘要`;
+                        if (searchTerm || channel) {
+                            statusText += ' (已過濾)';
+                        }
+                        filterStatus.textContent = statusText;
+                    }
+
+                    // 顯示/隱藏無結果提示
+                    if (noResults) {
+                        if (visibleCount === 0) {
+                            summariesList.style.display = 'none';
+                            noResults.style.display = 'block';
+                        } else {
+                            summariesList.style.display = 'block';
+                            noResults.style.display = 'none';
+                            convertSummaryTitles();
+                        }
+                    }
+                });
+            });
+
             // Event listeners for filtering
             if (searchInput) searchInput.addEventListener('input', filterSummaries);
-            if (channelFilter) channelFilter.addEventListener('change', filterSummaries);
+            if (channelFilter) {
+                channelFilter.addEventListener('change', function() {
+                    // 同步更新標籤狀態
+                    const selectedChannel = this.value;
+                    document.querySelectorAll('.channel-chip').forEach(chip => {
+                        if (chip.dataset.channel === selectedChannel) {
+                            chip.classList.add('active');
+                        } else {
+                            chip.classList.remove('active');
+                        }
+                    });
+                    filterSummaries();
+                });
+            }
             if (clearSearchBtn) {
                 clearSearchBtn.addEventListener('click', function() {
                     if (searchInput) {

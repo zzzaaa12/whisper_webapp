@@ -291,13 +291,13 @@ class SummaryService:
             header_lines.append(f"📁 檔案：{header_info['filename']}")
 
         # 影片資訊
-        if 'title' in header_info:
+        if 'title' in header_info and header_info['title']:
             header_lines.append(f"🎬 標題：{header_info['title']}")
-        if 'uploader' in header_info:
+        if 'uploader' in header_info and header_info['uploader']:
             header_lines.append(f"📺 頻道：{header_info['uploader']}")
-        if 'duration_string' in header_info:
+        if 'duration_string' in header_info and header_info['duration_string']:
             header_lines.append(f"⏱️ 影片長度：{header_info['duration_string']}")
-        if 'url' in header_info:
+        if 'url' in header_info and header_info['url']:
             header_lines.append(f"🔗 網址：{header_info['url']}")
 
         # 處理時間
