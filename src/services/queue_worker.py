@@ -162,10 +162,13 @@ class QueueWorker:
             self._emit_log_to_frontend(task_id, error_msg, 'error')
 
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
-        # 配置 yt-dlp 下載
+        # 清理影片標題，避免 Windows 檔名禁用字元（:, !, ?, *, <, >, |, \, /, "）
+        safe_title = sanitize_filename(video_title)
+
+        # 配置 yt-dlp 下載（使用清理後的標題）
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=720]/best',
-            'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
+            'outtmpl': str(self.download_folder / f'{safe_title}.%(ext)s'),
             'noplaylist': True,
             'extract_flat': False,
             'writeinfojson': False,
