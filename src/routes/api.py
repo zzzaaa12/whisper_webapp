@@ -877,3 +877,57 @@ def api_get_summary():
             'error': 'internal_error',
             'message': f'獲取摘要內容失敗: {str(e)}'
         }), 500
+
+@api_bp.route('/summaries/list', methods=['POST'])
+@require_access_code
+def api_list_summaries():
+    """
+    獲取摘要列表（支援分頁、篩選、搜尋）
+
+    Request Body:
+    {
+        "access_code": "...",
+        "page": 1,              # 頁碼（從1開始，預設1）
+        "per_page": 30,         # 每頁數量（預設30）
+        "channel": "",          # 頻道篩選（可選，支援原始名稱或顯示名稱）
+        "search": "",           # 搜尋關鍵字（可選）
+        "bookmarked_only": false # 只顯示書籤（可選，預設false）
+    }
+    """
+    try:
+        data = request.get_json()
+
+        # 獲取參數
+        page = data.get('page', 1)
+        per_page = data.get('per_page', 30)
+        channel = data.get('channel', '').strip() or None
+        search = data.get('search', '').strip() or None
+        bookmarked_only = data.get('bookmarked_only', False)
+
+        # 驗證參數
+        if not isinstance(page, int) or page < 1:
+            return APIResponse.validation_error('page 必須是大於 0 的整數')
+
+        if not isinstance(per_page, int) or per_page < 1 or per_page > 100:
+            return APIResponse.validation_error('per_page 必須是 1-100 之間的整數')
+
+        # 獲取書籤列表
+        bookmarked_files = None
+        if bookmarked_only or True:  # 總是獲取書籤狀態
+            bookmarked_files = [b['filename'] for b in bookmark_service.get_bookmarks()]
+
+        # 呼叫服務獲取列表
+        summary_service = get_summary_api_service()
+        result = summary_service.get_summaries_list(
+            page=page,
+            per_page=per_page,
+            channel=channel,
+            search=search,
+            bookmarked_only=bookmarked_only,
+            bookmarked_files=bookmarked_files
+        )
+
+        return APIResponse.success(result)
+
+    except Exception as e:
+        return APIResponse.internal_error(f'獲取摘要列表失敗: {str(e)}')

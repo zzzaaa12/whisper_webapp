@@ -7,10 +7,11 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from src.utils.path_manager import get_path_manager
+from src.utils.channel_mapping import get_display_name
 
 class SummaryAPIService:
     """摘要 API 服務類"""
-    
+
     def __init__(self):
         self.path_manager = get_path_manager()
         self.summary_folder = self.path_manager.get_summary_folder()
@@ -223,6 +224,168 @@ class SummaryAPIService:
         except Exception as e:
             print(f"Error searching summary by title '{search_title}': {e}")
             return None
+
+    def get_summaries_list(self, page: int = 1, per_page: int = 30,
+                          channel: Optional[str] = None,
+                          search: Optional[str] = None,
+                          bookmarked_only: bool = False,
+                          bookmarked_files: Optional[List[str]] = None) -> Dict:
+        """
+        獲取摘要列表（支援分頁、篩選、搜尋）
+
+        Args:
+            page: 頁碼（從1開始）
+            per_page: 每頁數量
+            channel: 頻道篩選（原始頻道名稱或顯示名稱）
+            search: 搜尋關鍵字（搜尋標題）
+            bookmarked_only: 只顯示書籤
+            bookmarked_files: 書籤檔案列表（從外部傳入，避免循環依賴）
+
+        Returns:
+            Dict: 包含 summaries（摘要列表）、pagination（分頁資訊）、channels（頻道統計）
+        """
+        try:
+            # 獲取所有摘要檔案
+            all_files = []
+            if self.summary_folder.exists():
+                for file_path in self.summary_folder.glob("*.txt"):
+                    if file_path.is_file():
+                        all_files.append(file_path)
+
+            # 按修改時間排序（最新的在前）
+            all_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+
+            # 提取所有檔案的資訊
+            all_summaries = []
+            channel_counts = {}
+
+            for file_path in all_files:
+                # 提取頻道和標題
+                channel_name = self._extract_channel(file_path)
+                title = self._extract_title(file_path)
+                channel_display = get_display_name(channel_name)
+
+                # 統計頻道數量
+                if channel_display not in channel_counts:
+                    channel_counts[channel_display] = {
+                        'name': channel_name,
+                        'display_name': channel_display,
+                        'count': 0
+                    }
+                channel_counts[channel_display]['count'] += 1
+
+                # 建立摘要項目
+                summary_item = {
+                    'filename': file_path.name,
+                    'title': title,
+                    'channel': channel_name,
+                    'channel_display': channel_display,
+                    'created_at': datetime.fromtimestamp(file_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                    'file_size': file_path.stat().st_size,
+                    'is_bookmarked': bookmarked_files and file_path.name in bookmarked_files
+                }
+
+                all_summaries.append(summary_item)
+
+            # 篩選：書籤
+            if bookmarked_only and bookmarked_files:
+                all_summaries = [s for s in all_summaries if s['is_bookmarked']]
+
+            # 篩選：頻道
+            if channel:
+                # 同時支援原始名稱和顯示名稱
+                all_summaries = [
+                    s for s in all_summaries
+                    if s['channel'] == channel or s['channel_display'] == channel
+                ]
+
+            # 篩選：搜尋
+            if search:
+                search_lower = search.lower()
+                all_summaries = [
+                    s for s in all_summaries
+                    if search_lower in s['title'].lower()
+                ]
+
+            # 計算分頁
+            total_count = len(all_summaries)
+            total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 0
+
+            # 驗證頁碼
+            if page < 1:
+                page = 1
+            if page > total_pages and total_pages > 0:
+                page = total_pages
+
+            # 計算起始和結束索引
+            start_index = (page - 1) * per_page
+            end_index = start_index + per_page
+
+            # 取得當前頁的摘要
+            page_summaries = all_summaries[start_index:end_index]
+
+            # 整理頻道列表（按數量降序排列）
+            channels_list = sorted(
+                channel_counts.values(),
+                key=lambda x: (-x['count'], x['display_name'])
+            )
+
+            return {
+                'summaries': page_summaries,
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total_count': total_count,
+                    'total_pages': total_pages,
+                    'has_next': page < total_pages,
+                    'has_prev': page > 1
+                },
+                'channels': channels_list
+            }
+
+        except Exception as e:
+            print(f"Error getting summaries list: {e}")
+            return {
+                'summaries': [],
+                'pagination': {
+                    'page': 1,
+                    'per_page': per_page,
+                    'total_count': 0,
+                    'total_pages': 0,
+                    'has_next': False,
+                    'has_prev': False
+                },
+                'channels': []
+            }
+
+    def _extract_channel(self, file_path: Path) -> str:
+        """
+        從摘要文件中提取頻道信息
+
+        Args:
+            file_path: 文件路徑
+
+        Returns:
+            str: 頻道名稱
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # 只讀取前10行來尋找頻道信息
+                for i, line in enumerate(f):
+                    if i > 10:
+                        break
+
+                    line = line.strip()
+
+                    # 尋找 "📺 頻道：" 格式
+                    if '📺 頻道：' in line:
+                        return line.split('📺 頻道：')[1].strip()
+                    elif '頻道：' in line:
+                        return line.split('頻道：')[1].strip()
+
+                return "未知頻道"
+        except Exception:
+            return "未知頻道"
 
 
 # 全域服務實例
