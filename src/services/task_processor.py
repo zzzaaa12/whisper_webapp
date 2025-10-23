@@ -113,6 +113,21 @@ class TaskProcessor:
             'format': 'best[ext=mp4]/best',
             'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
             'noplaylist': True,
+            # 添加 HTTP 相關設定以避免 403 錯誤
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Sec-Fetch-Mode': 'navigate',
+            },
+            # 使用 cookies（如果需要）
+            'cookiesfrombrowser': None,  # 可以設置為 ('chrome',) 或 ('firefox',) 來使用瀏覽器 cookies
+            # 添加重試和超時設定
+            'retries': 10,
+            'fragment_retries': 10,
+            'socket_timeout': 30,
+            # 避免被偵測為機器人
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
 
         # 下載影片
@@ -248,7 +263,18 @@ class TaskProcessor:
             info_opts = {
                 'quiet': True,
                 'no_warnings': True,
-                'extract_flat': False  # 改為 False 以獲取完整信息
+                'extract_flat': False,  # 改為 False 以獲取完整信息
+                # 添加 HTTP 相關設定以避免 403 錯誤
+                'http_headers': {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-us,en;q=0.5',
+                    'Sec-Fetch-Mode': 'navigate',
+                },
+                'cookiesfrombrowser': None,
+                'retries': 10,
+                'socket_timeout': 30,
+                'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
             }
             with self.yt_dlp.YoutubeDL(info_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
