@@ -16,12 +16,32 @@ class EmailService:
         self.sender_password = get_config("EMAIL.APP_PASSWORD", "")  # Gmail 應用程式密碼
         self.recipient_email = get_config("EMAIL.RECIPIENT_EMAIL", "")
 
-    def send_summary(self, title: str, summary_path: Path) -> bool:
+    def _truncate_channel_name(self, channel_name: str, max_length: int = 20) -> str:
+        """截斷頻道名稱至指定長度（字符數）
+
+        Args:
+            channel_name: 原始頻道名稱
+            max_length: 最大長度（預設20）
+
+        Returns:
+            str: 截斷後的頻道名稱
+        """
+        if not channel_name:
+            return ""
+
+        if len(channel_name) <= max_length:
+            return channel_name
+
+        # 截斷至 max_length 個字符
+        return channel_name[:max_length]
+
+    def send_summary(self, title: str, summary_path: Path, channel_name: str = "") -> bool:
         """發送摘要郵件
 
         Args:
             title: 摘要標題
             summary_path: 摘要檔案路徑
+            channel_name: 頻道名稱（可選，默認為空）
 
         Returns:
             bool: 是否發送成功
@@ -35,11 +55,14 @@ class EmailService:
             with open(summary_path, 'r', encoding='utf-8') as f:
                 summary_content = f.read()
 
+            # 截斷頻道名稱至20個字符
+            truncated_channel = self._truncate_channel_name(channel_name)
+
             # 建立郵件
             msg = MIMEMultipart()
             msg['From'] = self.sender_email
             msg['To'] = self.recipient_email
-            msg['Subject'] = Header(f'[Whisper摘要] {title}', 'utf-8')
+            msg['Subject'] = Header(f'Whisper[{truncated_channel}] {title}', 'utf-8')
 
             # 郵件內容
             body = f"""

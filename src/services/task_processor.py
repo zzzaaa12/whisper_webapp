@@ -212,10 +212,10 @@ class TaskProcessor:
             self._log_worker_message(task_id, f"Summary generation failed: {result}", 'error')
             raise RuntimeError(f"Summary generation failed: {result}") # Raise to fail task
 
-    def _send_summary_email(self, task_id: str, title: str, summary_path: Path):
+    def _send_summary_email(self, task_id: str, title: str, summary_path: Path, channel_name: str = ""):
         """發送摘要郵件"""
         try:
-            if self.email_service.send_summary(title, summary_path):
+            if self.email_service.send_summary(title, summary_path, channel_name):
                 self._log_worker_message(task_id, "✉️ 摘要郵件發送成功")
             else:
                 self._log_worker_message(task_id, "⚠️ 摘要郵件發送失敗：郵件設定不完整", 'warning')
@@ -426,7 +426,7 @@ class TaskProcessor:
                         self._do_summarize(subtitle_content, summary_path, task_id, header_info={'title': video_title, 'uploader': uploader, 'url': url, 'duration_string': duration_string})
 
                 # 發送摘要郵件（無論是否跳過摘要生成）
-                self._send_summary_email(task_id, video_title, summary_path)
+                self._send_summary_email(task_id, video_title, summary_path, uploader)
 
             # 準備任務結果
             result = {

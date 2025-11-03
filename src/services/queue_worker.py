@@ -76,10 +76,10 @@ class QueueWorker:
         except Exception as e:
             self.logger_manager.error(f"[Task:{task_id[:8]}] 發送日誌到前端失敗: {e}", "queue_worker")
 
-    def _send_summary_email(self, task_id: str, title: str, summary_path: Path):
+    def _send_summary_email(self, task_id: str, title: str, summary_path: Path, channel_name: str = ""):
         """發送摘要郵件"""
         try:
-            if self.email_service.send_summary(title, summary_path):
+            if self.email_service.send_summary(title, summary_path, channel_name):
                 email_success_msg = "✉️ 摘要郵件發送成功"
                 self.logger_manager.info(f"[Task:{task_id[:8]}] {email_success_msg}", "queue_worker")
                 self._emit_log_to_frontend(task_id, email_success_msg, 'success')
@@ -488,7 +488,7 @@ class QueueWorker:
 
             # 發送摘要郵件（如果摘要存在）
             if summary_path.exists():
-                self._send_summary_email(task_id, video_title, summary_path)
+                self._send_summary_email(task_id, video_title, summary_path, uploader)
 
         except Exception as e:
             error_msg = f"YouTube 任務處理失敗: {str(e)}"
@@ -583,7 +583,7 @@ class QueueWorker:
 
             # 發送摘要郵件（如果摘要存在）
             if summary_path.exists():
-                self._send_summary_email(task_id, original_title, summary_path)
+                self._send_summary_email(task_id, original_title, summary_path, "音頻")
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"
