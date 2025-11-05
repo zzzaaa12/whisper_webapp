@@ -32,6 +32,17 @@ class EmailService:
         if len(channel_name) <= max_length:
             return channel_name
 
+        index = -1
+        if "吳淡如" in channel_name:
+            index = channel_name.find("（")
+        elif "區塊鏈日報" in channel_name:
+            index = channel_name.find(" ")
+        elif "Afford Anything Podcast" in channel_name:
+            channel_name = "Afford Anything"
+
+        if index != -1:
+            channel_name = channel_name[:index]
+
         # 截斷至 max_length 個字符
         return channel_name[:max_length]
 
