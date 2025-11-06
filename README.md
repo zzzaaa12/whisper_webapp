@@ -206,7 +206,7 @@ OPENAI_API_KEY=your_openai_api_key
 **建議配置**：
 - Python 3.10+
 - 8GB RAM
-- NVIDIA GPU（支援 CUDA）
+- NVIDIA GPU（支援 CUDA）或 Apple Silicon (M1/M2/M3) 以啟用 MLX 加速
 - 20GB 可用空間
 
 **支援的檔案格式**：
@@ -229,6 +229,9 @@ A: 理論上沒有長度限制，但建議單個檔案不超過 2 小時。
 
 **Q: 如何啟用 GPU 加速？**
 A: 安裝 CUDA 和對應的 PyTorch 版本，系統會自動偵測並使用 GPU。
+
+**Q: 我使用 Apple Silicon Mac，需要額外設定嗎？**
+A: 不需要。系統會自動偵測 Apple Silicon，並改用 `mlx-community/whisper-large-v3-turbo-q4` 模型與 MLX 推論引擎。首次轉錄時會自動下載模型，若未安裝請執行 `pip install mlx-whisper` 以取得必要套件。若 MLX 環境啟動失敗，任務會直接標記為失敗，請依錯誤訊息檢查 MLX 安裝或系統設定。
 
 ---
 

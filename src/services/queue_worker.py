@@ -602,7 +602,17 @@ class QueueWorker:
         if not whisper_manager.is_loaded:
             load_msg = "🔄 載入 Whisper 模型..."
             self._emit_log_to_frontend(task_id, load_msg)
-            whisper_manager.load_model()
+            loaded = whisper_manager.load_model(
+                log_callback=lambda msg, level: self._emit_log_to_frontend(task_id, msg, level)
+            )
+            if not loaded or not whisper_manager.is_loaded:
+                status = whisper_manager.get_status()
+                reason = status.get('backend_reason') or "未知原因"
+                backend = status.get('backend')
+                error_msg = f"❌ 模型載入失敗（後端: {backend}，原因: {reason}）"
+                self.logger_manager.error(error_msg, "queue_worker")
+                self._emit_log_to_frontend(task_id, error_msg, 'error')
+                raise RuntimeError("Whisper 模型載入失敗")
 
         transcribe_msg = "🎤 開始語音轉錄..."
         self.logger_manager.info(f"Transcribing audio: {audio_file}", "queue_worker")
@@ -632,7 +642,11 @@ class QueueWorker:
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=80)
 
         except Exception as e:
-            error_msg = f"❌ 語音轉錄失敗: {str(e)}"
+            status = whisper_manager.get_status()
+            reason = status.get('backend_reason') or str(e)
+            backend = status.get('backend')
+            error_msg = f"❌ 語音轉錄失敗（後端: {backend}，原因: {reason}）"
+            self.logger_manager.error(error_msg, "queue_worker")
             self.logger_manager.error(f"Transcription error: {e}", "queue_worker")
             self._emit_log_to_frontend(task_id, error_msg, 'error')
             raise

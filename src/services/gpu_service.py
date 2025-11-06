@@ -12,13 +12,15 @@ class GPUService:
             'device': 'unknown',
             'device_name': 'unknown',
             'cuda_available': False,
+            'mps_available': False,
             'last_updated': None
         }
 
-    def _detect_cuda_device_info(self) -> Tuple[str, str, bool]:
+    def _detect_cuda_device_info(self) -> Tuple[str, str, bool, bool]:
         device = "cpu"
         device_name = "CPU"
         cuda_available = torch.cuda.is_available()
+        mps_available = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
 
         if cuda_available:
             try:
@@ -31,17 +33,22 @@ class GPUService:
                 device = "cpu"
                 device_name = "CPU (CUDA 不可用)"
                 cuda_available = False
-        return device, device_name, cuda_available
+        elif mps_available:
+            device = "mps"
+            device_name = "Apple Silicon (MPS)"
+
+        return device, device_name, cuda_available, mps_available
 
     def get_gpu_status(self) -> Dict[str, Any]:
         """獲取 GPU 狀態資訊"""
         try:
-            device, device_name, cuda_available = self._detect_cuda_device_info()
+            device, device_name, cuda_available, mps_available = self._detect_cuda_device_info()
 
             self.gpu_status.update({
                 'device': device,
                 'device_name': device_name,
                 'cuda_available': cuda_available,
+                'mps_available': mps_available,
                 'last_updated': get_timestamp("default")
             })
 
