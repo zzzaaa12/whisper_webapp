@@ -44,16 +44,16 @@ class LoggerManager:
         # 創建根日誌器
         self.root_logger = logging.getLogger('whisper_webapp')
         self.root_logger.setLevel(logging.DEBUG)
-        
+
         # 清除現有的處理器
         self.root_logger.handlers.clear()
-        
+
         # 創建格式器
         formatter = logging.Formatter(
             '[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
-        
+
         # 添加檔案處理器
         file_handler = logging.FileHandler(
             self.log_dir / 'whisper_webapp.log',
@@ -62,13 +62,21 @@ class LoggerManager:
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
         self.root_logger.addHandler(file_handler)
-        
+
         # 添加控制台處理器（如果啟用）
         if self.enable_console:
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setLevel(logging.INFO)
             console_handler.setFormatter(formatter)
             self.root_logger.addHandler(console_handler)
+
+        # 隱藏 Werkzeug HTTP 請求日誌（例如: GET /api/queue/status HTTP/1.1 200）
+        werkzeug_logger = logging.getLogger('werkzeug')
+        werkzeug_logger.setLevel(logging.WARNING)
+
+        # 隱藏 Config 相關的 DEBUG 日誌
+        config_logger = logging.getLogger('whisper_webapp.config')
+        config_logger.setLevel(logging.INFO)
     
     @classmethod
     def get_instance(cls, log_dir: Optional[Path] = None, enable_console: bool = True) -> 'LoggerManager':

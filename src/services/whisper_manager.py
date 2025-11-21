@@ -119,7 +119,10 @@ class WhisperModelManager:
                 compute_type = "float16"
 
                 if log_callback:
-                    log_callback("✅ CUDA 測試成功，使用 GPU 加速", 'success')
+                    gpu_name = torch.cuda.get_device_name(0)
+                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    log_callback(f"✅ CUDA 測試成功，使用 GPU 加速", 'success')
+                    log_callback(f"📱 GPU 資訊 - 型號: {gpu_name}, 顯存: {gpu_memory:.1f}GB", 'info')
 
             except Exception as cuda_error:
                 if log_callback:
@@ -159,7 +162,7 @@ class WhisperModelManager:
             import faster_whisper
 
             if log_callback:
-                log_callback("🔄 載入 Whisper 模型...", 'info')
+                log_callback(f"🔄 載入 Whisper 模型: {self.model_name}...", 'info')
 
             # 重置狀態
             self.model = None
@@ -170,7 +173,7 @@ class WhisperModelManager:
 
             # 載入模型
             if log_callback:
-                log_callback(f"🔄 載入模型 (設備: {self.device}, 計算類型: {self.compute_type})", 'info')
+                log_callback(f"🔄 載入模型 (模型: {self.model_name}, 設備: {self.device}, 計算類型: {self.compute_type})", 'info')
 
             self.model = faster_whisper.WhisperModel(
                 self.model_name,
@@ -181,7 +184,7 @@ class WhisperModelManager:
             self.is_loaded = True
 
             if log_callback:
-                log_callback(f"✅ Whisper 模型載入成功 ({self.device})", 'success')
+                log_callback(f"✅ Whisper 模型載入成功 (模型: {self.model_name}, 設備: {self.device})", 'success')
 
             return True
 
@@ -260,10 +263,13 @@ class WhisperModelManager:
             return False, None
 
         # 設定預設轉錄參數
+        # RTX3060 12GB: batch_size 建議值為 8-16
+        # 根據顯存調整 - 更大的batch_size會加快轉錄速度但消耗更多GPU記憶體
         default_params = {
             'beam_size': 1,
             'language': "zh",
             'vad_filter': True
+#            'batch_size': 12  # RTX3060 12GB 顯存最佳化
         }
         default_params.update(transcribe_kwargs)
 
@@ -274,6 +280,8 @@ class WhisperModelManager:
         try:
             if log_callback:
                 log_callback("🎯 開始轉錄音檔...", 'info')
+                log_callback(f"📊 使用模型: {self.model_name}", 'info')
+                log_callback(f"⚙️ 轉錄參數 - batch_size: {default_params.get('batch_size', 1)}, beam_size: {default_params.get('beam_size', 1)}, 語言: {default_params.get('language', 'auto')}", 'info')
                 log_callback("🔄 正在初始化轉錄...", 'info')
 
             # 第一次嘗試轉錄
@@ -321,7 +329,7 @@ class WhisperModelManager:
             import faster_whisper
 
             if log_callback:
-                log_callback("🔄 重新載入 CPU 模型...", 'info')
+                log_callback(f"🔄 重新載入 CPU 模型: {self.model_name}...", 'info')
 
             # 重新載入CPU模型
             self.model = faster_whisper.WhisperModel(
@@ -334,6 +342,8 @@ class WhisperModelManager:
             self.compute_type = "int8"
 
             # 重新嘗試轉錄
+            if log_callback:
+                log_callback(f"📊 使用模型: {self.model_name} (CPU 模式)", 'info')
             segments, _ = self.model.transcribe(str(audio_file), **transcribe_kwargs)
 
             if log_callback:

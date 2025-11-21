@@ -652,7 +652,10 @@ def api_process_youtube():
             queue_task_id,
             queue_position,
             youtube_url=audio_url,
-            base_url=base_url
+            base_url=base_url,
+            title=video_title,
+            display_name=task_data.get('display_name', ''),
+            uploader=user_uploader if user_uploader else ''
         )
 
     except Exception as e:

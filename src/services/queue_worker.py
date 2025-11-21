@@ -453,10 +453,12 @@ class QueueWorker:
             # 更新任務結果
             result = {
                 'video_title': video_title,
+                'uploader': uploader,
                 'subtitle_file': str(subtitle_path),
                 'summary_file': str(summary_path) if summary_path.exists() else None,
                 'original_file': str(audio_file) if audio_file else None,
-                'used_subtitle_extraction': skip_transcription  # 標記是否使用了字幕擷取
+                'used_subtitle_extraction': skip_transcription,  # 標記是否使用了字幕擷取
+                'channel_name': uploader  # 頻道名稱通常來自上傳者
             }
 
             # 發送完成日誌到前端
@@ -569,7 +571,8 @@ class QueueWorker:
                 'title': title,
                 'subtitle_file': str(subtitle_path),
                 'summary_file': str(summary_path) if summary_path.exists() else None,
-                'original_file': str(audio_file)
+                'original_file': str(audio_file),
+                'channel_name': '本地上傳'  # 本地上傳的頻道名稱標記
             }
 
             self.task_queue.update_task_status(
