@@ -1,5 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
 
+    // Theme toggle is handled by theme-toggle.js
+
+    // ==================== Socket.IO and Main Functionality ====================
     const socket = io();
 
     const form = document.getElementById('process-form');

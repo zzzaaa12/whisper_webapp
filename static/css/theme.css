@@ -1,4 +1,314 @@
-/* 咖啡色主題樣式 */
+/* ==================== CSS Variables for Theme ==================== */
+:root {
+    /* Light Theme (Default) */
+    --bg-primary: #f8f9fa;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --text-muted: #6c757d;
+    --border-color: #dee2e6;
+    --navbar-bg: #212529;
+    --navbar-text: #ffffff;
+    --log-bg: #ffffff;
+    --log-border: #dee2e6;
+    --scrollbar-track: #f8f9fa;
+    --scrollbar-thumb: #6c757d;
+    --scrollbar-thumb-hover: #495057;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --input-text: #212529;
+}
+
+/* Dark Theme */
+[data-theme="dark"] {
+    --bg-primary: #0d1117;
+    --bg-secondary: #161b22;
+    --bg-card: #161b22;
+    --text-primary: #c9d1d9;
+    --text-secondary: #8b949e;
+    --text-muted: #8b949e;
+    --border-color: #30363d;
+    --navbar-bg: #010409;
+    --navbar-text: #c9d1d9;
+    --log-bg: #0d1117;
+    --log-border: #30363d;
+    --scrollbar-track: #161b22;
+    --scrollbar-thumb: #484f58;
+    --scrollbar-thumb-hover: #6e7681;
+    --input-bg: #0d1117;
+    --input-border: #30363d;
+    --input-text: #c9d1d9;
+}
+
+/* Apply theme variables to body and common elements */
+body {
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
+}
+
+.card {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+.card-header {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+.card-body {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+
+.card-footer {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+}
+
+.navbar-dark {
+    background-color: var(--navbar-bg) !important;
+}
+
+.form-control {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+    color: var(--input-text) !important;
+}
+
+.form-control:focus {
+    background-color: var(--input-bg) !important;
+    border-color: #0d6efd !important;
+    color: var(--input-text) !important;
+}
+
+.form-label {
+    color: var(--text-primary) !important;
+}
+
+.text-muted {
+    color: var(--text-muted) !important;
+}
+
+/* Log container dark theme */
+#log-container {
+    background-color: var(--log-bg) !important;
+    border-color: var(--log-border) !important;
+    color: var(--text-primary) !important;
+}
+
+#log-container div {
+    color: var(--text-primary) !important;
+}
+
+/* Log entry colors for dark theme */
+[data-theme="dark"] #log-container .text-danger {
+    color: #f85149 !important;
+}
+
+[data-theme="dark"] #log-container .text-success {
+    color: #3fb950 !important;
+}
+
+[data-theme="dark"] #log-container .text-info {
+    color: #58a6ff !important;
+}
+
+[data-theme="dark"] #log-container .text-warning {
+    color: #d29922 !important;
+}
+
+[data-theme="dark"] #log-container .system-info {
+    color: #58a6ff !important;
+}
+
+/* Scrollbar styling for dark theme */
+#log-container::-webkit-scrollbar-track {
+    background: var(--scrollbar-track) !important;
+    border-color: var(--border-color) !important;
+}
+
+#log-container::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb) !important;
+    border-color: var(--border-color) !important;
+}
+
+#log-container::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover) !important;
+}
+
+#log-container::-webkit-scrollbar-button {
+    background: var(--scrollbar-track) !important;
+    border-color: var(--border-color) !important;
+}
+
+#log-container::-webkit-scrollbar-corner {
+    background: var(--scrollbar-track) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Alert styling for dark theme */
+[data-theme="dark"] .alert {
+    border-color: var(--border-color) !important;
+}
+
+/* Table styling for dark theme */
+[data-theme="dark"] .table {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .table-striped > tbody > tr:nth-of-type(odd) > * {
+    color: var(--text-primary) !important;
+}
+
+/* Modal styling for dark theme */
+[data-theme="dark"] .modal-content {
+    background-color: var(--bg-card) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .modal-header {
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .modal-footer {
+    border-color: var(--border-color) !important;
+}
+
+/* Dropdown styling for dark theme */
+[data-theme="dark"] .dropdown-menu {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .dropdown-item {
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .dropdown-item:hover {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* List items and hover effects */
+[data-theme="dark"] .summary-item:hover,
+[data-theme="dark"] .bookmark-item:hover,
+[data-theme="dark"] .trash-item:hover {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Batch toolbar */
+[data-theme="dark"] .batch-toolbar {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Summary content and markdown */
+[data-theme="dark"] .summary-content,
+[data-theme="dark"] .markdown-content {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .markdown-content blockquote {
+    background-color: var(--bg-secondary) !important;
+    border-left-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .markdown-content code {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .markdown-content pre {
+    background-color: var(--bg-secondary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .markdown-content th {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .markdown-content table {
+    color: var(--text-primary) !important;
+}
+
+/* Channel badges and chips */
+[data-theme="dark"] .channel-badge {
+    background-color: var(--bg-secondary) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+}
+
+[data-theme="dark"] .channel-chip:hover {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Task queue priority badges - keep original colors but adjust for dark theme */
+[data-theme="dark"] .priority-high {
+    background-color: #dc3545 !important;
+    color: white !important;
+}
+
+[data-theme="dark"] .priority-medium {
+    background-color: #ffc107 !important;
+    color: black !important;
+}
+
+[data-theme="dark"] .priority-low {
+    background-color: #28a745 !important;
+    color: white !important;
+}
+
+/* Video info card */
+[data-theme="dark"] #video-info-card {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+}
+
+/* Progress bars - keep Bootstrap colors */
+[data-theme="dark"] .progress {
+    background-color: var(--bg-secondary) !important;
+}
+
+/* Badges */
+[data-theme="dark"] .badge {
+    border-color: var(--border-color) !important;
+}
+
+/* List group items */
+[data-theme="dark"] .list-group-item {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Pagination */
+[data-theme="dark"] .pagination .page-link {
+    background-color: var(--bg-card) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-primary) !important;
+}
+
+[data-theme="dark"] .pagination .page-item.active .page-link {
+    background-color: #0d6efd !important;
+    border-color: #0d6efd !important;
+}
+
+/* Breadcrumb */
+[data-theme="dark"] .breadcrumb {
+    background-color: var(--bg-secondary) !important;
+}
+
+[data-theme="dark"] .breadcrumb-item a {
+    color: #0d6efd !important;
+}
+
+/* ==================== Coffee Theme Styles ==================== */
 
 /* 書籤按鈕樣式 */
 .btn-bookmark {

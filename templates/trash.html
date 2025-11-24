@@ -1,400 +1,180 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>回收桶 - Whisper 語音轉文字工具</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- 主題樣式 -->
-    <link href="{{ url_for('static', filename='css/theme.css') }}" rel="stylesheet">
-    <style>
-        body {
-            background-color: #f8f9fa;
-        }
-        .trash-item {
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-            margin-bottom: 1rem;
-            background-color: white;
-        }
-        .trash-item:hover {
-            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        }
-        .file-info {
-            font-size: 0.875rem;
-            color: #6c757d;
-        }
-        .btn-group-sm .btn {
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-        }
-        .empty-trash {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #6c757d;
-        }
-        .empty-trash i {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
+{% extends "base.html" %}
 
-        /* 自定義按鈕樣式 - 統一三個導航按鈕 */
-        .btn-outline-primary {
-            background-color: #0d6efd; /* 藍色背景 */
-            color: #ffffff !important; /* 白色文字 */
-            border-color: #0d6efd;
-        }
+{% block title %}回收桶 - Whisper Web App{% endblock %}
 
-        .btn-outline-secondary.nav-bookmark {
-            background-color: #8B4513; /* 咖啡色背景 */
-            color: #ffffff !important; /* 白色文字 */
-            border-color: #8B4513;
-        }
+{% block head %}
+<style>
+    .trash-item {
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+        background-color: var(--bg-card);
+        padding: 1rem;
+    }
+    .trash-item:hover {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    .file-info {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    .file-name {
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
 
-        .btn-secondary {
-            background-color: #6c757d; /* 灰色背景 */
-            color: #ffffff !important; /* 白色文字 */
-            border-color: #6c757d;
-        }
+{% block content %}
+<div class="page-header">
+    <h1><i class="bi bi-trash"></i> 回收桶</h1>
+    <p class="page-description">已刪除的檔案會在此保留，您可以還原或永久刪除</p>
+</div>
 
-        /* hover 效果 */
-        .btn-outline-primary:hover {
-            opacity: 0.8;
-            color: #ffffff !important;
-        }
-
-        .btn-outline-secondary.nav-bookmark:hover {
-            opacity: 0.8;
-            color: #ffffff !important;
-        }
-
-        .btn-secondary:hover {
-            opacity: 0.8;
-            color: #ffffff !important;
-        }
-    </style>
-</head>
-<body>
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h1 class="h3 mb-0">
-                            <i class="bi bi-trash"></i> 回收桶
-                        </h1>
-                        <p class="text-muted mb-0">已刪除的檔案會在此保留，您可以還原或永久刪除</p>
-                    </div>
-                    <div class="btn-group">
-                        <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark">
-                            <i class="bi bi-bookmark-fill"></i> 書籤
-                        </a>
-                        <a href="/summary" class="btn btn-outline-primary">
-                            <i class="bi bi-file-text"></i> 摘要列表
-                        </a>
-                        <a href="{{ url_for('main.index') }}" class="btn btn-secondary">返回主頁</a>
+{% if trash_files %}
+<div class="card">
+    <div class="card-body">
+        {% for file in trash_files %}
+        <div class="trash-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="file-name">{{ file.name }}</div>
+                    <div class="file-info">
+                        <i class="bi bi-calendar"></i> 刪除時間：{{ file.deleted_at }}
+                        {% if file.size %}
+                        <span class="ms-3"><i class="bi bi-file-earmark"></i> 大小：{{ file.size }}</span>
+                        {% endif %}
                     </div>
                 </div>
-
-                <!-- 搜尋欄 -->
-                <div class="card mb-3">
-                    <div class="card-body">
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-search"></i>
-                            </span>
-                            <input type="text" class="form-control" id="search-input"
-                                   placeholder="搜尋回收桶項目..."
-                                   autocomplete="off">
-                            <button class="btn btn-outline-secondary" type="button" id="clear-search">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
-                        </div>
-                        <div class="mt-2">
-                            <small class="text-muted" id="search-results">顯示全部 {{ trash_items|length }} 個項目</small>
-                        </div>
-                    </div>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-success restore-btn" data-filename="{{ file.name }}">
+                        <i class="bi bi-arrow-counterclockwise"></i> 還原
+                    </button>
+                    <button class="btn btn-outline-danger delete-btn" data-filename="{{ file.name }}">
+                        <i class="bi bi-x-circle"></i> 永久刪除
+                    </button>
                 </div>
-
-                {% if trash_items %}
-                <div class="card">
-                    <div class="card-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span>共 {{ trash_items|length }} 個項目</span>
-                            <div class="btn-group btn-group-sm">
-                                <button type="button" class="btn btn-outline-success" onclick="restoreAll()">
-                                    <i class="bi bi-arrow-clockwise"></i> 全部還原
-                                </button>
-                                <button type="button" class="btn btn-outline-danger" onclick="deleteAll()">
-                                    <i class="bi bi-trash"></i> 全部刪除
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="trash-list">
-                            {% for item in trash_items %}
-                            <div class="trash-item p-3" data-trash-id="{{ item.id }}">
-                                <div class="row align-items-center">
-                                    <div class="col-md-6">
-                                        <div class="d-flex align-items-center">
-                                            <div class="me-3">
-                                                {% if item.file_type == 'summary' %}
-                                                <i class="bi bi-file-text text-primary" style="font-size: 1.5rem;"></i>
-                                                {% else %}
-                                                <i class="bi bi-file-earmark-text text-secondary" style="font-size: 1.5rem;"></i>
-                                                {% endif %}
-                                            </div>
-                                            <div>
-                                                <h6 class="mb-1">{{ item.original_name }}</h6>
-                                                <div class="file-info">
-                                                    <span class="badge bg-{{ 'primary' if item.file_type == 'summary' else 'secondary' }} me-2">
-                                                        {{ '摘要' if item.file_type == 'summary' else '字幕' }}
-                                                    </span>
-                                                    <span>{{ (item.file_size / 1024)|round(1) }} KB</span>
-                                                    <span class="mx-2">•</span>
-                                                    <span>{{ item.deleted_at[:10] }} {{ item.deleted_at[11:19] }}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-6 text-end">
-                                        <div class="btn-group btn-group-sm">
-                                            <button type="button" class="btn btn-outline-success" onclick="restoreItem('{{ item.id }}')">
-                                                <i class="bi bi-arrow-clockwise"></i> 還原
-                                            </button>
-                                            <button type="button" class="btn btn-outline-danger" onclick="deleteItem('{{ item.id }}')">
-                                                <i class="bi bi-trash"></i> 刪除
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-                <div class="empty-trash">
-                    <i class="bi bi-trash"></i>
-                    <h4>回收桶是空的</h4>
-                    <p>沒有已刪除的檔案</p>
-                    <a href="/summary" class="btn btn-primary">查看所有摘要</a>
-                </div>
-                {% endif %}
             </div>
         </div>
+        {% endfor %}
     </div>
+</div>
 
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<div class="mt-3">
+    <button class="btn btn-danger" id="empty-trash-btn">
+        <i class="bi bi-trash3"></i> 清空回收桶
+    </button>
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-trash"></i>
+    <h3>回收桶是空的</h3>
+    <p>沒有已刪除的檔案</p>
+    <a href="{{ url_for('main.list_summaries') }}" class="btn btn-primary mt-3">
+        <i class="bi bi-list"></i> 前往摘要列表
+    </a>
+</div>
+{% endif %}
+{% endblock %}
 
-    <script>
-        // 頁面載入完成後初始化搜尋功能
-        document.addEventListener('DOMContentLoaded', function() {
-            const searchInput = document.getElementById('search-input');
-            const clearButton = document.getElementById('clear-search');
-
-            if (searchInput) {
-                searchInput.addEventListener('input', performSearch);
-                clearButton.addEventListener('click', clearSearch);
-
-                // 按 ESC 清除搜尋
-                searchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Escape') {
-                        clearSearch();
-                    }
-                });
-            }
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // 還原檔案
+        document.querySelectorAll('.restore-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const filename = this.dataset.filename;
+                if (confirm(`確定要還原「${filename}」嗎？`)) {
+                    restoreFile(filename);
+                }
+            });
         });
 
-        function performSearch() {
-            const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
-            const trashItems = document.querySelectorAll('.trash-item');
-            const searchResults = document.getElementById('search-results');
-            let visibleCount = 0;
-
-            trashItems.forEach(item => {
-                const filename = item.querySelector('h6').textContent.toLowerCase();
-                const isVisible = filename.includes(searchTerm);
-
-                item.style.display = isVisible ? 'block' : 'none';
-                if (isVisible) visibleCount++;
+        // 永久刪除檔案
+        document.querySelectorAll('.delete-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const filename = this.dataset.filename;
+                if (confirm(`確定要永久刪除「${filename}」嗎？此操作無法復原！`)) {
+                    deleteFile(filename);
+                }
             });
+        });
 
-            // 更新搜尋結果文字
-            const totalCount = trashItems.length;
-            if (searchTerm === '') {
-                searchResults.textContent = `顯示全部 ${totalCount} 個項目`;
-            } else {
-                searchResults.textContent = `找到 ${visibleCount} 個項目，共 ${totalCount} 個`;
-            }
+        // 清空回收桶
+        const emptyTrashBtn = document.getElementById('empty-trash-btn');
+        if (emptyTrashBtn) {
+            emptyTrashBtn.addEventListener('click', function() {
+                if (confirm('確定要清空回收桶嗎？所有檔案將被永久刪除，此操作無法復原！')) {
+                    emptyTrash();
+                }
+            });
         }
 
-        function clearSearch() {
-            document.getElementById('search-input').value = '';
-            performSearch();
-            document.getElementById('search-input').focus();
-        }
-
-        function restoreItem(trashId) {
-            if (!confirm('確定要還原這個檔案嗎？')) return;
-
-            fetch('/api/trash/restore', {
+        function restoreFile(filename) {
+            fetch('/api/restore', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ trash_id: trashId })
+                body: JSON.stringify({ filename: filename })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // 移除項目從頁面
-                    document.querySelector(`[data-trash-id="${trashId}"]`).remove();
-                    showMessage('檔案已還原', 'success');
-                    updateEmptyState();
+                    location.reload();
                 } else {
-                    showMessage(data.message, 'error');
+                    alert('還原失敗：' + data.message);
                 }
             })
             .catch(error => {
-                showMessage('還原失敗: ' + error.message, 'error');
+                console.error('還原失敗:', error);
+                alert('還原失敗，請稍後再試');
             });
         }
 
-        function deleteItem(trashId) {
-            if (!confirm('確定要永久刪除這個檔案嗎？此操作無法撤銷！')) return;
-
-            fetch('/api/trash/delete', {
+        function deleteFile(filename) {
+            fetch('/api/delete_permanent', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ trash_id: trashId })
+                body: JSON.stringify({ filename: filename })
             })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // 移除項目從頁面
-                    document.querySelector(`[data-trash-id="${trashId}"]`).remove();
-                    showMessage('檔案已永久刪除', 'success');
-                    updateEmptyState();
+                    location.reload();
                 } else {
-                    showMessage(data.message, 'error');
+                    alert('刪除失敗：' + data.message);
                 }
             })
             .catch(error => {
-                showMessage('刪除失敗: ' + error.message, 'error');
+                console.error('刪除失敗:', error);
+                alert('刪除失敗，請稍後再試');
             });
         }
 
-        function restoreAll() {
-            if (!confirm('確定要還原所有檔案嗎？')) return;
-
-            const items = document.querySelectorAll('[data-trash-id]');
-            let completed = 0;
-            let total = items.length;
-
-            items.forEach(item => {
-                const trashId = item.getAttribute('data-trash-id');
-                fetch('/api/trash/restore', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ trash_id: trashId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        item.remove();
-                    }
-                    completed++;
-                    if (completed === total) {
-                        showMessage('所有檔案已還原', 'success');
-                        updateEmptyState();
-                    }
-                })
-                .catch(error => {
-                    completed++;
-                    if (completed === total) {
-                        showMessage('部分檔案還原失敗', 'error');
-                        updateEmptyState();
-                    }
-                });
+        function emptyTrash() {
+            fetch('/api/empty_trash', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('清空回收桶失敗：' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('清空回收桶失敗:', error);
+                alert('清空回收桶失敗，請稍後再試');
             });
         }
-
-        function deleteAll() {
-            if (!confirm('確定要永久刪除所有檔案嗎？此操作無法撤銷！')) return;
-
-            const items = document.querySelectorAll('[data-trash-id]');
-            let completed = 0;
-            let total = items.length;
-
-            items.forEach(item => {
-                const trashId = item.getAttribute('data-trash-id');
-                fetch('/api/trash/delete', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ trash_id: trashId })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        item.remove();
-                    }
-                    completed++;
-                    if (completed === total) {
-                        showMessage('所有檔案已永久刪除', 'success');
-                        updateEmptyState();
-                    }
-                })
-                .catch(error => {
-                    completed++;
-                    if (completed === total) {
-                        showMessage('部分檔案刪除失敗', 'error');
-                        updateEmptyState();
-                    }
-                });
-            });
-        }
-
-        function updateEmptyState() {
-            const items = document.querySelectorAll('[data-trash-id]');
-            if (items.length === 0) {
-                location.reload(); // 重新載入頁面顯示空狀態
-            } else {
-                // 更新搜尋結果計數
-                performSearch();
-            }
-        }
-
-        function showMessage(message, type) {
-            // 簡單的訊息顯示
-            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
-            const alertHtml = `
-                <div class="alert ${alertClass} alert-dismissible fade show position-fixed"
-                     style="top: 20px; right: 20px; z-index: 1050; min-width: 300px;">
-                    ${message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                </div>
-            `;
-            document.body.insertAdjacentHTML('beforeend', alertHtml);
-
-            // 自動移除訊息
-            setTimeout(() => {
-                const alert = document.querySelector('.alert');
-                if (alert) alert.remove();
-            }, 3000);
-        }
-    </script>
-</body>
-</html>
+    });
+</script>
+{% endblock %}

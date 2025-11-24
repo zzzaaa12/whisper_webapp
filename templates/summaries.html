@@ -1,801 +1,750 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>所有摘要紀錄 - Whisper 工具</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
-    <link href="{{ url_for('static', filename='css/theme.css') }}" rel="stylesheet">
-    <!-- OpenCC.js for Traditional Chinese conversion -->
-    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
-    <style>
-        body { background-color: #f8f9fa; }
+{% extends "base.html" %}
 
-        /* Desktop Styles */
-        .desktop-view .summary-item {
-            display: flex;
-            align-items: center;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #dee2e6;
-        }
-        .desktop-view .summary-item:last-child {
-            border-bottom: none;
-        }
-        .desktop-view .summary-item:hover {
-            background-color: #f8f9fa;
-        }
-        .desktop-view .summary-checkbox {
-            margin-right: 1rem;
-        }
-        .desktop-view .summary-content {
-            flex: 1;
-            cursor: pointer;
-        }
-        .desktop-view .summary-content:hover {
-            color: #0d6efd;
-        }
-        .desktop-view .batch-toolbar {
-            background-color: #e9ecef;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid #dee2e6;
-            display: none;
-        }
-        .desktop-view .summary-meta {
-            font-size: 0.875rem;
-            color: #6c757d;
-            margin-top: 0.25rem;
-        }
-        .desktop-view .channel-badge {
-            background-color: #e7f3ff;
-            color: #0366d6;
-            border: 1px solid #c8e1ff;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.375rem;
-            font-size: 0.75rem;
-            font-weight: 500;
-            margin-right: 0.5rem;
-        }
-        .desktop-view .summary-actions {
-            display: flex;
-            gap: 0.5rem;
-            align-items: center;
-        }
-        .desktop-view .btn-group .btn {
-            white-space: nowrap;
-        }
-        .desktop-view .filter-section {
-            background-color: white;
-            border: 1px solid #dee2e6;
-            border-radius: 0.375rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-        }
-        .desktop-view .bookmark-badge {
-            background-color: #ffc107;
-            color: #000;
-            padding: 0.25rem 0.5rem;
-            border-radius: 0.25rem;
-            font-size: 0.75rem;
-            margin-left: 0.5rem;
-        }
+{% block title %}所有摘要紀錄 - Whisper Web App{% endblock %}
 
-        /* 快速頻道過濾標籤樣式 */
-        .channel-chips {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.5rem;
-        }
-        .channel-chip {
-            border: 2px solid #dee2e6;
-            background-color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 1.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: flex;
-            align-items: center;
-            gap: 0.25rem;
-        }
-        .channel-chip:hover {
-            border-color: #0d6efd;
-            background-color: #f8f9fa;
-            transform: translateY(-2px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .channel-chip.active {
-            border-color: #0d6efd;
-            background-color: #0d6efd;
-            color: white;
-        }
-        .channel-chip .badge {
-            font-size: 0.75rem;
-        }
-        .channel-chip.active .badge {
-            background-color: rgba(255,255,255,0.3) !important;
-        }
+{% block head %}
+<!-- OpenCC.js for Traditional Chinese conversion -->
+<script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
+<style>
+    /* Desktop Styles */
+    .desktop-view .summary-item {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .desktop-view .summary-item:last-child {
+        border-bottom: none;
+    }
+    .desktop-view .summary-item:hover {
+        background-color: var(--bg-secondary);
+    }
+    .desktop-view .summary-checkbox {
+        margin-right: 1rem;
+    }
+    .desktop-view .summary-content {
+        flex: 1;
+        cursor: pointer;
+    }
+    .desktop-view .summary-content:hover {
+        color: #0d6efd;
+    }
+    .desktop-view .batch-toolbar {
+        background-color: var(--bg-secondary);
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: none;
+    }
+    .desktop-view .summary-meta {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        margin-top: 0.25rem;
+    }
+    .desktop-view .summary-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    .desktop-view .btn-group .btn {
+        white-space: nowrap;
+    }
+    .desktop-view .filter-section {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
 
-        /* Mobile Styles */
-        .mobile-view {
-            display: none;
-        }
+    /* 快速頻道過濾標籤樣式 */
+    .channel-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .channel-chip {
+        border: 2px solid var(--border-color);
+        background-color: var(--bg-card);
+        padding: 0.5rem 1rem;
+        border-radius: 1.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        color: var(--text-primary);
+    }
+    .channel-chip:hover {
+        border-color: #0d6efd;
+        background-color: var(--bg-secondary);
+        transform: translateY(-2px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .channel-chip.active {
+        border-color: #0d6efd;
+        background-color: #0d6efd;
+        color: white;
+    }
+    .channel-chip .badge {
+        font-size: 0.75rem;
+    }
+    .channel-chip.active .badge {
+        background-color: rgba(255,255,255,0.3) !important;
+    }
 
-        .mobile-view .simple-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-bottom: 0.5rem;
-            border-bottom: 1px solid #e9ecef;
-            margin-bottom: 1rem;
-        }
+    /* Mobile Styles */
+    .mobile-view {
+        display: none;
+    }
 
-        .mobile-view .summary-count {
-            font-size: 0.9rem;
-            color: #6c757d;
-        }
+    .mobile-view .simple-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border-color);
+        margin-bottom: 1rem;
+    }
 
-        .mobile-view .simple-filter {
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            padding: 0.5rem 0;
-            margin-bottom: 1rem;
-            border-radius: 0.5rem;
-        }
+    .mobile-view .summary-count {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
 
-        .mobile-view .hidden-nav,
-        .mobile-view .hidden-search {
-            background: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            animation: slideDown 0.3s ease;
-            display: none;
-        }
+    .mobile-view .hidden-nav,
+    .mobile-view .hidden-search {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        animation: slideDown 0.3s ease;
+        display: none;
+    }
 
-        .mobile-view .nav-buttons {
-            display: flex;
-            gap: 0.5rem;
-            flex-wrap: wrap;
-        }
+    .mobile-view .nav-buttons {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
 
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .mobile-view .summary-item {
-            margin-bottom: 0.75rem;
-            padding: 0;
-            border: 1px solid #e9ecef;
-            border-radius: 0.5rem;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow: hidden;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            position: relative;
-        }
-
-        .mobile-view .summary-item:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-        }
-
-        .mobile-view .summary-checkbox {
-            position: absolute;
-            top: 1rem;
-            left: 1rem;
-            transform: scale(1.3);
-            z-index: 10;
-            display: none;
-        }
-
-        .mobile-view .summary-content {
-            padding: 1rem;
-            cursor: pointer;
-        }
-
-        .mobile-view .summary-content h6 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            line-height: 1.4;
-            color: #2c3e50;
-        }
-
-        .mobile-view .summary-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .mobile-view .channel-badge {
-            background-color: #f8f9fa;
-            color: #495057;
-            border: 1px solid #dee2e6;
-            padding: 0.25rem 0.75rem;
-            border-radius: 1rem;
-            font-size: 0.8rem;
-            font-weight: 500;
-            width: fit-content;
-        }
-
-        .mobile-view .summary-item.bookmarked {
-            border-color: #ffc107;
-            border-width: 2px;
-        }
-
-        .mobile-view .summary-item.bookmarked::before {
-            content: "\f4a5";
-            font-family: "Bootstrap Icons";
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            color: #ffc107;
-            font-size: 1.2rem;
-            z-index: 5;
-        }
-
-        /* Floating Action Button */
-        .floating-actions {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-            display: none;
-        }
-
-        .fab {
-            width: 56px;
-            height: 56px;
-            border-radius: 50%;
-            border: none;
-            background: #007bff;
-            color: white;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.2rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .fab:hover {
-            background: #0056b3;
-            transform: scale(1.1);
-        }
-
-        .fab-menu.active .fab-main {
-            background: #dc3545;
-            transform: rotate(45deg);
-        }
-
-        .fab-actions {
-            position: absolute;
-            bottom: 0;
-            right: 0;
-            display: flex;
-            flex-direction: column-reverse;
-            gap: 12px;
+    @keyframes slideDown {
+        from {
             opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            transform: translateY(-20px);
         }
-
-        .fab-menu.active .fab-actions {
+        to {
             opacity: 1;
-            pointer-events: auto;
-            transform: translateY(-68px);
+            transform: translateY(0);
         }
+    }
 
-        .fab-action {
-            width: 48px;
-            height: 48px;
-            font-size: 1rem;
-            background: #6c757d;
-            transform: scale(0);
-            animation: fabScale 0.3s ease forwards;
+    .mobile-view .summary-item {
+        margin-bottom: 0.75rem;
+        padding: 0;
+        border: 1px solid var(--border-color);
+        border-radius: 0.5rem;
+        background: var(--bg-card);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        overflow: hidden;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        position: relative;
+    }
+
+    .mobile-view .summary-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .mobile-view .summary-checkbox {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        transform: scale(1.3);
+        z-index: 10;
+        display: none;
+    }
+
+    .mobile-view .summary-content {
+        padding: 1rem;
+        cursor: pointer;
+    }
+
+    .mobile-view .summary-content h6 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        line-height: 1.4;
+        color: var(--text-primary);
+    }
+
+    .mobile-view .summary-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .mobile-view .summary-item.bookmarked {
+        border-color: #ffc107;
+        border-width: 2px;
+    }
+
+    .mobile-view .summary-item.bookmarked::before {
+        content: "\f4a5";
+        font-family: "Bootstrap Icons";
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        color: #ffc107;
+        font-size: 1.2rem;
+        z-index: 5;
+    }
+
+    /* Floating Action Button */
+    .floating-actions {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+        display: none;
+    }
+
+    .fab {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        border: none;
+        background: #007bff;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .fab:hover {
+        background: #0056b3;
+        transform: scale(1.1);
+    }
+
+    .fab-menu.active .fab-main {
+        background: #dc3545;
+        transform: rotate(45deg);
+    }
+
+    .fab-actions {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        display: flex;
+        flex-direction: column-reverse;
+        gap: 12px;
+        opacity: 0;
+        pointer-events: none;
+        transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    }
+
+    .fab-menu.active .fab-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(-68px);
+    }
+
+    .fab-action {
+        width: 48px;
+        height: 48px;
+        font-size: 1rem;
+        background: #6c757d;
+        transform: scale(0);
+        animation: fabScale 0.3s ease forwards;
+    }
+
+    .fab-action:nth-child(1) { animation-delay: 0.1s; }
+    .fab-action:nth-child(2) { animation-delay: 0.2s; }
+    .fab-action:nth-child(3) { animation-delay: 0.3s; }
+
+    @keyframes fabScale {
+        to {
+            transform: scale(1);
         }
+    }
 
-        .fab-action:nth-child(1) { animation-delay: 0.1s; }
-        .fab-action:nth-child(2) { animation-delay: 0.2s; }
-        .fab-action:nth-child(3) { animation-delay: 0.3s; }
+    /* Mobile batch toolbar */
+    .mobile-batch-toolbar {
+        position: fixed;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        z-index: 1000;
+        border-radius: 25px;
+        padding: 1rem 1.5rem;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        display: none;
+    }
 
-        @keyframes fabScale {
-            to {
-                transform: scale(1);
-            }
+    [data-theme="dark"] .mobile-batch-toolbar {
+        background: rgba(22, 27, 34, 0.95);
+    }
+
+    /* Media Queries */
+    @media (max-width: 768px) {
+        .desktop-view {
+            display: none !important;
         }
-
-        /* Mobile batch toolbar */
-        .mobile-batch-toolbar {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            right: 20px;
-            z-index: 1000;
-            border-radius: 25px;
-            padding: 1rem 1.5rem;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-            display: none;
+        .mobile-view {
+            display: block !important;
         }
-
-        /* Media Queries */
-        @media (max-width: 768px) {
-            .desktop-view {
-                display: none !important;
-            }
-            .mobile-view {
-                display: block !important;
-            }
-            .floating-actions {
-                display: block;
-            }
-            body.batch-mode .mobile-view .summary-checkbox {
-                display: block;
-            }
-            body.batch-mode {
-                padding-bottom: 100px;
-            }
+        .floating-actions {
+            display: block;
         }
-
-        @media (min-width: 769px) {
-            .mobile-view {
-                display: none !important;
-            }
-            .desktop-view {
-                display: block !important;
-            }
+        body.batch-mode .mobile-view .summary-checkbox {
+            display: block;
         }
-    </style>
-</head>
-<body>
-    <div class="container mt-4">
-        <!-- Desktop View -->
-        <div class="desktop-view">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <h1 class="h3 mb-0">所有摘要紀錄</h1>
-                <span class="text-muted">共 {{ summaries|length }} 個摘要</span>
-            </div>
+        body.batch-mode {
+            padding-bottom: 100px;
+        }
+    }
 
-            <!-- 批量工具列 -->
-            <div class="batch-toolbar" id="desktop-batch-toolbar">
-                <div class="d-flex justify-content-between align-items-center">
-                    <span id="desktop-selected-count">已選擇 0 個項目</span>
-                    <div class="btn-group">
-                        <button class="btn btn-sm btn-outline-primary" id="desktop-batch-bookmark">
-                            <i class="bi bi-bookmark-plus"></i> 批量書籤
-                        </button>
-                        <button class="btn btn-sm btn-outline-danger" id="desktop-batch-delete">
-                            <i class="bi bi-trash"></i> 批量刪除
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" id="desktop-cancel-selection">
-                            <i class="bi bi-x"></i> 取消選擇
-                        </button>
-                    </div>
-                </div>
-            </div>
+    @media (min-width: 769px) {
+        .mobile-view {
+            display: none !important;
+        }
+        .desktop-view {
+            display: block !important;
+        }
+    }
+</style>
+{% endblock %}
 
-            <!-- 導航按鈕 -->
-            <div class="mb-3">
-                <div class="btn-group">
-                    <a href="/trash" class="btn btn-warning">
-                        <i class="bi bi-trash"></i> 回收桶
-                    </a>
-                    <a href="/bookmarks" class="btn btn-outline-secondary nav-bookmark-solid">
-                        <i class="bi bi-bookmark-fill"></i> 書籤
-                    </a>
-                    <a href="{{ url_for('main.index') }}" class="btn btn-secondary">返回主頁</a>
-                </div>
-            </div>
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <h1>所有摘要紀錄</h1>
+    <p class="page-description">共 {{ summaries|length }} 個摘要</p>
+</div>
 
-            <!-- 過濾器區域 -->
-            <div class="filter-section">
-                <!-- 快速頻道過濾標籤 -->
-                <div class="mb-3">
-                    <label class="form-label">快速頻道篩選 (前20個熱門頻道)</label>
-                    <div class="channel-chips d-flex flex-wrap gap-2">
-                        <button class="channel-chip active" data-channel="">
-                            📺 全部頻道 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
-                        </button>
-                        {% for channel in top_channels %}
-                        <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
-                            {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
-                        </button>
-                        {% endfor %}
-                    </div>
-                </div>
-
-                <div class="row g-3">
-                    <div class="col-md-4">
-                        <label for="desktop-channel-filter" class="form-label">頻道過濾</label>
-                        <select class="form-select" id="desktop-channel-filter">
-                            <option value="">全部頻道 ({{ summaries|length }})</option>
-                            {% for channel in channels %}
-                            <option value="{{ channel }}">{{ channel }} ({{ channel_counts[channel] }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-6">
-                        <label for="desktop-search-input" class="form-label">搜尋</label>
-                        <div class="input-group">
-                            <span class="input-group-text">
-                                <i class="bi bi-search"></i>
-                            </span>
-                            <input type="text" class="form-control" id="desktop-search-input" placeholder="搜尋摘要標題...">
-                            <button class="btn btn-outline-secondary" type="button" id="desktop-clear-search">
-                                <i class="bi bi-x-lg"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label">&nbsp;</label>
-                        <div>
-                            <button class="btn btn-outline-secondary w-100" type="button" id="desktop-clear-filters">
-                                <i class="bi bi-arrow-clockwise"></i> 重置
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <small class="text-muted" id="desktop-filter-status">顯示全部 {{ summaries|length }} 個摘要</small>
-                </div>
-            </div>
-
-            <!-- 摘要列表 -->
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush" id="desktop-summaries-list">
-                        {% for summary in summaries %}
-                        <div class="summary-item" data-filename="{{ summary.filename }}" data-title="{{ summary.title }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
-                            <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
-                            <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
-                                <h6 class="mb-1">{{ summary.title }}</h6>
-                                <div class="summary-meta">
-                                    <span class="channel-badge">{{ summary.channel_display }}</span>
-                                    {% if summary.is_bookmarked %}
-                                    <span class="bookmark-badge">
-                                        <i class="bi bi-bookmark-fill"></i> 已書籤
-                                    </span>
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="summary-actions">
-                                <button class="btn btn-sm btn-outline-primary bookmark-toggle" data-filename="{{ summary.filename }}">
-                                    <i class="bi bi-bookmark{{ '-fill' if summary.is_bookmarked else '' }}"></i>
-                                </button>
-                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success">
-                                    <i class="bi bi-download"></i>
-                                </a>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- 無結果提示 -->
-            <div class="card mt-3" id="desktop-no-results" style="display: none;">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-search display-1 text-muted"></i>
-                    <h5 class="mt-3">沒有找到符合條件的摘要</h5>
-                    <p class="text-muted">請嘗試調整搜尋條件或頻道過濾器</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Mobile View -->
-        <div class="mobile-view">
-            <div class="simple-header mb-3">
-                <h1 class="h4 mb-0">摘要列表</h1>
-                <span class="summary-count">共 {{ summaries|length }} 個摘要</span>
-            </div>
-
-            <!-- 隱藏的導航區域 -->
-            <div class="hidden-nav" id="mobile-hidden-nav">
-                <div class="nav-buttons mb-3">
-                    <a href="{{ url_for('main.index') }}" class="btn btn-primary btn-sm">
-                        <i class="bi bi-house"></i> 首頁
-                    </a>
-                    <a href="/queue" class="btn btn-info btn-sm">
-                        <i class="bi bi-list-task"></i> 任務佇列
-                    </a>
-                    <a href="/trash" class="btn btn-warning btn-sm">
-                        <i class="bi bi-trash"></i> 回收桶
-                    </a>
-                    <a href="/bookmarks" class="btn btn-outline-secondary btn-sm">
-                        <i class="bi bi-bookmark-fill"></i> 書籤
-                    </a>
-                </div>
-            </div>
-
-            <!-- 快速頻道過濾標籤 (手機版) -->
-            <div class="mb-3">
-                <div class="channel-chips d-flex flex-wrap gap-2">
-                    <button class="channel-chip active" data-channel="">
-                        📺 全部 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
-                    </button>
-                    {% for channel in top_channels %}
-                    <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
-                        {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
-                    </button>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <!-- 簡化的過濾器 -->
-            <div class="simple-filter mb-3" style="display: none;">
-                <select class="form-select" id="mobile-channel-filter">
-                    <option value="">📺 全部頻道 ({{ summaries|length }})</option>
-                    {% for channel in channels %}
-                    <option value="{{ channel }}">{{ channel }} ({{ channel_counts[channel] }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <!-- 隱藏的搜尋區域 -->
-            <div class="hidden-search" id="mobile-hidden-search">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="bi bi-search"></i>
-                    </span>
-                    <input type="text" class="form-control" id="mobile-search-input" placeholder="搜尋摘要標題...">
-                    <button class="btn btn-outline-secondary" type="button" id="mobile-clear-search">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                    <button class="btn btn-outline-secondary" type="button" id="mobile-clear-filters">
-                        <i class="bi bi-arrow-clockwise"></i>
-                    </button>
-                </div>
-                <div class="mt-2">
-                    <small class="text-muted" id="mobile-filter-status">顯示全部 {{ summaries|length }} 個摘要</small>
-                </div>
-            </div>
-
-            <!-- 摘要列表 -->
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="list-group list-group-flush" id="mobile-summaries-list">
-                        {% for summary in summaries %}
-                        <div class="summary-item{{ ' bookmarked' if summary.is_bookmarked else '' }}" data-filename="{{ summary.filename }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
-                            <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
-                            <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
-                                <h6 class="mb-1">{{ summary.title }}</h6>
-                                <div class="summary-meta">
-                                    <span class="channel-badge">📺 {{ summary.channel_display }}</span>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-
-            <!-- 無結果提示 -->
-            <div class="card mt-3" id="mobile-no-results" style="display: none;">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-search display-1 text-muted"></i>
-                    <h5 class="mt-3">沒有找到符合條件的摘要</h5>
-                    <p class="text-muted">請嘗試調整搜尋條件或頻道過濾器</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- 懸浮功能按鈕組 (Mobile Only) -->
-        <div class="floating-actions">
-            <div class="fab-menu" id="fab-menu">
-                <button class="fab fab-main" id="fab-main" title="更多功能">
-                    <i class="bi bi-three-dots"></i>
+<!-- Desktop View -->
+<div class="desktop-view">
+    <!-- 批量工具列 -->
+    <div class="batch-toolbar" id="desktop-batch-toolbar">
+        <div class="d-flex justify-content-between align-items-center">
+            <span id="desktop-selected-count">已選擇 0 個項目</span>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-primary" id="desktop-batch-bookmark">
+                    <i class="bi bi-bookmark-plus"></i> 批量書籤
                 </button>
-                <div class="fab-actions">
-                    <button class="fab fab-action" id="toggle-search" title="搜尋摘要">
-                        <i class="bi bi-search"></i>
-                    </button>
-                    <button class="fab fab-action" id="toggle-nav" title="導航選單">
-                        <i class="bi bi-menu-button"></i>
-                    </button>
-                    <button class="fab fab-action" id="toggle-batch" title="批量操作">
-                        <i class="bi bi-check2-square"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 手機版批量操作工具列 -->
-        <div class="mobile-batch-toolbar" id="mobile-batch-toolbar">
-            <div class="d-flex justify-content-between align-items-center">
-                <span id="mobile-selected-count">已選擇 0 個項目</span>
-                <div class="btn-group">
-                    <button class="btn btn-sm btn-outline-primary" id="mobile-batch-bookmark">
-                        <i class="bi bi-bookmark-plus"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-secondary" id="mobile-cancel-selection">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
+                <button class="btn btn-sm btn-outline-danger" id="desktop-batch-delete">
+                    <i class="bi bi-trash"></i> 批量刪除
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" id="desktop-cancel-selection">
+                    <i class="bi bi-x"></i> 取消選擇
+                </button>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // OpenCC converter instance
-        let converter = null;
+    <!-- 過濾器區域 -->
+    <div class="filter-section">
+        <!-- 快速頻道過濾標籤 -->
+        <div class="mb-3">
+            <label class="form-label">快速頻道篩選 (前20個熱門頻道)</label>
+            <div class="channel-chips d-flex flex-wrap gap-2">
+                <button class="channel-chip active" data-channel="">
+                    📺 全部頻道 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
+                </button>
+                {% for channel in top_channels %}
+                <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
+                    {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
+                </button>
+                {% endfor %}
+            </div>
+        </div>
 
-        // Initialize OpenCC converter for Traditional Chinese
-        function initializeOpenCC() {
-            try {
-                // Create converter from Simplified Chinese to Traditional Chinese (Taiwan)
-                converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
-                console.log('OpenCC converter initialized successfully');
-                return true;
-            } catch (error) {
-                console.error('Failed to initialize OpenCC:', error);
-                return false;
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label for="desktop-channel-filter" class="form-label">頻道過濾</label>
+                <select class="form-select" id="desktop-channel-filter">
+                    <option value="">全部頻道 ({{ summaries|length }})</option>
+                    {% for channel in channels %}
+                    <option value="{{ channel_original_names.get(channel, channel) }}">{{ channel }} ({{ channel_counts[channel] }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="desktop-search-input" class="form-label">搜尋</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control" id="desktop-search-input" placeholder="搜尋摘要標題...">
+                    <button class="btn btn-outline-secondary" type="button" id="desktop-clear-search">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div>
+                    <button class="btn btn-outline-secondary w-100" type="button" id="desktop-clear-filters">
+                        <i class="bi bi-arrow-clockwise"></i> 重置
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="mt-2">
+            <small class="text-muted" id="desktop-filter-status">顯示全部 {{ summaries|length }} 個摘要</small>
+        </div>
+    </div>
+
+    <!-- 摘要列表 -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush" id="desktop-summaries-list">
+                {% for summary in summaries %}
+                <div class="summary-item" data-filename="{{ summary.filename }}" data-title="{{ summary.title }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
+                    <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
+                    <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
+                        <h6 class="mb-1">{{ summary.title }}</h6>
+                        <div class="summary-meta">
+                            <span class="badge-channel">{{ summary.channel_display }}</span>
+                            {% if summary.is_bookmarked %}
+                            <span class="badge-bookmark">
+                                <i class="bi bi-bookmark-fill"></i> 已書籤
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="summary-actions">
+                        <button class="btn btn-sm btn-outline-primary bookmark-toggle" data-filename="{{ summary.filename }}">
+                            <i class="bi bi-bookmark{{ '-fill' if summary.is_bookmarked else '' }}"></i>
+                        </button>
+                        <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success">
+                            <i class="bi bi-download"></i>
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 無結果提示 -->
+    <div class="empty-state" id="desktop-no-results" style="display: none;">
+        <i class="bi bi-search"></i>
+        <h3>沒有找到符合條件的摘要</h3>
+        <p>請嘗試調整搜尋條件或頻道過濾器</p>
+    </div>
+</div>
+
+<!-- Mobile View -->
+<div class="mobile-view">
+    <div class="simple-header mb-3">
+        <h1 class="h4 mb-0">摘要列表</h1>
+        <span class="summary-count">共 {{ summaries|length }} 個摘要</span>
+    </div>
+
+    <!-- 快速頻道過濾標籤 (手機版) -->
+    <div class="mb-3">
+        <div class="channel-chips d-flex flex-wrap gap-2">
+            <button class="channel-chip active" data-channel="">
+                📺 全部 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
+            </button>
+            {% for channel in top_channels %}
+            <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
+                {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- 隱藏的搜尋區域 -->
+    <div class="hidden-search" id="mobile-hidden-search">
+        <div class="input-group">
+            <span class="input-group-text">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="text" class="form-control" id="mobile-search-input" placeholder="搜尋摘要標題...">
+            <button class="btn btn-outline-secondary" type="button" id="mobile-clear-search">
+                <i class="bi bi-x-lg"></i>
+            </button>
+            <button class="btn btn-outline-secondary" type="button" id="mobile-clear-filters">
+                <i class="bi bi-arrow-clockwise"></i>
+            </button>
+        </div>
+        <div class="mt-2">
+            <small class="text-muted" id="mobile-filter-status">顯示全部 {{ summaries|length }} 個摘要</small>
+        </div>
+    </div>
+
+    <!-- 摘要列表 -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="list-group list-group-flush" id="mobile-summaries-list">
+                {% for summary in summaries %}
+                <div class="summary-item{{ ' bookmarked' if summary.is_bookmarked else '' }}" data-filename="{{ summary.filename }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
+                    <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
+                    <div class="summary-content" onclick="window.location.href='/summary/{{ summary.filename }}'">
+                        <h6 class="mb-1">{{ summary.title }}</h6>
+                        <div class="summary-meta">
+                            <span class="badge-channel">📺 {{ summary.channel_display }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- 無結果提示 -->
+    <div class="empty-state" id="mobile-no-results" style="display: none;">
+        <i class="bi bi-search"></i>
+        <h3>沒有找到符合條件的摘要</h3>
+        <p>請嘗試調整搜尋條件或頻道過濾器</p>
+    </div>
+</div>
+
+<!-- 懸浮功能按鈕組 (Mobile Only) -->
+<div class="floating-actions">
+    <div class="fab-menu" id="fab-menu">
+        <button class="fab fab-main" id="fab-main" title="更多功能">
+            <i class="bi bi-three-dots"></i>
+        </button>
+        <div class="fab-actions">
+            <button class="fab fab-action" id="toggle-search" title="搜尋摘要">
+                <i class="bi bi-search"></i>
+            </button>
+            <button class="fab fab-action" id="toggle-batch" title="批量操作">
+                <i class="bi bi-check2-square"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 手機版批量操作工具列 -->
+<div class="mobile-batch-toolbar" id="mobile-batch-toolbar">
+    <div class="d-flex justify-content-between align-items-center">
+        <span id="mobile-selected-count">已選擇 0 個項目</span>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-primary" id="mobile-batch-bookmark">
+                <i class="bi bi-bookmark-plus"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="mobile-cancel-selection">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+    // OpenCC converter instance
+    let converter = null;
+
+    // Initialize OpenCC converter for Traditional Chinese
+    function initializeOpenCC() {
+        try {
+            converter = OpenCC.Converter({ from: 'cn', to: 'tw' });
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize OpenCC:', error);
+            return false;
+        }
+    }
+
+    // Convert text to Traditional Chinese
+    function convertToTraditional(text) {
+        if (!converter || !text) return text;
+        try {
+            return converter(text);
+        } catch (error) {
+            console.error('Failed to convert text:', error);
+            return text;
+        }
+    }
+
+    // Convert all summary titles to Traditional Chinese
+    function convertSummaryTitles() {
+        if (!converter) return;
+
+        const isMobile = window.innerWidth <= 768;
+        const viewClass = isMobile ? '.mobile-view' : '.desktop-view';
+
+        document.querySelectorAll(`${viewClass} .summary-item:not([style*="display: none"]) .summary-content h6`).forEach(titleElement => {
+            if (titleElement.getAttribute('data-converted') === 'true') return;
+
+            const originalText = titleElement.textContent;
+            const convertedText = convertToTraditional(originalText);
+            if (convertedText !== originalText) {
+                titleElement.textContent = convertedText;
+                titleElement.setAttribute('data-converted', 'true');
             }
-        }
+        });
 
-        // Convert text to Traditional Chinese
-        function convertToTraditional(text) {
-            if (!converter || !text) return text;
-            try {
-                return converter(text);
-            } catch (error) {
-                console.error('Failed to convert text:', error);
-                return text;
+        document.querySelectorAll(`${viewClass} .summary-item:not([style*="display: none"]) .badge-channel`).forEach(badgeElement => {
+            if (badgeElement.getAttribute('data-converted') === 'true') return;
+
+            const originalText = badgeElement.textContent.replace('📺 ', '');
+            const convertedText = convertToTraditional(originalText);
+            if (convertedText !== originalText) {
+                badgeElement.textContent = (badgeElement.textContent.includes('📺') ? '📺 ' : '') + convertedText;
+                badgeElement.setAttribute('data-converted', 'true');
             }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize OpenCC and convert titles
+        if (initializeOpenCC()) {
+            convertSummaryTitles();
         }
 
-        // Convert all summary titles to Traditional Chinese
-        function convertSummaryTitles() {
-            if (!converter) return;
-
-            // Get the appropriate view based on screen size
-            const isMobile = window.innerWidth <= 768;
-            const viewClass = isMobile ? '.mobile-view' : '.desktop-view';
-
-            // Convert visible summary titles only
-            document.querySelectorAll(`${viewClass} .summary-item:not([style*="display: none"]) .summary-content h6`).forEach(titleElement => {
-                if (titleElement.getAttribute('data-converted') === 'true') return;
-
-                const originalText = titleElement.textContent;
-                const convertedText = convertToTraditional(originalText);
-                if (convertedText !== originalText) {
-                    titleElement.textContent = convertedText;
-                    titleElement.setAttribute('data-converted', 'true');
-                }
+        // Re-convert titles when window is resized (mobile/desktop switch)
+        window.addEventListener('resize', function() {
+            document.querySelectorAll('[data-converted]').forEach(element => {
+                element.removeAttribute('data-converted');
             });
-
-            // Convert visible channel badges only
-            document.querySelectorAll(`${viewClass} .summary-item:not([style*="display: none"]) .channel-badge`).forEach(badgeElement => {
-                if (badgeElement.getAttribute('data-converted') === 'true') return;
-
-                const originalText = badgeElement.textContent.replace('📺 ', '');
-                const convertedText = convertToTraditional(originalText);
-                if (convertedText !== originalText) {
-                    badgeElement.textContent = (badgeElement.textContent.includes('📺') ? '📺 ' : '') + convertedText;
-                    badgeElement.setAttribute('data-converted', 'true');
-                }
-            });
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize OpenCC and convert titles
-            if (initializeOpenCC()) {
+            setTimeout(() => {
                 convertSummaryTitles();
-            }
+            }, 100);
+        });
 
-            // Re-convert titles when window is resized (mobile/desktop switch)
-            window.addEventListener('resize', function() {
-                // Reset conversion markers for proper re-conversion on layout change
-                document.querySelectorAll('[data-converted]').forEach(element => {
-                    element.removeAttribute('data-converted');
-                });
-                // Re-convert titles after a short delay to ensure layout has updated
-                setTimeout(() => {
-                    convertSummaryTitles();
-                }, 100);
-            });
-            const isMobile = window.innerWidth <= 768;
-            const prefix = isMobile ? 'mobile' : 'desktop';
+        const isMobile = window.innerWidth <= 768;
+        const prefix = isMobile ? 'mobile' : 'desktop';
 
-            // Get elements with proper prefix
-            const searchInput = document.getElementById(prefix + '-search-input');
-            const channelFilter = document.getElementById(prefix + '-channel-filter');
-            const summariesList = document.getElementById(prefix + '-summaries-list');
-            const noResults = document.getElementById(prefix + '-no-results');
-            const filterStatus = document.getElementById(prefix + '-filter-status');
-            const clearSearchBtn = document.getElementById(prefix + '-clear-search');
-            const clearFiltersBtn = document.getElementById(prefix + '-clear-filters');
+        // Get elements with proper prefix
+        const searchInput = document.getElementById(prefix + '-search-input');
+        const channelFilter = document.getElementById(prefix + '-channel-filter');
+        const summariesList = document.getElementById(prefix + '-summaries-list');
+        const noResults = document.getElementById(prefix + '-no-results');
+        const filterStatus = document.getElementById(prefix + '-filter-status');
+        const clearSearchBtn = document.getElementById(prefix + '-clear-search');
+        const clearFiltersBtn = document.getElementById(prefix + '-clear-filters');
 
-            // Mobile-specific elements
-            if (isMobile) {
-                // Titles are now cleaned on the server side, no need for client-side processing
+        // Mobile-specific elements
+        if (isMobile) {
+            const hiddenSearch = document.getElementById('mobile-hidden-search');
+            const fabMenu = document.getElementById('fab-menu');
+            const fabMain = document.getElementById('fab-main');
+            const toggleSearch = document.getElementById('toggle-search');
+            const toggleBatch = document.getElementById('toggle-batch');
 
-                const hiddenSearch = document.getElementById('mobile-hidden-search');
-                const hiddenNav = document.getElementById('mobile-hidden-nav');
-                const fabMenu = document.getElementById('fab-menu');
-                const fabMain = document.getElementById('fab-main');
-                const toggleSearch = document.getElementById('toggle-search');
-                const toggleNav = document.getElementById('toggle-nav');
-                const toggleBatch = document.getElementById('toggle-batch');
+            let isMenuOpen = false;
 
-                let isMenuOpen = false;
+            // FAB functionality
+            fabMain.addEventListener('click', function() {
+                isMenuOpen = !isMenuOpen;
+                fabMenu.classList.toggle('active', isMenuOpen);
 
-                // FAB functionality
-                fabMain.addEventListener('click', function() {
-                    isMenuOpen = !isMenuOpen;
-                    fabMenu.classList.toggle('active', isMenuOpen);
-
-                    if (!isMenuOpen) {
-                        hiddenSearch.style.display = 'none';
-                        hiddenNav.style.display = 'none';
-                    }
-                });
-
-                toggleSearch.addEventListener('click', function() {
-                    const isVisible = hiddenSearch.style.display !== 'none';
-                    hiddenSearch.style.display = isVisible ? 'none' : 'block';
-                    hiddenNav.style.display = 'none';
-                    closeFabMenu();
-                });
-
-                toggleNav.addEventListener('click', function() {
-                    const isVisible = hiddenNav.style.display !== 'none';
-                    hiddenNav.style.display = isVisible ? 'none' : 'block';
+                if (!isMenuOpen) {
                     hiddenSearch.style.display = 'none';
-                    closeFabMenu();
-                });
-
-                toggleBatch.addEventListener('click', function() {
-                    enableBatchMode();
-                    closeFabMenu();
-                });
-
-                function closeFabMenu() {
-                    isMenuOpen = false;
-                    fabMenu.classList.remove('active');
                 }
+            });
 
-                function enableBatchMode() {
-                    document.body.classList.add('batch-mode');
-                    document.querySelectorAll('.mobile-view .summary-checkbox').forEach(checkbox => {
-                        checkbox.style.display = 'block';
-                    });
-                }
+            toggleSearch.addEventListener('click', function() {
+                const isVisible = hiddenSearch.style.display !== 'none';
+                hiddenSearch.style.display = isVisible ? 'none' : 'block';
+                closeFabMenu();
+            });
+
+            toggleBatch.addEventListener('click', function() {
+                enableBatchMode();
+                closeFabMenu();
+            });
+
+            function closeFabMenu() {
+                isMenuOpen = false;
+                fabMenu.classList.remove('active');
             }
 
-            // Filter functionality
-            function filterSummaries() {
-                if (!searchInput || !channelFilter) return;
+            function enableBatchMode() {
+                document.body.classList.add('batch-mode');
+                document.querySelectorAll('.mobile-view .summary-checkbox').forEach(checkbox => {
+                    checkbox.style.display = 'block';
+                });
+            }
+        }
 
-                const searchTerm = searchInput.value.toLowerCase();
-                const selectedChannel = channelFilter.value;
+        // Filter functionality
+        function filterSummaries() {
+            if (!searchInput) return;
+
+            const searchTerm = searchInput.value.toLowerCase();
+            const selectedChannel = channelFilter ? channelFilter.value : '';
+            let visibleCount = 0;
+
+            const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+
+            summaryItems.forEach(item => {
+                const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
+                const channel = item.dataset.channel;
+
+                const matchesSearch = !searchTerm || title.includes(searchTerm);
+                const matchesChannel = !selectedChannel || channel.trim() === selectedChannel.trim();
+
+                if (matchesSearch && matchesChannel) {
+                    item.style.display = '';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            // Update status
+            if (filterStatus) {
+                let statusText = `顯示 ${visibleCount} 個摘要`;
+                if (searchTerm || selectedChannel) {
+                    statusText += ' (已過濾)';
+                }
+                filterStatus.textContent = statusText;
+            }
+
+            // Show/hide no results
+            if (noResults) {
+                if (visibleCount === 0) {
+                    summariesList.style.display = 'none';
+                    noResults.style.display = 'block';
+                } else {
+                    summariesList.style.display = 'block';
+                    noResults.style.display = 'none';
+                    convertSummaryTitles();
+                }
+            }
+        }
+
+        // 頻道標籤點擊事件
+        document.querySelectorAll('.channel-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                const channel = this.dataset.channel;
+
+                // 更新標籤狀態
+                document.querySelectorAll('.channel-chip').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+
+                // 同步更新下拉選單 (如果存在)
+                if (channelFilter) {
+                    channelFilter.value = channel;
+                }
+
+                // 執行篩選
                 let visibleCount = 0;
-
                 const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+                const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
 
                 summaryItems.forEach(item => {
                     const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
-                    const channel = item.dataset.channel;
+                    const itemChannel = item.dataset.channel;
 
                     const matchesSearch = !searchTerm || title.includes(searchTerm);
-                    const matchesChannel = !selectedChannel || channel === selectedChannel;
+                    const matchesChannel = !channel || itemChannel.trim() === channel.trim();
 
                     if (matchesSearch && matchesChannel) {
                         item.style.display = '';
@@ -805,16 +754,16 @@
                     }
                 });
 
-                // Update status
+                // 更新狀態文字
                 if (filterStatus) {
                     let statusText = `顯示 ${visibleCount} 個摘要`;
-                    if (searchTerm || selectedChannel) {
+                    if (searchTerm || channel) {
                         statusText += ' (已過濾)';
                     }
                     filterStatus.textContent = statusText;
                 }
 
-                // Show/hide no results
+                // 顯示/隱藏無結果提示
                 if (noResults) {
                     if (visibleCount === 0) {
                         summariesList.style.display = 'none';
@@ -822,264 +771,205 @@
                     } else {
                         summariesList.style.display = 'block';
                         noResults.style.display = 'none';
-
-                        // Re-convert visible titles to Traditional Chinese after filtering
                         convertSummaryTitles();
                     }
                 }
-            }
-
-            // 頻道標籤點擊事件
-            document.querySelectorAll('.channel-chip').forEach(chip => {
-                chip.addEventListener('click', function() {
-                    const channel = this.dataset.channel;
-
-                    // 更新標籤狀態
-                    document.querySelectorAll('.channel-chip').forEach(c => c.classList.remove('active'));
-                    this.classList.add('active');
-
-                    // 同步更新下拉選單 (如果存在)
-                    if (channelFilter) {
-                        channelFilter.value = channel;
-                    }
-
-                    // 執行篩選
-                    let visibleCount = 0;
-                    const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
-                    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-
-                    summaryItems.forEach(item => {
-                        const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
-                        const itemChannel = item.dataset.channel;
-
-                        const matchesSearch = !searchTerm || title.includes(searchTerm);
-                        const matchesChannel = !channel || itemChannel === channel;
-
-                        if (matchesSearch && matchesChannel) {
-                            item.style.display = '';
-                            visibleCount++;
-                        } else {
-                            item.style.display = 'none';
-                        }
-                    });
-
-                    // 更新狀態文字
-                    if (filterStatus) {
-                        let statusText = `顯示 ${visibleCount} 個摘要`;
-                        if (searchTerm || channel) {
-                            statusText += ' (已過濾)';
-                        }
-                        filterStatus.textContent = statusText;
-                    }
-
-                    // 顯示/隱藏無結果提示
-                    if (noResults) {
-                        if (visibleCount === 0) {
-                            summariesList.style.display = 'none';
-                            noResults.style.display = 'block';
-                        } else {
-                            summariesList.style.display = 'block';
-                            noResults.style.display = 'none';
-                            convertSummaryTitles();
-                        }
-                    }
-                });
             });
+        });
 
-            // Event listeners for filtering
-            if (searchInput) searchInput.addEventListener('input', filterSummaries);
-            if (channelFilter) {
-                channelFilter.addEventListener('change', function() {
-                    // 同步更新標籤狀態
-                    const selectedChannel = this.value;
-                    document.querySelectorAll('.channel-chip').forEach(chip => {
-                        if (chip.dataset.channel === selectedChannel) {
-                            chip.classList.add('active');
-                        } else {
-                            chip.classList.remove('active');
-                        }
-                    });
-                    filterSummaries();
-                });
-            }
-            if (clearSearchBtn) {
-                clearSearchBtn.addEventListener('click', function() {
-                    if (searchInput) {
-                        searchInput.value = '';
-                        filterSummaries();
+        // Event listeners for filtering
+        if (searchInput) searchInput.addEventListener('input', filterSummaries);
+        if (channelFilter) {
+            channelFilter.addEventListener('change', function() {
+                const selectedChannel = this.value;
+                document.querySelectorAll('.channel-chip').forEach(chip => {
+                    if (chip.dataset.channel === selectedChannel) {
+                        chip.classList.add('active');
+                    } else {
+                        chip.classList.remove('active');
                     }
                 });
-            }
-            if (clearFiltersBtn) {
-                clearFiltersBtn.addEventListener('click', function() {
-                    if (searchInput) searchInput.value = '';
-                    if (channelFilter) channelFilter.value = '';
+                filterSummaries();
+            });
+        }
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', function() {
+                if (searchInput) {
+                    searchInput.value = '';
                     filterSummaries();
+                }
+            });
+        }
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', function() {
+                if (searchInput) searchInput.value = '';
+                if (channelFilter) channelFilter.value = '';
+                document.querySelectorAll('.channel-chip').forEach(chip => {
+                    chip.classList.remove('active');
+                    if (chip.dataset.channel === '') {
+                        chip.classList.add('active');
+                    }
                 });
-            }
+                filterSummaries();
+            });
+        }
 
-            // Batch selection functionality
-            const checkboxes = document.querySelectorAll('.summary-checkbox');
-            const batchToolbar = document.getElementById(prefix + '-batch-toolbar');
-            const selectedCount = document.getElementById(prefix + '-selected-count');
-            const cancelSelection = document.getElementById(prefix + '-cancel-selection');
-            const batchBookmark = document.getElementById(prefix + '-batch-bookmark');
-            const batchDelete = document.getElementById(prefix + '-batch-delete');
+        // Batch selection functionality
+        const checkboxes = document.querySelectorAll('.summary-checkbox');
+        const batchToolbar = document.getElementById(prefix + '-batch-toolbar');
+        const selectedCount = document.getElementById(prefix + '-selected-count');
+        const cancelSelection = document.getElementById(prefix + '-cancel-selection');
+        const batchBookmark = document.getElementById(prefix + '-batch-bookmark');
+        const batchDelete = document.getElementById(prefix + '-batch-delete');
 
-            function updateBatchToolbar() {
-                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
-                const count = checkedBoxes.length;
+        function updateBatchToolbar() {
+            const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+            const count = checkedBoxes.length;
 
-                if (batchToolbar && selectedCount) {
-                    if (count > 0) {
-                        batchToolbar.style.display = 'block';
-                        selectedCount.textContent = `已選擇 ${count} 個項目`;
-                        if (isMobile) {
-                            document.body.classList.add('batch-mode');
-                        }
-                    } else {
-                        batchToolbar.style.display = 'none';
-                        if (isMobile) {
-                            document.body.classList.remove('batch-mode');
-                            // Hide checkboxes
-                            document.querySelectorAll('.mobile-view .summary-checkbox').forEach(checkbox => {
-                                checkbox.style.display = 'none';
-                                checkbox.checked = false;
-                            });
-                        }
+            if (batchToolbar && selectedCount) {
+                if (count > 0) {
+                    batchToolbar.style.display = 'block';
+                    selectedCount.textContent = `已選擇 ${count} 個項目`;
+                    if (isMobile) {
+                        document.body.classList.add('batch-mode');
+                    }
+                } else {
+                    batchToolbar.style.display = 'none';
+                    if (isMobile) {
+                        document.body.classList.remove('batch-mode');
+                        document.querySelectorAll('.mobile-view .summary-checkbox').forEach(checkbox => {
+                            checkbox.style.display = 'none';
+                            checkbox.checked = false;
+                        });
                     }
                 }
             }
+        }
 
-            checkboxes.forEach(checkbox => {
-                checkbox.addEventListener('change', updateBatchToolbar);
-            });
-
-            if (cancelSelection) {
-                cancelSelection.addEventListener('click', function() {
-                    checkboxes.forEach(checkbox => {
-                        checkbox.checked = false;
-                    });
-                    updateBatchToolbar();
-                });
-            }
-
-            // Bookmark functionality
-            document.querySelectorAll('.bookmark-toggle').forEach(button => {
-                button.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    const filename = this.dataset.filename;
-                    const icon = this.querySelector('i');
-                    const isBookmarked = icon.classList.contains('bi-bookmark-fill');
-
-                    fetch('/api/bookmark', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            filename: filename,
-                            action: isBookmarked ? 'remove' : 'add'
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            if (isBookmarked) {
-                                icon.classList.replace('bi-bookmark-fill', 'bi-bookmark');
-                            } else {
-                                icon.classList.replace('bi-bookmark', 'bi-bookmark-fill');
-                            }
-                        }
-                    })
-                    .catch(error => {
-                        console.error('書籤操作失敗:', error);
-                    });
-                });
-            });
-
-            // Batch bookmark functionality
-            if (batchBookmark) {
-                batchBookmark.addEventListener('click', function() {
-                    const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
-                    const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
-
-                    if (filenames.length === 0) return;
-
-                    fetch('/api/batch-bookmark', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            filenames: filenames,
-                            action: 'add'
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            location.reload();
-                        } else {
-                            alert('批量書籤操作失敗：' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('批量書籤操作失敗:', error);
-                        alert('批量書籤操作失敗，請稍後再試');
-                    });
-                });
-            }
-
-            // Batch delete functionality
-            if (batchDelete) {
-                batchDelete.addEventListener('click', function() {
-                    const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
-                    const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
-
-                    if (filenames.length === 0) return;
-
-                    // 確認對話框
-                    const confirmMessage = `確定要刪除選中的 ${filenames.length} 個摘要檔案嗎？\n\n檔案將被移動到回收桶，可以稍後還原。`;
-                    if (!confirm(confirmMessage)) return;
-
-                    // 顯示載入狀態
-                    const originalText = batchDelete.innerHTML;
-                    batchDelete.innerHTML = '<i class="bi bi-hourglass-split"></i> 處理中...';
-                    batchDelete.disabled = true;
-
-                    fetch('/api/batch-delete', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            filenames: filenames
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            // 重新載入頁面以更新列表
-                            location.reload();
-                        } else {
-                            alert('批量刪除操作失敗：' + data.message);
-                        }
-                    })
-                    .catch(error => {
-                        console.error('批量刪除操作失敗:', error);
-                        alert('批量刪除操作失敗，請稍後再試');
-                    })
-                    .finally(() => {
-                        // 恢復按鈕狀態
-                        batchDelete.innerHTML = originalText;
-                        batchDelete.disabled = false;
-                    });
-                });
-            }
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', updateBatchToolbar);
         });
-    </script>
-</body>
-</html>
+
+        if (cancelSelection) {
+            cancelSelection.addEventListener('click', function() {
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                updateBatchToolbar();
+            });
+        }
+
+        // Bookmark functionality
+        document.querySelectorAll('.bookmark-toggle').forEach(button => {
+            button.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const filename = this.dataset.filename;
+                const icon = this.querySelector('i');
+                const isBookmarked = icon.classList.contains('bi-bookmark-fill');
+
+                fetch('/api/bookmark', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: filename,
+                        action: isBookmarked ? 'remove' : 'add'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (isBookmarked) {
+                            icon.classList.replace('bi-bookmark-fill', 'bi-bookmark');
+                        } else {
+                            icon.classList.replace('bi-bookmark', 'bi-bookmark-fill');
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('書籤操作失敗:', error);
+                });
+            });
+        });
+
+        // Batch bookmark functionality
+        if (batchBookmark) {
+            batchBookmark.addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
+
+                if (filenames.length === 0) return;
+
+                fetch('/api/batch-bookmark', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filenames: filenames,
+                        action: 'add'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('批量書籤操作失敗：' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('批量書籤操作失敗:', error);
+                    alert('批量書籤操作失敗，請稍後再試');
+                });
+            });
+        }
+
+        // Batch delete functionality
+        if (batchDelete) {
+            batchDelete.addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.summary-checkbox:checked');
+                const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
+
+                if (filenames.length === 0) return;
+
+                const confirmMessage = `確定要刪除選中的 ${filenames.length} 個摘要檔案嗎？\n\n檔案將被移動到回收桶，可以稍後還原。`;
+                if (!confirm(confirmMessage)) return;
+
+                const originalText = batchDelete.innerHTML;
+                batchDelete.innerHTML = '<i class="bi bi-hourglass-split"></i> 處理中...';
+                batchDelete.disabled = true;
+
+                fetch('/api/batch-delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filenames: filenames
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('批量刪除操作失敗：' + data.message);
+                    }
+                })
+                .catch(error => {
+                    console.error('批量刪除操作失敗:', error);
+                    alert('批量刪除操作失敗，請稍後再試');
+                })
+                .finally(() => {
+                    batchDelete.innerHTML = originalText;
+                    batchDelete.disabled = false;
+                });
+            });
+        }
+    });
+</script>
+{% endblock %}
