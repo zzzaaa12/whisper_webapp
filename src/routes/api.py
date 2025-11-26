@@ -803,7 +803,7 @@ def api_last_5_summary():
 
         # 獲取摘要服務
         summary_service = get_summary_api_service()
-        summaries = summary_service.get_latest_summaries(5)
+        summaries = summary_service.get_latest_summaries(10)
 
         return jsonify({
             'success': True,

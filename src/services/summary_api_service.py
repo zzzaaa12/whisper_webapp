@@ -16,7 +16,7 @@ class SummaryAPIService:
         self.path_manager = get_path_manager()
         self.summary_folder = self.path_manager.get_summary_folder()
     
-    def get_latest_summaries(self, limit: int = 5) -> List[Dict]:
+    def get_latest_summaries(self, limit: int = 10) -> List[Dict]:
         """
         獲取最新的摘要列表
         
@@ -74,11 +74,11 @@ class SummaryAPIService:
         """
         try:
             # 驗證索引範圍
-            if index < 1 or index > 5:
+            if index < 1 or index > 10:
                 return None
             
             # 獲取最新的摘要列表
-            summaries = self.get_latest_summaries(5)
+            summaries = self.get_latest_summaries(10)
             
             # 檢查索引是否存在
             if index > len(summaries):
