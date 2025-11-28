@@ -5,6 +5,20 @@
 {% block head %}
 <!-- OpenCC.js for Traditional Chinese conversion -->
 <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js"></script>
+<!-- 防止視圖切換閃爍：根據 localStorage 預先隱藏不需要的視圖 -->
+<script>
+    (function() {
+        var savedView = localStorage.getItem('summaryView') || 'list';
+        var style = document.createElement('style');
+        style.id = 'view-preload-style';
+        if (savedView === 'card') {
+            style.textContent = '#list-view { display: none !important; } #card-view { display: block !important; }';
+        } else {
+            style.textContent = '#list-view { display: block !important; } #card-view { display: none !important; }';
+        }
+        document.head.appendChild(style);
+    })();
+</script>
 <style>
     /* Desktop Styles */
     .desktop-view .summary-item {
@@ -119,6 +133,17 @@
         padding: 0.75rem 1rem;
     }
 
+    /* 可點擊的頻道標籤樣式 */
+    .badge-channel-clickable {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .badge-channel-clickable:hover {
+        background-color: #0d6efd !important;
+        color: white !important;
+        transform: scale(1.05);
+    }
+
     /* 快速頻道過濾標籤樣式 */
     .channel-chips {
         display: flex;
@@ -155,6 +180,149 @@
     }
     .channel-chip.active .badge {
         background-color: rgba(255,255,255,0.3) !important;
+    }
+
+    /* 左側可收合頻道面板樣式 */
+    .channel-sidebar {
+        position: fixed;
+        top: 0;
+        left: -320px;
+        width: 320px;
+        height: 100vh;
+        background-color: var(--bg-card);
+        border-right: 1px solid var(--border-color);
+        z-index: 1050;
+        transition: left 0.3s ease;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    }
+    .channel-sidebar.open {
+        left: 0;
+    }
+    .channel-sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        background-color: var(--bg-secondary);
+    }
+    .channel-sidebar-header h5 {
+        margin: 0;
+        font-weight: 600;
+    }
+    .channel-sidebar-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem;
+    }
+    .channel-sidebar-search {
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .channel-sidebar-search input {
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        background-color: var(--bg-card);
+        color: var(--text-primary);
+    }
+    .channel-sidebar-search input:focus {
+        outline: none;
+        border-color: #0d6efd;
+    }
+    .sidebar-channel-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        margin: 0.25rem 0;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: var(--text-primary);
+        border: 2px solid transparent;
+    }
+    .sidebar-channel-item:hover {
+        background-color: var(--bg-secondary);
+    }
+    .sidebar-channel-item.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+    .sidebar-channel-item .channel-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin-right: 0.5rem;
+    }
+    .sidebar-channel-item .channel-count {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+        border-radius: 1rem;
+        background-color: var(--bg-secondary);
+    }
+    .sidebar-channel-item.active .channel-count {
+        background-color: rgba(255,255,255,0.2);
+    }
+    .channel-sidebar-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background-color: rgba(0,0,0,0.5);
+        z-index: 1040;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+    .channel-sidebar-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+    .sidebar-toggle-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: 2px solid var(--border-color);
+        border-radius: 0.5rem;
+        background-color: var(--bg-card);
+        color: var(--text-primary);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        font-weight: 500;
+    }
+    .sidebar-toggle-btn:hover {
+        border-color: #0d6efd;
+        background-color: var(--bg-secondary);
+    }
+    .sidebar-toggle-btn i {
+        font-size: 1.1rem;
+    }
+    .current-channel-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.25rem 0.75rem;
+        background-color: #0d6efd;
+        color: white;
+        border-radius: 1rem;
+        font-size: 0.875rem;
+        margin-left: 0.5rem;
+    }
+    .current-channel-badge .clear-filter {
+        cursor: pointer;
+        margin-left: 0.25rem;
+        opacity: 0.8;
+    }
+    .current-channel-badge .clear-filter:hover {
+        opacity: 1;
     }
 
     /* Mobile Styles */
@@ -387,6 +555,32 @@
 {% endblock %}
 
 {% block content %}
+<!-- 左側頻道篩選面板 -->
+<div class="channel-sidebar-overlay" id="channel-sidebar-overlay"></div>
+<div class="channel-sidebar" id="channel-sidebar">
+    <div class="channel-sidebar-header">
+        <h5><i class="bi bi-funnel"></i> 頻道篩選</h5>
+        <button class="btn btn-sm btn-outline-secondary" id="close-sidebar-btn">
+            <i class="bi bi-x-lg"></i>
+        </button>
+    </div>
+    <div class="channel-sidebar-search">
+        <input type="text" id="sidebar-channel-search" placeholder="搜尋頻道名稱...">
+    </div>
+    <div class="channel-sidebar-body">
+        <div class="sidebar-channel-item active" data-channel="">
+            <span class="channel-name">📺 全部頻道</span>
+            <span class="channel-count">{{ summaries|length }}</span>
+        </div>
+        {% for channel in channels %}
+        <div class="sidebar-channel-item" data-channel="{{ channel_original_names.get(channel, channel) }}">
+            <span class="channel-name">{{ channel }}</span>
+            <span class="channel-count">{{ channel_counts[channel] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
 <!-- Page Header -->
 <div class="page-header">
     <h1>所有摘要紀錄</h1>
@@ -415,9 +609,17 @@
 
     <!-- 過濾器區域 -->
     <div class="filter-section">
-        <!-- 視圖切換按鈕 -->
+        <!-- 頻道篩選按鈕與視圖切換 -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <label class="form-label mb-0">快速頻道篩選 (前20個熱門頻道)</label>
+            <div class="d-flex align-items-center">
+                <button class="sidebar-toggle-btn" id="open-sidebar-btn">
+                    <i class="bi bi-funnel"></i> 頻道篩選
+                </button>
+                <span class="current-channel-badge" id="current-channel-badge" style="display: none;">
+                    <span id="current-channel-name"></span>
+                    <i class="bi bi-x-circle-fill clear-filter" id="clear-channel-filter"></i>
+                </span>
+            </div>
             <div class="btn-group btn-group-sm" role="group">
                 <button type="button" class="btn btn-outline-secondary active" id="list-view-btn" title="列表視圖">
                     <i class="bi bi-list-ul"></i>
@@ -427,31 +629,9 @@
                 </button>
             </div>
         </div>
-        <!-- 快速頻道過濾標籤 -->
-        <div class="mb-3">
-            <div class="channel-chips d-flex flex-wrap gap-2">
-                <button class="channel-chip active" data-channel="">
-                    📺 全部頻道 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
-                </button>
-                {% for channel in top_channels %}
-                <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
-                    {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
-                </button>
-                {% endfor %}
-            </div>
-        </div>
 
         <div class="row g-3">
-            <div class="col-md-4">
-                <label for="desktop-channel-filter" class="form-label">頻道過濾</label>
-                <select class="form-select" id="desktop-channel-filter">
-                    <option value="">全部頻道 ({{ summaries|length }})</option>
-                    {% for channel in channels %}
-                    <option value="{{ channel_original_names.get(channel, channel) }}">{{ channel }} ({{ channel_counts[channel] }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-6">
+            <div class="col-md-9">
                 <label for="desktop-search-input" class="form-label">搜尋</label>
                 <div class="input-group">
                     <span class="input-group-text">
@@ -463,11 +643,11 @@
                     </button>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-3">
                 <label class="form-label">&nbsp;</label>
                 <div>
                     <button class="btn btn-outline-secondary w-100" type="button" id="desktop-clear-filters">
-                        <i class="bi bi-arrow-clockwise"></i> 重置
+                        <i class="bi bi-arrow-clockwise"></i> 重置篩選
                     </button>
                 </div>
             </div>
@@ -476,6 +656,14 @@
             <small class="text-muted" id="desktop-filter-status">顯示全部 {{ summaries|length }} 個摘要</small>
         </div>
     </div>
+
+    <!-- 隱藏的頻道下拉選單（保留給 JS 使用） -->
+    <select class="form-select d-none" id="desktop-channel-filter">
+        <option value="">全部頻道 ({{ summaries|length }})</option>
+        {% for channel in channels %}
+        <option value="{{ channel_original_names.get(channel, channel) }}">{{ channel }} ({{ channel_counts[channel] }})</option>
+        {% endfor %}
+    </select>
 
     <!-- 列表視圖 -->
     <div id="list-view" class="card">
@@ -516,25 +704,23 @@
             <div class="col-12 col-md-6 col-lg-4">
                 <div class="summary-card" data-filename="{{ summary.filename }}" data-title="{{ summary.title }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
                     <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
-                            <button class="btn btn-sm btn-link bookmark-toggle p-0" data-filename="{{ summary.filename }}">
-                                <i class="bi bi-bookmark{{ '-fill' if summary.is_bookmarked else '' }} fs-5 {{ 'text-warning' if summary.is_bookmarked else 'text-secondary' }}"></i>
-                            </button>
+                        <div class="card-header d-flex align-items-center gap-2">
+                            <input type="checkbox" class="form-check-input summary-checkbox m-0" data-filename="{{ summary.filename }}">
+                            <span class="badge-channel badge-channel-clickable small text-truncate" style="max-width: 150px;" data-channel="{{ summary.channel }}" data-channel-display="{{ summary.channel_display }}" title="點擊篩選此頻道">{{ summary.channel_display }}</span>
+                            <div class="ms-auto d-flex align-items-center gap-1">
+                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success p-1" onclick="event.stopPropagation()" title="下載">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                                <button class="btn btn-sm btn-link bookmark-toggle p-0" data-filename="{{ summary.filename }}" title="書籤">
+                                    <i class="bi bi-bookmark{{ '-fill' if summary.is_bookmarked else '' }} fs-5 {{ 'text-warning' if summary.is_bookmarked else 'text-secondary' }}"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body" style="cursor: pointer;" onclick="window.location.href='/summary/{{ summary.filename }}'">
                             <h6 class="card-title text-truncate-2">{{ summary.title }}</h6>
                             {% if summary.preview %}
                             <p class="card-text text-muted small text-truncate-3" style="white-space: pre-line;">{{ summary.preview }}</p>
                             {% endif %}
-                        </div>
-                        <div class="card-footer">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge-channel small">{{ summary.channel_display }}</span>
-                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success" onclick="event.stopPropagation()">
-                                    <i class="bi bi-download"></i>
-                                </a>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -558,18 +744,14 @@
         <span class="summary-count">共 {{ summaries|length }} 個摘要</span>
     </div>
 
-    <!-- 快速頻道過濾標籤 (手機版) -->
+    <!-- 頻道篩選按鈕 (手機版) -->
     <div class="mb-3">
-        <div class="channel-chips d-flex flex-wrap gap-2">
-            <button class="channel-chip active" data-channel="">
-                📺 全部 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
-            </button>
-            {% for channel in top_channels %}
-            <button class="channel-chip" data-channel="{{ channel_original_names.get(channel, channel) }}">
-                {{ channel }} <span class="badge bg-secondary ms-1">{{ channel_counts[channel] }}</span>
-            </button>
-            {% endfor %}
-        </div>
+        <button class="sidebar-toggle-btn w-100" id="mobile-open-sidebar-btn">
+            <i class="bi bi-funnel"></i> 頻道篩選
+            <span class="current-channel-badge ms-auto" id="mobile-current-channel-badge" style="display: none;">
+                <span id="mobile-current-channel-name"></span>
+            </span>
+        </button>
     </div>
 
     <!-- 隱藏的搜尋區域 -->
@@ -715,7 +897,181 @@
             convertSummaryTitles();
         }
 
-        // 視圖切換功能
+        // ========== 左側頻道篩選面板功能 ==========
+        const channelSidebar = document.getElementById('channel-sidebar');
+        const channelSidebarOverlay = document.getElementById('channel-sidebar-overlay');
+        const openSidebarBtn = document.getElementById('open-sidebar-btn');
+        const mobileOpenSidebarBtn = document.getElementById('mobile-open-sidebar-btn');
+        const closeSidebarBtn = document.getElementById('close-sidebar-btn');
+        const sidebarChannelSearch = document.getElementById('sidebar-channel-search');
+        const currentChannelBadge = document.getElementById('current-channel-badge');
+        const currentChannelName = document.getElementById('current-channel-name');
+        const mobileCurrentChannelBadge = document.getElementById('mobile-current-channel-badge');
+        const mobileCurrentChannelName = document.getElementById('mobile-current-channel-name');
+        const clearChannelFilter = document.getElementById('clear-channel-filter');
+
+        let currentSelectedChannel = '';
+
+        function openSidebar() {
+            channelSidebar.classList.add('open');
+            channelSidebarOverlay.classList.add('show');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSidebar() {
+            channelSidebar.classList.remove('open');
+            channelSidebarOverlay.classList.remove('show');
+            document.body.style.overflow = '';
+        }
+
+        function updateCurrentChannelBadge(channelName) {
+            if (channelName) {
+                currentSelectedChannel = channelName;
+                if (currentChannelBadge) {
+                    currentChannelBadge.style.display = 'inline-flex';
+                    currentChannelName.textContent = channelName;
+                }
+                if (mobileCurrentChannelBadge) {
+                    mobileCurrentChannelBadge.style.display = 'inline-flex';
+                    mobileCurrentChannelName.textContent = channelName;
+                }
+            } else {
+                currentSelectedChannel = '';
+                if (currentChannelBadge) currentChannelBadge.style.display = 'none';
+                if (mobileCurrentChannelBadge) mobileCurrentChannelBadge.style.display = 'none';
+            }
+        }
+
+        // 開啟側邊欄
+        if (openSidebarBtn) openSidebarBtn.addEventListener('click', openSidebar);
+        if (mobileOpenSidebarBtn) mobileOpenSidebarBtn.addEventListener('click', openSidebar);
+        if (closeSidebarBtn) closeSidebarBtn.addEventListener('click', closeSidebar);
+        if (channelSidebarOverlay) channelSidebarOverlay.addEventListener('click', closeSidebar);
+
+        // 清除頻道篩選
+        if (clearChannelFilter) {
+            clearChannelFilter.addEventListener('click', function(e) {
+                e.stopPropagation();
+                selectSidebarChannel('', '全部頻道');
+            });
+        }
+
+        // 側邊欄頻道搜尋
+        if (sidebarChannelSearch) {
+            sidebarChannelSearch.addEventListener('input', function() {
+                const searchTerm = this.value.toLowerCase();
+                document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+                    const channelName = item.querySelector('.channel-name').textContent.toLowerCase();
+                    item.style.display = channelName.includes(searchTerm) ? '' : 'none';
+                });
+            });
+        }
+
+        // 側邊欄頻道選擇
+        document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const channel = this.dataset.channel;
+                const channelName = this.querySelector('.channel-name').textContent.trim();
+                selectSidebarChannel(channel, channelName);
+                closeSidebar();
+            });
+        });
+
+        function selectSidebarChannel(channel, displayName) {
+            // 更新側邊欄選中狀態
+            document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.channel === channel);
+            });
+
+            // 更新當前頻道標籤
+            updateCurrentChannelBadge(channel ? displayName : '');
+
+            // 同步隱藏的下拉選單
+            const channelFilter = document.getElementById('desktop-channel-filter');
+            if (channelFilter) channelFilter.value = channel;
+
+            // 執行篩選
+            filterByChannel(channel);
+        }
+
+        function filterByChannel(channel) {
+            const isMobile = window.innerWidth <= 768;
+            const prefix = isMobile ? 'mobile' : 'desktop';
+            const searchInput = document.getElementById(prefix + '-search-input');
+            const filterStatus = document.getElementById(prefix + '-filter-status');
+            const noResults = document.getElementById(prefix + '-no-results');
+            const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+
+            let visibleCount = 0;
+            const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+            const summaryCards = document.querySelectorAll('.desktop-view .summary-card');
+
+            // 過濾列表視圖
+            summaryItems.forEach(item => {
+                const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
+                const itemChannel = item.dataset.channel;
+
+                const matchesSearch = !searchTerm || title.includes(searchTerm);
+                const matchesChannel = !channel || itemChannel.trim() === channel.trim();
+
+                if (matchesSearch && matchesChannel) {
+                    item.style.display = '';
+                    visibleCount++;
+                } else {
+                    item.style.display = 'none';
+                }
+            });
+
+            // 過濾卡片視圖
+            let cardVisibleCount = 0;
+            summaryCards.forEach(card => {
+                const title = card.dataset.title ? card.dataset.title.toLowerCase() : card.dataset.filename.toLowerCase();
+                const itemChannel = card.dataset.channel;
+
+                const matchesSearch = !searchTerm || title.includes(searchTerm);
+                const matchesChannel = !channel || itemChannel.trim() === channel.trim();
+
+                const colElement = card.parentElement;
+                if (matchesSearch && matchesChannel) {
+                    colElement.style.display = '';
+                    cardVisibleCount++;
+                } else {
+                    colElement.style.display = 'none';
+                }
+            });
+
+            const currentView = localStorage.getItem('summaryView') || 'list';
+            const finalVisibleCount = currentView === 'card' ? cardVisibleCount : visibleCount;
+
+            if (filterStatus) {
+                let statusText = `顯示 ${finalVisibleCount} 個摘要`;
+                if (searchTerm || channel) statusText += ' (已過濾)';
+                filterStatus.textContent = statusText;
+            }
+
+            if (noResults) {
+                const listViewElement = document.getElementById('list-view');
+                const cardViewElement = document.getElementById('card-view');
+
+                if (finalVisibleCount === 0) {
+                    if (listViewElement) listViewElement.style.display = 'none';
+                    if (cardViewElement) cardViewElement.style.display = 'none';
+                    noResults.style.display = 'block';
+                } else {
+                    if (currentView === 'card') {
+                        if (listViewElement) listViewElement.style.display = 'none';
+                        if (cardViewElement) cardViewElement.style.display = 'block';
+                    } else {
+                        if (listViewElement) listViewElement.style.display = 'block';
+                        if (cardViewElement) cardViewElement.style.display = 'none';
+                    }
+                    noResults.style.display = 'none';
+                    convertSummaryTitles();
+                }
+            }
+        }
+
+        // ========== 視圖切換功能 ==========
         const listViewBtn = document.getElementById('list-view-btn');
         const cardViewBtn = document.getElementById('card-view-btn');
         const listView = document.getElementById('list-view');
@@ -898,97 +1254,7 @@
             }
         }
 
-        // 頻道標籤點擊事件
-        document.querySelectorAll('.channel-chip').forEach(chip => {
-            chip.addEventListener('click', function() {
-                const channel = this.dataset.channel;
-
-                // 更新標籤狀態
-                document.querySelectorAll('.channel-chip').forEach(c => c.classList.remove('active'));
-                this.classList.add('active');
-
-                // 同步更新下拉選單 (如果存在)
-                if (channelFilter) {
-                    channelFilter.value = channel;
-                }
-
-                // 執行篩選
-                let visibleCount = 0;
-                const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
-                const summaryCards = document.querySelectorAll('.desktop-view .summary-card');
-                const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
-
-                // 過濾列表視圖
-                summaryItems.forEach(item => {
-                    const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
-                    const itemChannel = item.dataset.channel;
-
-                    const matchesSearch = !searchTerm || title.includes(searchTerm);
-                    const matchesChannel = !channel || itemChannel.trim() === channel.trim();
-
-                    if (matchesSearch && matchesChannel) {
-                        item.style.display = '';
-                        visibleCount++;
-                    } else {
-                        item.style.display = 'none';
-                    }
-                });
-
-                // 過濾卡片視圖（使用相同的過濾邏輯）
-                let cardVisibleCount = 0;
-                summaryCards.forEach(card => {
-                    const title = card.dataset.title ? card.dataset.title.toLowerCase() : card.dataset.filename.toLowerCase();
-                    const itemChannel = card.dataset.channel;
-
-                    const matchesSearch = !searchTerm || title.includes(searchTerm);
-                    const matchesChannel = !channel || itemChannel.trim() === channel.trim();
-
-                    // 設定整個 col 的顯示狀態
-                    const colElement = card.parentElement;
-                    if (matchesSearch && matchesChannel) {
-                        colElement.style.display = '';
-                        cardVisibleCount++;
-                    } else {
-                        colElement.style.display = 'none';
-                    }
-                });
-
-                // 根據當前視圖模式選擇正確的計數
-                const currentView = localStorage.getItem('summaryView') || 'list';
-                const finalVisibleCount = currentView === 'card' ? cardVisibleCount : visibleCount;
-
-                // 更新狀態文字
-                if (filterStatus) {
-                    let statusText = `顯示 ${finalVisibleCount} 個摘要`;
-                    if (searchTerm || channel) {
-                        statusText += ' (已過濾)';
-                    }
-                    filterStatus.textContent = statusText;
-                }
-
-                // 顯示/隱藏無結果提示
-                if (noResults) {
-                    const listViewElement = document.getElementById('list-view');
-                    const cardViewElement = document.getElementById('card-view');
-
-                    if (finalVisibleCount === 0) {
-                        if (listViewElement) listViewElement.style.display = 'none';
-                        if (cardViewElement) cardViewElement.style.display = 'none';
-                        noResults.style.display = 'block';
-                    } else {
-                        if (currentView === 'card') {
-                            if (listViewElement) listViewElement.style.display = 'none';
-                            if (cardViewElement) cardViewElement.style.display = 'block';
-                        } else {
-                            if (listViewElement) listViewElement.style.display = 'block';
-                            if (cardViewElement) cardViewElement.style.display = 'none';
-                        }
-                        noResults.style.display = 'none';
-                        convertSummaryTitles();
-                    }
-                }
-            });
-        });
+        // 頻道篩選已移至左側面板，此處保留空白以維持程式碼結構
 
         // Event listeners for filtering
         if (searchInput) searchInput.addEventListener('input', filterSummaries);
@@ -1017,12 +1283,15 @@
             clearFiltersBtn.addEventListener('click', function() {
                 if (searchInput) searchInput.value = '';
                 if (channelFilter) channelFilter.value = '';
-                document.querySelectorAll('.channel-chip').forEach(chip => {
-                    chip.classList.remove('active');
-                    if (chip.dataset.channel === '') {
-                        chip.classList.add('active');
-                    }
+                // 重置側邊欄選擇
+                document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+                    item.classList.toggle('active', item.dataset.channel === '');
                 });
+                // 清除當前頻道標籤
+                const currentChannelBadge = document.getElementById('current-channel-badge');
+                const mobileCurrentChannelBadge = document.getElementById('mobile-current-channel-badge');
+                if (currentChannelBadge) currentChannelBadge.style.display = 'none';
+                if (mobileCurrentChannelBadge) mobileCurrentChannelBadge.style.display = 'none';
                 filterSummaries();
             });
         }
@@ -1071,6 +1340,44 @@
                 updateBatchToolbar();
             });
         }
+
+        // 卡片頻道標籤點擊篩選功能
+        document.querySelectorAll('.badge-channel-clickable').forEach(badge => {
+            badge.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const channel = this.dataset.channel;
+                const channelDisplay = this.dataset.channelDisplay;
+
+                // 更新側邊欄選中狀態
+                document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+                    item.classList.toggle('active', item.dataset.channel === channel);
+                });
+
+                // 更新當前頻道標籤
+                const currentChannelBadge = document.getElementById('current-channel-badge');
+                const currentChannelName = document.getElementById('current-channel-name');
+                const mobileCurrentChannelBadge = document.getElementById('mobile-current-channel-badge');
+                const mobileCurrentChannelName = document.getElementById('mobile-current-channel-name');
+
+                if (currentChannelBadge) {
+                    currentChannelBadge.style.display = 'inline-flex';
+                    currentChannelName.textContent = channelDisplay;
+                }
+                if (mobileCurrentChannelBadge) {
+                    mobileCurrentChannelBadge.style.display = 'inline-flex';
+                    mobileCurrentChannelName.textContent = channelDisplay;
+                }
+
+                // 同步隱藏的下拉選單
+                const channelFilter = document.getElementById('desktop-channel-filter');
+                if (channelFilter) channelFilter.value = channel;
+
+                // 執行篩選
+                filterByChannel(channel);
+            });
+        });
 
         // Bookmark functionality
         document.querySelectorAll('.bookmark-toggle').forEach(button => {
