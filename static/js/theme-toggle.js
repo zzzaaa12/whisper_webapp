@@ -4,9 +4,11 @@
 
     const htmlElement = document.documentElement;
 
-    // Load saved theme from localStorage or default to light
+    // 主題已在 base.html 的 head 中預先載入，這裡只需確保一致性
     const savedTheme = localStorage.getItem('theme') || 'light';
-    setTheme(savedTheme);
+    if (htmlElement.getAttribute('data-theme') !== savedTheme) {
+        setTheme(savedTheme);
+    }
 
     // Initialize theme toggle buttons when DOM is ready
     document.addEventListener('DOMContentLoaded', function() {

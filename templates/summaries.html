@@ -103,13 +103,13 @@
         font-weight: 600;
         margin-bottom: 0.75rem;
         color: var(--text-primary);
-        min-height: 2.4em;
+        min-height: 3em;
         line-height: 1.2;
     }
     .summary-card .card-text {
         font-size: 0.875rem;
         line-height: 1.5;
-        min-height: 4.5em;
+        min-height: 6em;
     }
 
     /* 文字截斷樣式 */
@@ -581,12 +581,6 @@
     </div>
 </div>
 
-<!-- Page Header -->
-<div class="page-header">
-    <h1>所有摘要紀錄</h1>
-    <p class="page-description">共 {{ summaries|length }} 個摘要</p>
-</div>
-
 <!-- Desktop View -->
 <div class="desktop-view">
     <!-- 批量工具列 -->
@@ -609,9 +603,9 @@
 
     <!-- 過濾器區域 -->
     <div class="filter-section">
-        <!-- 頻道篩選按鈕與視圖切換 -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <div class="d-flex align-items-center">
+        <!-- 頻道篩選、搜尋與視圖切換 -->
+        <div class="d-flex justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-2">
                 <button class="sidebar-toggle-btn" id="open-sidebar-btn">
                     <i class="bi bi-funnel"></i> 頻道篩選
                 </button>
@@ -620,19 +614,7 @@
                     <i class="bi bi-x-circle-fill clear-filter" id="clear-channel-filter"></i>
                 </span>
             </div>
-            <div class="btn-group btn-group-sm" role="group">
-                <button type="button" class="btn btn-outline-secondary active" id="list-view-btn" title="列表視圖">
-                    <i class="bi bi-list-ul"></i>
-                </button>
-                <button type="button" class="btn btn-outline-secondary" id="card-view-btn" title="卡片視圖">
-                    <i class="bi bi-grid-3x3-gap"></i>
-                </button>
-            </div>
-        </div>
-
-        <div class="row g-3">
-            <div class="col-md-9">
-                <label for="desktop-search-input" class="form-label">搜尋</label>
+            <div class="flex-grow-1">
                 <div class="input-group">
                     <span class="input-group-text">
                         <i class="bi bi-search"></i>
@@ -641,15 +623,18 @@
                     <button class="btn btn-outline-secondary" type="button" id="desktop-clear-search">
                         <i class="bi bi-x-lg"></i>
                     </button>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">&nbsp;</label>
-                <div>
-                    <button class="btn btn-outline-secondary w-100" type="button" id="desktop-clear-filters">
-                        <i class="bi bi-arrow-clockwise"></i> 重置篩選
+                    <button class="btn btn-outline-secondary" type="button" id="desktop-clear-filters">
+                        <i class="bi bi-arrow-clockwise"></i>
                     </button>
                 </div>
+            </div>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="list-view-btn" title="列表視圖">
+                    <i class="bi bi-list-ul"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="card-view-btn" title="卡片視圖">
+                    <i class="bi bi-grid-3x3-gap"></i>
+                </button>
             </div>
         </div>
         <div class="mt-2">
@@ -708,7 +693,7 @@
                             <input type="checkbox" class="form-check-input summary-checkbox m-0" data-filename="{{ summary.filename }}">
                             <span class="badge-channel badge-channel-clickable small text-truncate" style="max-width: 150px;" data-channel="{{ summary.channel }}" data-channel-display="{{ summary.channel_display }}" title="點擊篩選此頻道">{{ summary.channel_display }}</span>
                             <div class="ms-auto d-flex align-items-center gap-1">
-                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success p-1" onclick="event.stopPropagation()" title="下載">
+                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-link text-success p-1" onclick="event.stopPropagation()" title="下載">
                                     <i class="bi bi-download"></i>
                                 </a>
                                 <button class="btn btn-sm btn-link bookmark-toggle p-0" data-filename="{{ summary.filename }}" title="書籤">
@@ -956,6 +941,8 @@
             });
         }
 
+
+
         // 側邊欄頻道搜尋
         if (sidebarChannelSearch) {
             sidebarChannelSearch.addEventListener('input', function() {
@@ -1091,7 +1078,13 @@
             switchToCardView();
         });
 
+        function removePreloadStyle() {
+            var preloadStyle = document.getElementById('view-preload-style');
+            if (preloadStyle) preloadStyle.remove();
+        }
+
         function switchToListView() {
+            removePreloadStyle();
             listView.style.display = 'block';
             cardView.style.display = 'none';
             listViewBtn.classList.add('active');
@@ -1100,6 +1093,7 @@
         }
 
         function switchToCardView() {
+            removePreloadStyle();
             listView.style.display = 'none';
             cardView.style.display = 'block';
             listViewBtn.classList.remove('active');
@@ -1279,22 +1273,37 @@
                 }
             });
         }
-        if (clearFiltersBtn) {
-            clearFiltersBtn.addEventListener('click', function() {
-                if (searchInput) searchInput.value = '';
-                if (channelFilter) channelFilter.value = '';
-                // 重置側邊欄選擇
-                document.querySelectorAll('.sidebar-channel-item').forEach(item => {
-                    item.classList.toggle('active', item.dataset.channel === '');
-                });
-                // 清除當前頻道標籤
-                const currentChannelBadge = document.getElementById('current-channel-badge');
-                const mobileCurrentChannelBadge = document.getElementById('mobile-current-channel-badge');
-                if (currentChannelBadge) currentChannelBadge.style.display = 'none';
-                if (mobileCurrentChannelBadge) mobileCurrentChannelBadge.style.display = 'none';
-                filterSummaries();
+        function clearAllFilters() {
+            if (searchInput) searchInput.value = '';
+            if (channelFilter) channelFilter.value = '';
+            // 重置側邊欄選擇
+            document.querySelectorAll('.sidebar-channel-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.channel === '');
             });
+            // 清除當前頻道標籤
+            const currentChannelBadge = document.getElementById('current-channel-badge');
+            const mobileCurrentChannelBadge = document.getElementById('mobile-current-channel-badge');
+            if (currentChannelBadge) currentChannelBadge.style.display = 'none';
+            if (mobileCurrentChannelBadge) mobileCurrentChannelBadge.style.display = 'none';
+            filterSummaries();
         }
+
+        if (clearFiltersBtn) {
+            clearFiltersBtn.addEventListener('click', clearAllFilters);
+        }
+
+        // ESC 鍵清除所有篩選
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                // 如果側邊欄開啟，先關閉側邊欄
+                if (channelSidebar && channelSidebar.classList.contains('open')) {
+                    closeSidebar();
+                    return;
+                }
+                // 否則清除所有篩選
+                clearAllFilters();
+            }
+        });
 
         // Batch selection functionality
         const checkboxes = document.querySelectorAll('.summary-checkbox');
