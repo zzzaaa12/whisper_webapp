@@ -15,14 +15,14 @@ class SummaryAPIService:
     def __init__(self):
         self.path_manager = get_path_manager()
         self.summary_folder = self.path_manager.get_summary_folder()
-    
+
     def get_latest_summaries(self, limit: int = 10) -> List[Dict]:
         """
         獲取最新的摘要列表
-        
+
         Args:
             limit: 返回的摘要數量限制
-            
+
         Returns:
             List[Dict]: 摘要列表，包含 index, title, created_at
         """
@@ -39,36 +39,36 @@ class SummaryAPIService:
                             'mtime': mtime,
                             'name': file_path.stem
                         })
-            
+
             # 按修改時間排序（最新的在前）
             summary_files.sort(key=lambda x: x['mtime'], reverse=True)
-            
+
             # 限制數量並添加索引
             result = []
             for i, file_info in enumerate(summary_files[:limit]):
                 # 讀取文件第一行作為標題，如果沒有則使用文件名
                 title = self._extract_title(file_info['path'])
-                
+
                 result.append({
                     'index': i + 1,
                     'title': title,
                     'created_at': datetime.fromtimestamp(file_info['mtime']).strftime('%Y-%m-%d %H:%M:%S'),
                     'file_name': file_info['name']
                 })
-            
+
             return result
-            
+
         except Exception as e:
             print(f"Error getting latest summaries: {e}")
             return []
-    
+
     def get_summary_by_index(self, index: int) -> Optional[Dict]:
         """
         根據索引獲取摘要內容
-        
+
         Args:
             index: 摘要索引（1-5，1是最新的）
-            
+
         Returns:
             Optional[Dict]: 摘要詳細信息，包含 index, title, content, created_at, file_name
         """
@@ -76,24 +76,24 @@ class SummaryAPIService:
             # 驗證索引範圍
             if index < 1 or index > 10:
                 return None
-            
+
             # 獲取最新的摘要列表
             summaries = self.get_latest_summaries(10)
-            
+
             # 檢查索引是否存在
             if index > len(summaries):
                 return None
-            
+
             # 獲取對應的摘要信息
             summary_info = summaries[index - 1]
-            
+
             # 讀取完整內容
             file_path = self.summary_folder / f"{summary_info['file_name']}.txt"
             content = self._read_file_content(file_path)
-            
+
             if content is None:
                 return None
-            
+
             return {
                 'index': index,
                 'title': summary_info['title'],
@@ -101,39 +101,39 @@ class SummaryAPIService:
                 'created_at': summary_info['created_at'],
                 'file_name': summary_info['file_name']
             }
-            
+
         except Exception as e:
             print(f"Error getting summary by index {index}: {e}")
             return None
-    
+
     def _extract_title(self, file_path: Path) -> str:
         """
         從摘要文件中提取標題
-        
+
         Args:
             file_path: 文件路徑
-            
+
         Returns:
             str: 標題文本
         """
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 first_line = f.readline().strip()
-                
+
                 # 如果第一行不為空且不太長，使用作為標題
                 if first_line and len(first_line) <= 100:
                     # 移除可能的標題標記
                     title = first_line.lstrip('#').strip()
                     if title:
                         return title
-                
+
                 # 否則使用文件名
                 return file_path.stem
-                
+
         except Exception:
             # 如果讀取失敗，使用文件名
             return file_path.stem
-    
+
     def _read_file_content(self, file_path: Path) -> Optional[str]:
         """
         讀取文件完整內容
@@ -274,6 +274,9 @@ class SummaryAPIService:
                     }
                 channel_counts[channel_display]['count'] += 1
 
+                # 提取核心主題作為預覽
+                preview = self._extract_core_topics(file_path)
+
                 # 建立摘要項目
                 summary_item = {
                     'filename': file_path.name,
@@ -282,7 +285,8 @@ class SummaryAPIService:
                     'channel_display': channel_display,
                     'created_at': datetime.fromtimestamp(file_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
                     'file_size': file_path.stat().st_size,
-                    'is_bookmarked': bookmarked_files and file_path.name in bookmarked_files
+                    'is_bookmarked': bookmarked_files and file_path.name in bookmarked_files,
+                    'preview': preview
                 }
 
                 all_summaries.append(summary_item)
@@ -386,6 +390,55 @@ class SummaryAPIService:
                 return "未知頻道"
         except Exception:
             return "未知頻道"
+
+    def _extract_core_topics(self, file_path: Path) -> str:
+        """
+        從摘要文件中提取核心主題內容作為預覽
+
+        Args:
+            file_path: 文件路徑
+
+        Returns:
+            str: 核心主題內容（最多200字）
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+                # 尋找核心主題區塊
+                in_core_topics = False
+                core_topics_lines = []
+
+                for line in lines:
+                    line_stripped = line.strip()
+
+                    # 找到核心主題標題
+                    if '核心主題' in line_stripped and line_stripped.startswith('#'):
+                        in_core_topics = True
+                        continue
+
+                    # 如果在核心主題區塊中
+                    if in_core_topics:
+                        # 遇到下一個標題就停止
+                        if line_stripped.startswith('#'):
+                            break
+
+                        # 收集非空行
+                        if line_stripped and not line_stripped.startswith('='):
+                            core_topics_lines.append(line_stripped)
+
+                # 合併內容並限制長度
+                if core_topics_lines:
+                    content = ' '.join(core_topics_lines)
+                    # 限制在200字以內
+                    if len(content) > 200:
+                        content = content[:200] + '...'
+                    return content
+
+                return ""
+        except Exception as e:
+            print(f"Error extracting core topics from {file_path}: {e}")
+            return ""
 
 
 # 全域服務實例

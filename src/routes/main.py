@@ -233,9 +233,56 @@ def list_summaries():
         # 記錄原始名稱
         channel_original_names[channel_display] = channel
 
+        # 讀取摘要預覽（提取核心主題）
+        preview = ''
+        try:
+            content = f.read_text(encoding='utf-8')
+            lines = content.split('\n')
+
+            # 尋找核心主題區塊
+            in_core_topics = False
+            core_topics_lines = []
+
+            for line in lines:
+                line_stripped = line.strip()
+
+                # 找到核心主題標題
+                if '核心主題' in line_stripped and line_stripped.startswith('#'):
+                    in_core_topics = True
+                    continue
+
+                # 如果在核心主題區塊中
+                if in_core_topics:
+                    # 遇到下一個標題就停止
+                    if line_stripped.startswith('#'):
+                        break
+
+                    # 收集非空行
+                    if line_stripped and not line_stripped.startswith('='):
+                        core_topics_lines.append(line_stripped)
+
+            # 合併內容並處理換行
+            if core_topics_lines:
+                # 合併所有行
+                preview = ' '.join(core_topics_lines)
+
+                # 在第二個及之後的 ' - ' 前插入換行符號
+                parts = preview.split(' - ')
+                if len(parts) > 1:
+                    # 保留第一個項目，其餘項目前加換行
+                    preview = parts[0] + ''.join(['\n- ' + part for part in parts[1:]])
+
+                # 限制在200字以內
+                if len(preview) > 200:
+                    preview = preview[:200] + '...'
+        except Exception as e:
+            print(f"Error extracting preview from {f.name}: {e}")
+            preview = ''
+
         summaries_with_info.append({
             'filename': f.name,
             'title': display_title,
+            'preview': preview,  # 新增預覽
             'is_bookmarked': bookmark_service.is_bookmarked(f.name),
             'channel': channel,  # 保留原始名稱用於後端篩選
             'channel_display': channel_display  # 顯示名稱

@@ -56,6 +56,69 @@
         margin-bottom: 1rem;
     }
 
+    /* 視圖切換按鈕 */
+    .btn-group .btn.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+
+    /* 卡片視圖樣式 */
+    .summary-card .card {
+        transition: all 0.3s ease;
+        border: 1px solid var(--border-color);
+        background-color: var(--bg-card);
+    }
+    .summary-card .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    [data-theme="dark"] .summary-card .card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .summary-card .card-header {
+        background-color: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.5rem 1rem;
+    }
+    .summary-card .card-body {
+        padding: 1rem;
+    }
+    .summary-card .card-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--text-primary);
+        min-height: 2.4em;
+        line-height: 1.2;
+    }
+    .summary-card .card-text {
+        font-size: 0.875rem;
+        line-height: 1.5;
+        min-height: 4.5em;
+    }
+
+    /* 文字截斷樣式 */
+    .text-truncate-2 {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .text-truncate-3 {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .summary-card .card-footer {
+        background-color: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        padding: 0.75rem 1rem;
+    }
+
     /* 快速頻道過濾標籤樣式 */
     .channel-chips {
         display: flex;
@@ -352,9 +415,20 @@
 
     <!-- 過濾器區域 -->
     <div class="filter-section">
+        <!-- 視圖切換按鈕 -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <label class="form-label mb-0">快速頻道篩選 (前20個熱門頻道)</label>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn btn-outline-secondary active" id="list-view-btn" title="列表視圖">
+                    <i class="bi bi-list-ul"></i>
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="card-view-btn" title="卡片視圖">
+                    <i class="bi bi-grid-3x3-gap"></i>
+                </button>
+            </div>
+        </div>
         <!-- 快速頻道過濾標籤 -->
         <div class="mb-3">
-            <label class="form-label">快速頻道篩選 (前20個熱門頻道)</label>
             <div class="channel-chips d-flex flex-wrap gap-2">
                 <button class="channel-chip active" data-channel="">
                     📺 全部頻道 <span class="badge bg-primary ms-1">{{ summaries|length }}</span>
@@ -403,8 +477,8 @@
         </div>
     </div>
 
-    <!-- 摘要列表 -->
-    <div class="card">
+    <!-- 列表視圖 -->
+    <div id="list-view" class="card">
         <div class="card-body p-0">
             <div class="list-group list-group-flush" id="desktop-summaries-list">
                 {% for summary in summaries %}
@@ -432,6 +506,40 @@
                 </div>
                 {% endfor %}
             </div>
+        </div>
+    </div>
+
+    <!-- 卡片視圖 -->
+    <div id="card-view" style="display: none;">
+        <div class="row g-3" id="desktop-summaries-cards">
+            {% for summary in summaries %}
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="summary-card" data-filename="{{ summary.filename }}" data-title="{{ summary.title }}" data-channel="{{ summary.channel }}" data-bookmarked="{{ summary.is_bookmarked|lower }}">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <input type="checkbox" class="form-check-input summary-checkbox" data-filename="{{ summary.filename }}">
+                            <button class="btn btn-sm btn-link bookmark-toggle p-0" data-filename="{{ summary.filename }}">
+                                <i class="bi bi-bookmark{{ '-fill' if summary.is_bookmarked else '' }} fs-5 {{ 'text-warning' if summary.is_bookmarked else 'text-secondary' }}"></i>
+                            </button>
+                        </div>
+                        <div class="card-body" style="cursor: pointer;" onclick="window.location.href='/summary/{{ summary.filename }}'">
+                            <h6 class="card-title text-truncate-2">{{ summary.title }}</h6>
+                            {% if summary.preview %}
+                            <p class="card-text text-muted small text-truncate-3" style="white-space: pre-line;">{{ summary.preview }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="card-footer">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge-channel small">{{ summary.channel_display }}</span>
+                                <a href="/download/summary/{{ summary.filename }}" class="btn btn-sm btn-outline-success" onclick="event.stopPropagation()">
+                                    <i class="bi bi-download"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
 
@@ -607,6 +715,42 @@
             convertSummaryTitles();
         }
 
+        // 視圖切換功能
+        const listViewBtn = document.getElementById('list-view-btn');
+        const cardViewBtn = document.getElementById('card-view-btn');
+        const listView = document.getElementById('list-view');
+        const cardView = document.getElementById('card-view');
+
+        // 載入儲存的視圖偏好
+        const savedView = localStorage.getItem('summaryView') || 'list';
+        if (savedView === 'card') {
+            switchToCardView();
+        }
+
+        listViewBtn.addEventListener('click', function() {
+            switchToListView();
+        });
+
+        cardViewBtn.addEventListener('click', function() {
+            switchToCardView();
+        });
+
+        function switchToListView() {
+            listView.style.display = 'block';
+            cardView.style.display = 'none';
+            listViewBtn.classList.add('active');
+            cardViewBtn.classList.remove('active');
+            localStorage.setItem('summaryView', 'list');
+        }
+
+        function switchToCardView() {
+            listView.style.display = 'none';
+            cardView.style.display = 'block';
+            listViewBtn.classList.remove('active');
+            cardViewBtn.classList.add('active');
+            localStorage.setItem('summaryView', 'card');
+        }
+
         // Re-convert titles when window is resized (mobile/desktop switch)
         window.addEventListener('resize', function() {
             document.querySelectorAll('[data-converted]').forEach(element => {
@@ -681,8 +825,11 @@
             const selectedChannel = channelFilter ? channelFilter.value : '';
             let visibleCount = 0;
 
+            // 同時過濾列表視圖和卡片視圖
             const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+            const summaryCards = document.querySelectorAll('.desktop-view .summary-card');
 
+            // 過濾列表視圖
             summaryItems.forEach(item => {
                 const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
                 const channel = item.dataset.channel;
@@ -698,9 +845,30 @@
                 }
             });
 
+            // 過濾卡片視圖
+            let cardVisibleCount = 0;
+            summaryCards.forEach(card => {
+                const title = card.dataset.title ? card.dataset.title.toLowerCase() : card.dataset.filename.toLowerCase();
+                const channel = card.dataset.channel;
+
+                const matchesSearch = !searchTerm || title.includes(searchTerm);
+                const matchesChannel = !selectedChannel || channel.trim() === selectedChannel.trim();
+
+                if (matchesSearch && matchesChannel) {
+                    card.parentElement.style.display = '';
+                    cardVisibleCount++;
+                } else {
+                    card.parentElement.style.display = 'none';
+                }
+            });
+
+            // 根據當前視圖模式選擇正確的計數
+            const currentView = localStorage.getItem('summaryView') || 'list';
+            const finalVisibleCount = currentView === 'card' ? cardVisibleCount : visibleCount;
+
             // Update status
             if (filterStatus) {
-                let statusText = `顯示 ${visibleCount} 個摘要`;
+                let statusText = `顯示 ${finalVisibleCount} 個摘要`;
                 if (searchTerm || selectedChannel) {
                     statusText += ' (已過濾)';
                 }
@@ -709,11 +877,21 @@
 
             // Show/hide no results
             if (noResults) {
-                if (visibleCount === 0) {
-                    summariesList.style.display = 'none';
+                const listViewElement = document.getElementById('list-view');
+                const cardViewElement = document.getElementById('card-view');
+
+                if (finalVisibleCount === 0) {
+                    if (listViewElement) listViewElement.style.display = 'none';
+                    if (cardViewElement) cardViewElement.style.display = 'none';
                     noResults.style.display = 'block';
                 } else {
-                    summariesList.style.display = 'block';
+                    if (currentView === 'card') {
+                        if (listViewElement) listViewElement.style.display = 'none';
+                        if (cardViewElement) cardViewElement.style.display = 'block';
+                    } else {
+                        if (listViewElement) listViewElement.style.display = 'block';
+                        if (cardViewElement) cardViewElement.style.display = 'none';
+                    }
                     noResults.style.display = 'none';
                     convertSummaryTitles();
                 }
@@ -737,8 +915,10 @@
                 // 執行篩選
                 let visibleCount = 0;
                 const summaryItems = document.querySelectorAll((isMobile ? '.mobile-view' : '.desktop-view') + ' .summary-item');
+                const summaryCards = document.querySelectorAll('.desktop-view .summary-card');
                 const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
 
+                // 過濾列表視圖
                 summaryItems.forEach(item => {
                     const title = item.dataset.title ? item.dataset.title.toLowerCase() : item.dataset.filename.toLowerCase();
                     const itemChannel = item.dataset.channel;
@@ -754,9 +934,32 @@
                     }
                 });
 
+                // 過濾卡片視圖（使用相同的過濾邏輯）
+                let cardVisibleCount = 0;
+                summaryCards.forEach(card => {
+                    const title = card.dataset.title ? card.dataset.title.toLowerCase() : card.dataset.filename.toLowerCase();
+                    const itemChannel = card.dataset.channel;
+
+                    const matchesSearch = !searchTerm || title.includes(searchTerm);
+                    const matchesChannel = !channel || itemChannel.trim() === channel.trim();
+
+                    // 設定整個 col 的顯示狀態
+                    const colElement = card.parentElement;
+                    if (matchesSearch && matchesChannel) {
+                        colElement.style.display = '';
+                        cardVisibleCount++;
+                    } else {
+                        colElement.style.display = 'none';
+                    }
+                });
+
+                // 根據當前視圖模式選擇正確的計數
+                const currentView = localStorage.getItem('summaryView') || 'list';
+                const finalVisibleCount = currentView === 'card' ? cardVisibleCount : visibleCount;
+
                 // 更新狀態文字
                 if (filterStatus) {
-                    let statusText = `顯示 ${visibleCount} 個摘要`;
+                    let statusText = `顯示 ${finalVisibleCount} 個摘要`;
                     if (searchTerm || channel) {
                         statusText += ' (已過濾)';
                     }
@@ -765,11 +968,21 @@
 
                 // 顯示/隱藏無結果提示
                 if (noResults) {
-                    if (visibleCount === 0) {
-                        summariesList.style.display = 'none';
+                    const listViewElement = document.getElementById('list-view');
+                    const cardViewElement = document.getElementById('card-view');
+
+                    if (finalVisibleCount === 0) {
+                        if (listViewElement) listViewElement.style.display = 'none';
+                        if (cardViewElement) cardViewElement.style.display = 'none';
                         noResults.style.display = 'block';
                     } else {
-                        summariesList.style.display = 'block';
+                        if (currentView === 'card') {
+                            if (listViewElement) listViewElement.style.display = 'none';
+                            if (cardViewElement) cardViewElement.style.display = 'block';
+                        } else {
+                            if (listViewElement) listViewElement.style.display = 'block';
+                            if (cardViewElement) cardViewElement.style.display = 'none';
+                        }
                         noResults.style.display = 'none';
                         convertSummaryTitles();
                     }
