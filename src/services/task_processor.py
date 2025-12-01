@@ -24,6 +24,40 @@ from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
 from src.services.email_service import EmailService
 
+
+def cleanup_original_file(file_path, log_callback=None) -> bool:
+    """
+    清理原始音訊/影片檔案
+    
+    Args:
+        file_path: 要刪除的檔案路徑 (Path 或 str)
+        log_callback: 日誌回調函數
+    
+    Returns:
+        bool: 是否成功刪除
+    """
+    try:
+        # 確保是 Path 物件
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+        
+        if log_callback:
+            log_callback(f"嘗試清理檔案: {file_path}", 'info')
+        
+        if file_path and file_path.exists():
+            file_size = file_path.stat().st_size
+            file_path.unlink()
+            if log_callback:
+                log_callback(f"✅ 已清理原始檔案: {file_path.name} ({file_size / 1024 / 1024:.2f} MB)", 'info')
+            return True
+        else:
+            if log_callback:
+                log_callback(f"檔案不存在，無需清理: {file_path}", 'warning')
+    except Exception as e:
+        if log_callback:
+            log_callback(f"清理原始檔案失敗: {file_path} - {e}", 'warning')
+    return False
+
 class TaskProcessor:
     """
     負責處理各種類型任務的具體邏輯。
@@ -439,6 +473,9 @@ class TaskProcessor:
             # 發送完成通知
             self._send_task_notification(task_id, video_title, sanitized_title, url, summary_path)
 
+            # 清理原始音訊檔案
+            cleanup_original_file(audio_file, lambda msg, level: self._log_worker_message(task_id, msg, level))
+
             return result
 
         except Exception as e:
@@ -511,6 +548,9 @@ class TaskProcessor:
             # 發送完成通知
             original_title = title if title else audio_file.name
             self._send_task_notification(task_id, None, None, None, summary_path, original_file_name=original_title)
+
+            # 清理原始上傳檔案
+            cleanup_original_file(audio_file, lambda msg, level: self._log_worker_message(task_id, msg, level))
 
             return result
 

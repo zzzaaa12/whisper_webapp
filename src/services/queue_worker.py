@@ -28,6 +28,40 @@ from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
 from src.services.file_service import FileService
 from src.services.task_processor import TaskProcessor
+
+
+def cleanup_original_file(file_path, logger_manager=None) -> bool:
+    """
+    清理原始音訊/影片檔案
+    
+    Args:
+        file_path: 要刪除的檔案路徑 (Path 或 str)
+        logger_manager: 日誌管理器
+    
+    Returns:
+        bool: 是否成功刪除
+    """
+    try:
+        # 確保是 Path 物件
+        if isinstance(file_path, str):
+            file_path = Path(file_path)
+        
+        if logger_manager:
+            logger_manager.info(f"嘗試清理檔案: {file_path}", "queue_worker")
+        
+        if file_path and file_path.exists():
+            file_size = file_path.stat().st_size
+            file_path.unlink()
+            if logger_manager:
+                logger_manager.info(f"✅ 已清理原始檔案: {file_path.name} ({file_size / 1024 / 1024:.2f} MB)", "queue_worker")
+            return True
+        else:
+            if logger_manager:
+                logger_manager.warning(f"檔案不存在，無需清理: {file_path}", "queue_worker")
+    except Exception as e:
+        if logger_manager:
+            logger_manager.warning(f"清理原始檔案失敗: {file_path} - {e}", "queue_worker")
+    return False
 from src.services.youtube_subtitle_extractor import get_youtube_subtitle_extractor
 from src.services.email_service import EmailService
 
@@ -492,6 +526,10 @@ class QueueWorker:
             if summary_path.exists():
                 self._send_summary_email(task_id, video_title, summary_path, uploader)
 
+            # 清理原始音訊檔案
+            if audio_file:
+                cleanup_original_file(audio_file, self.logger_manager)
+
         except Exception as e:
             error_msg = f"YouTube 任務處理失敗: {str(e)}"
             self.logger_manager.error(error_msg, "queue_worker")
@@ -587,6 +625,9 @@ class QueueWorker:
             # 發送摘要郵件（如果摘要存在）
             if summary_path.exists():
                 self._send_summary_email(task_id, original_title, summary_path, "音頻")
+
+            # 清理原始上傳檔案
+            cleanup_original_file(audio_file, self.logger_manager)
 
         except Exception as e:
             error_msg = f"處理音訊檔案時發生錯誤: {str(e)}"
