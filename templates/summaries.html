@@ -103,8 +103,13 @@
         font-weight: 600;
         margin-bottom: 0.75rem;
         color: var(--text-primary);
-        min-height: 3em;
+        min-height: 3.6em;
         line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     .summary-card .card-text {
         font-size: 0.875rem;
@@ -702,7 +707,7 @@
                             </div>
                         </div>
                         <div class="card-body" style="cursor: pointer;" onclick="window.location.href='/summary/{{ summary.filename }}'">
-                            <h6 class="card-title text-truncate-2">{{ summary.title }}</h6>
+                            <h6 class="card-title">{{ summary.title }}</h6>
                             {% if summary.preview %}
                             <p class="card-text text-muted small text-truncate-3" style="white-space: pre-line;">{{ summary.preview }}</p>
                             {% endif %}

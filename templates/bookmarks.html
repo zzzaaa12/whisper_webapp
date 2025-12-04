@@ -3,123 +3,181 @@
 {% block title %}我的書籤 - Whisper Web App{% endblock %}
 
 {% block head %}
+<!-- 防止視圖切換閃爍 -->
+<script>
+    (function() {
+        var savedView = localStorage.getItem('bookmarkView') || 'list';
+        var style = document.createElement('style');
+        style.id = 'view-preload-style';
+        if (savedView === 'card') {
+            style.textContent = '#list-view { display: none !important; } #card-view { display: block !important; }';
+        } else {
+            style.textContent = '#list-view { display: block !important; } #card-view { display: none !important; }';
+        }
+        document.head.appendChild(style);
+    })();
+</script>
 <style>
+    /* 過濾器區域 */
+    .filter-section {
+        background-color: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 0.375rem;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    /* 視圖切換按鈕 */
+    .btn-group .btn.active {
+        background-color: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+    }
+
+    /* 列表視圖樣式 */
     .bookmark-item {
         display: flex;
         align-items: center;
-        padding: 1rem;
+        padding: 0.75rem 1rem;
         border-bottom: 1px solid var(--border-color);
         transition: background-color 0.2s;
-        cursor: pointer;
+    }
+    .bookmark-item:last-child {
+        border-bottom: none;
     }
     .bookmark-item:hover {
         background-color: var(--bg-secondary);
     }
     .bookmark-checkbox {
         margin-right: 1rem;
-        align-self: flex-start;
-        margin-top: 0.2rem;
     }
     .bookmark-content {
         flex: 1;
+        cursor: pointer;
         min-width: 0;
     }
-    .bookmark-title {
-        font-weight: 500;
-        margin-bottom: 0.5rem;
-        font-size: 1.1rem;
-        color: var(--text-primary);
-    }
-    .bookmark-preview {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        line-height: 1.4;
-        margin-bottom: 0.5rem;
+    .bookmark-content:hover h6 {
+        color: #0d6efd;
     }
     .bookmark-meta {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 0.8rem;
+        font-size: 0.875rem;
         color: var(--text-secondary);
+        margin-top: 0.25rem;
     }
     .bookmark-actions {
         display: flex;
         gap: 0.5rem;
         align-items: center;
-        margin-left: 1rem;
     }
+
+    /* 批量工具列 */
     .batch-toolbar {
-        padding: 1rem;
-        margin-bottom: 0;
-        display: none;
-        border-bottom: 1px solid var(--border-color);
         background-color: var(--bg-secondary);
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: none;
     }
-    .batch-toolbar.show {
-        display: block;
+
+    /* 卡片視圖樣式 */
+    .bookmark-card .card {
+        transition: all 0.3s ease;
+        border: 1px solid var(--border-color);
+        background-color: var(--bg-card);
     }
-    @media (max-width: 768px) {
-        .bookmark-meta {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 0.25rem;
-        }
-        .bookmark-actions {
-            margin-left: 0.5rem;
-            flex-direction: column;
-            gap: 0.25rem;
-        }
-        .bookmark-actions .btn {
-            width: 100%;
-        }
+    .bookmark-card .card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
+    [data-theme="dark"] .bookmark-card .card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .bookmark-card .card-header {
+        background-color: var(--bg-secondary);
+        border-bottom: 1px solid var(--border-color);
+        padding: 0.5rem 1rem;
+    }
+    .bookmark-card .card-body {
+        padding: 1rem;
+        cursor: pointer;
+    }
+    .bookmark-card .card-title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 0;
+        color: var(--text-primary);
+        line-height: 1.3;
+    }
+    .bookmark-card .card-body {
+        padding: 0.75rem 1rem;
+    }
+
+
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>我的書籤</h1>
-    <p class="page-description">共 {{ bookmarks|length }} 個書籤</p>
-</div>
-
 {% if bookmarks %}
-<div class="card">
-    <!-- 批量工具列 -->
-    <div class="batch-toolbar" id="batch-toolbar">
-        <div class="d-flex justify-content-between align-items-center">
-            <span id="selected-count">已選擇 0 個項目</span>
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-danger" id="batch-remove">
-                    <i class="bi bi-bookmark-x"></i> 批量移除
-                </button>
-                <button class="btn btn-sm btn-outline-secondary" id="cancel-selection">
-                    <i class="bi bi-x"></i> 取消選擇
+<!-- 過濾器區域 -->
+<div class="filter-section">
+    <div class="d-flex justify-content-between align-items-center gap-3">
+        <div class="flex-grow-1">
+            <div class="input-group">
+                <span class="input-group-text">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text" class="form-control" id="search-input" placeholder="搜尋書籤標題...">
+                <button class="btn btn-outline-secondary" type="button" id="clear-search">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </div>
         </div>
+        <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-secondary active" id="list-view-btn" title="列表視圖">
+                <i class="bi bi-list-ul"></i>
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="card-view-btn" title="卡片視圖">
+                <i class="bi bi-grid-3x3-gap"></i>
+            </button>
+        </div>
     </div>
+    <div class="mt-2">
+        <small class="text-muted" id="filter-status">共 {{ bookmarks|length }} 個書籤</small>
+    </div>
+</div>
 
+<!-- 批量工具列 -->
+<div class="batch-toolbar" id="batch-toolbar">
+    <div class="d-flex justify-content-between align-items-center">
+        <span id="selected-count">已選擇 0 個項目</span>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-outline-danger" id="batch-remove">
+                <i class="bi bi-bookmark-x"></i> 批量移除
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" id="cancel-selection">
+                <i class="bi bi-x"></i> 取消選擇
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- 列表視圖 -->
+<div id="list-view" class="card">
     <div class="card-body p-0">
-        <div class="list-group list-group-flush">
+        <div class="list-group list-group-flush" id="bookmarks-list">
             {% for bookmark in bookmarks %}
-            <div class="bookmark-item" data-filename="{{ bookmark.filename }}">
+            <div class="bookmark-item" data-filename="{{ bookmark.filename }}" data-title="{{ bookmark.title }}">
                 <input type="checkbox" class="form-check-input bookmark-checkbox" data-filename="{{ bookmark.filename }}">
                 <div class="bookmark-content" onclick="window.location.href='/summary/{{ bookmark.filename }}'">
-                    <div class="bookmark-title">{{ bookmark.title }}</div>
-                    {% if bookmark.preview %}
-                    <div class="bookmark-preview">{{ bookmark.preview[:150] }}...</div>
-                    {% endif %}
+                    <h6 class="mb-1">{{ bookmark.title }}</h6>
                     <div class="bookmark-meta">
-                        <span><i class="bi bi-calendar"></i> {{ bookmark.created_at }}</span>
-                        <span><i class="bi bi-tv"></i> {{ bookmark.channel }}</span>
+                        <span class="badge-channel">{{ bookmark.channel }}</span>
                     </div>
                 </div>
                 <div class="bookmark-actions">
-                    <button class="btn btn-sm btn-outline-danger remove-bookmark" data-filename="{{ bookmark.filename }}" onclick="event.stopPropagation()">
+                    <button class="btn btn-sm btn-outline-danger remove-bookmark" data-filename="{{ bookmark.filename }}" onclick="event.stopPropagation()" title="移除書籤">
                         <i class="bi bi-bookmark-x"></i>
                     </button>
-                    <a href="/download/summary/{{ bookmark.filename }}" class="btn btn-sm btn-outline-success" onclick="event.stopPropagation()">
+                    <a href="/download/summary/{{ bookmark.filename }}" class="btn btn-sm btn-link text-success p-1" onclick="event.stopPropagation()" title="下載">
                         <i class="bi bi-download"></i>
                     </a>
                 </div>
@@ -128,6 +186,43 @@
         </div>
     </div>
 </div>
+
+<!-- 卡片視圖 -->
+<div id="card-view" style="display: none;">
+    <div class="row g-3" id="bookmarks-cards">
+        {% for bookmark in bookmarks %}
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="bookmark-card" data-filename="{{ bookmark.filename }}" data-title="{{ bookmark.title }}">
+                <div class="card h-100">
+                    <div class="card-header d-flex align-items-center gap-2">
+                        <input type="checkbox" class="form-check-input bookmark-checkbox m-0" data-filename="{{ bookmark.filename }}">
+                        <span class="badge-channel small text-truncate" style="max-width: 150px;">{{ bookmark.channel }}</span>
+                        <div class="ms-auto d-flex align-items-center gap-1">
+                            <a href="/download/summary/{{ bookmark.filename }}" class="btn btn-sm btn-link text-success p-1" onclick="event.stopPropagation()" title="下載">
+                                <i class="bi bi-download"></i>
+                            </a>
+                            <button class="btn btn-sm btn-link text-danger p-0 remove-bookmark" data-filename="{{ bookmark.filename }}" onclick="event.stopPropagation()" title="移除書籤">
+                                <i class="bi bi-bookmark-x-fill fs-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body" onclick="window.location.href='/summary/{{ bookmark.filename }}'">
+                        <h6 class="card-title">{{ bookmark.title }}</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- 無結果提示 -->
+<div class="empty-state" id="no-results" style="display: none;">
+    <i class="bi bi-search"></i>
+    <h3>沒有找到符合條件的書籤</h3>
+    <p>請嘗試調整搜尋條件</p>
+</div>
+
 {% else %}
 <div class="empty-state">
     <i class="bi bi-bookmark"></i>
@@ -142,114 +237,216 @@
 
 {% block scripts %}
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const checkboxes = document.querySelectorAll('.bookmark-checkbox');
-        const batchToolbar = document.getElementById('batch-toolbar');
-        const selectedCount = document.getElementById('selected-count');
-        const cancelSelection = document.getElementById('cancel-selection');
-        const batchRemove = document.getElementById('batch-remove');
+document.addEventListener('DOMContentLoaded', function() {
+    // ========== 視圖切換功能 ==========
+    const listViewBtn = document.getElementById('list-view-btn');
+    const cardViewBtn = document.getElementById('card-view-btn');
+    const listView = document.getElementById('list-view');
+    const cardView = document.getElementById('card-view');
 
-        function updateBatchToolbar() {
-            const checkedBoxes = document.querySelectorAll('.bookmark-checkbox:checked');
-            const count = checkedBoxes.length;
+    function removePreloadStyle() {
+        var preloadStyle = document.getElementById('view-preload-style');
+        if (preloadStyle) preloadStyle.remove();
+    }
 
-            if (count > 0) {
-                batchToolbar.classList.add('show');
-                selectedCount.textContent = `已選擇 ${count} 個項目`;
+    function switchToListView() {
+        removePreloadStyle();
+        if (listView) listView.style.display = 'block';
+        if (cardView) cardView.style.display = 'none';
+        if (listViewBtn) listViewBtn.classList.add('active');
+        if (cardViewBtn) cardViewBtn.classList.remove('active');
+        localStorage.setItem('bookmarkView', 'list');
+    }
+
+    function switchToCardView() {
+        removePreloadStyle();
+        if (listView) listView.style.display = 'none';
+        if (cardView) cardView.style.display = 'block';
+        if (listViewBtn) listViewBtn.classList.remove('active');
+        if (cardViewBtn) cardViewBtn.classList.add('active');
+        localStorage.setItem('bookmarkView', 'card');
+    }
+
+    // 載入儲存的視圖偏好
+    const savedView = localStorage.getItem('bookmarkView') || 'list';
+    if (savedView === 'card') {
+        switchToCardView();
+    }
+
+    if (listViewBtn) listViewBtn.addEventListener('click', switchToListView);
+    if (cardViewBtn) cardViewBtn.addEventListener('click', switchToCardView);
+
+    // ========== 搜尋功能 ==========
+    const searchInput = document.getElementById('search-input');
+    const clearSearchBtn = document.getElementById('clear-search');
+    const filterStatus = document.getElementById('filter-status');
+    const noResults = document.getElementById('no-results');
+
+    function filterBookmarks() {
+        const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+        let visibleCount = 0;
+
+        // 過濾列表視圖
+        document.querySelectorAll('.bookmark-item').forEach(item => {
+            const title = item.dataset.title ? item.dataset.title.toLowerCase() : '';
+            const matches = !searchTerm || title.includes(searchTerm);
+            item.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+
+        // 過濾卡片視圖
+        let cardVisibleCount = 0;
+        document.querySelectorAll('.bookmark-card').forEach(card => {
+            const title = card.dataset.title ? card.dataset.title.toLowerCase() : '';
+            const matches = !searchTerm || title.includes(searchTerm);
+            card.parentElement.style.display = matches ? '' : 'none';
+            if (matches) cardVisibleCount++;
+        });
+
+        // 更新狀態
+        const currentView = localStorage.getItem('bookmarkView') || 'list';
+        const finalCount = currentView === 'card' ? cardVisibleCount : visibleCount;
+
+        if (filterStatus) {
+            filterStatus.textContent = searchTerm 
+                ? `顯示 ${finalCount} 個書籤 (已過濾)` 
+                : `共 {{ bookmarks|length }} 個書籤`;
+        }
+
+        // 顯示/隱藏無結果提示
+        if (noResults && listView && cardView) {
+            if (finalCount === 0) {
+                listView.style.display = 'none';
+                cardView.style.display = 'none';
+                noResults.style.display = 'block';
             } else {
-                batchToolbar.classList.remove('show');
+                noResults.style.display = 'none';
+                if (currentView === 'card') {
+                    listView.style.display = 'none';
+                    cardView.style.display = 'block';
+                } else {
+                    listView.style.display = 'block';
+                    cardView.style.display = 'none';
+                }
             }
         }
+    }
 
-        checkboxes.forEach(checkbox => {
-            checkbox.addEventListener('change', updateBatchToolbar);
+    if (searchInput) searchInput.addEventListener('input', filterBookmarks);
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function() {
+            if (searchInput) {
+                searchInput.value = '';
+                filterBookmarks();
+            }
         });
+    }
 
-        if (cancelSelection) {
-            cancelSelection.addEventListener('click', function() {
-                checkboxes.forEach(checkbox => {
-                    checkbox.checked = false;
-                });
-                updateBatchToolbar();
-            });
-        }
-
-        // 單個移除書籤
-        document.querySelectorAll('.remove-bookmark').forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-
-                const filename = this.dataset.filename;
-                if (confirm('確定要移除這個書籤嗎？')) {
-                    removeBookmark(filename);
-                }
-            });
-        });
-
-        // 批量移除書籤
-        if (batchRemove) {
-            batchRemove.addEventListener('click', function() {
-                const checkedBoxes = document.querySelectorAll('.bookmark-checkbox:checked');
-                const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
-
-                if (filenames.length === 0) return;
-
-                if (confirm(`確定要移除選中的 ${filenames.length} 個書籤嗎？`)) {
-                    batchRemoveBookmarks(filenames);
-                }
-            });
-        }
-
-        function removeBookmark(filename) {
-            fetch('/api/bookmark', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    filename: filename,
-                    action: 'remove'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('移除書籤失敗：' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('移除書籤失敗:', error);
-                alert('移除書籤失敗，請稍後再試');
-            });
-        }
-
-        function batchRemoveBookmarks(filenames) {
-            fetch('/api/batch-bookmark', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    filenames: filenames,
-                    action: 'remove'
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('批量移除書籤失敗：' + data.message);
-                }
-            })
-            .catch(error => {
-                console.error('批量移除書籤失敗:', error);
-                alert('批量移除書籤失敗，請稍後再試');
-            });
+    // ESC 鍵清除搜尋
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && searchInput) {
+            searchInput.value = '';
+            filterBookmarks();
         }
     });
+
+    // ========== 批量選擇功能 ==========
+    const checkboxes = document.querySelectorAll('.bookmark-checkbox');
+    const batchToolbar = document.getElementById('batch-toolbar');
+    const selectedCount = document.getElementById('selected-count');
+    const cancelSelection = document.getElementById('cancel-selection');
+    const batchRemove = document.getElementById('batch-remove');
+
+    function updateBatchToolbar() {
+        const checkedBoxes = document.querySelectorAll('.bookmark-checkbox:checked');
+        const count = checkedBoxes.length;
+
+        if (batchToolbar && selectedCount) {
+            if (count > 0) {
+                batchToolbar.style.display = 'block';
+                selectedCount.textContent = `已選擇 ${count} 個項目`;
+            } else {
+                batchToolbar.style.display = 'none';
+            }
+        }
+    }
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBatchToolbar);
+    });
+
+    if (cancelSelection) {
+        cancelSelection.addEventListener('click', function() {
+            checkboxes.forEach(checkbox => checkbox.checked = false);
+            updateBatchToolbar();
+        });
+    }
+
+    // ========== 移除書籤功能 ==========
+    document.querySelectorAll('.remove-bookmark').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const filename = this.dataset.filename;
+            if (confirm('確定要移除這個書籤嗎？')) {
+                removeBookmark(filename);
+            }
+        });
+    });
+
+    if (batchRemove) {
+        batchRemove.addEventListener('click', function() {
+            const checkedBoxes = document.querySelectorAll('.bookmark-checkbox:checked');
+            const filenames = Array.from(checkedBoxes).map(cb => cb.dataset.filename);
+
+            if (filenames.length === 0) return;
+
+            if (confirm(`確定要移除選中的 ${filenames.length} 個書籤嗎？`)) {
+                batchRemoveBookmarks(filenames);
+            }
+        });
+    }
+
+    function removeBookmark(filename) {
+        fetch('/api/bookmark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename, action: 'remove' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('移除書籤失敗：' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('移除書籤失敗:', error);
+            alert('移除書籤失敗，請稍後再試');
+        });
+    }
+
+    function batchRemoveBookmarks(filenames) {
+        fetch('/api/batch-bookmark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filenames: filenames, action: 'remove' })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('批量移除書籤失敗：' + data.message);
+            }
+        })
+        .catch(error => {
+            console.error('批量移除書籤失敗:', error);
+            alert('批量移除書籤失敗，請稍後再試');
+        });
+    }
+});
 </script>
 {% endblock %}

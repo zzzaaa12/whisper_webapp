@@ -72,11 +72,27 @@ class BookmarkService:
             print(f"Error saving bookmarks: {e}")
             return False
 
+    def _extract_channel_from_summary(self, file_path: Path) -> str:
+        """從摘要文件中提取頻道信息"""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i > 15:  # 只檢查前15行
+                        break
+                    if '📺 頻道：' in line:
+                        return line.split('📺 頻道：')[1].strip()
+                    elif '頻道：' in line:
+                        return line.split('頻道：')[1].strip()
+            return "未知頻道"
+        except Exception:
+            return "未知頻道"
+
     def _populate_summary_details(self, bookmark: Dict[str, Any], filename: str):
         try:
             summary_path = self.summary_folder / filename
             if summary_path.exists():
                 bookmark['file_size'] = summary_path.stat().st_size
+                bookmark['channel'] = self._extract_channel_from_summary(summary_path)
                 with open(summary_path, 'r', encoding='utf-8') as f:
                     content = f.read()
                     lines = content.split('\n')[:3]
@@ -144,6 +160,16 @@ class BookmarkService:
         try:
             bookmarks_data = self._load_bookmarks_data()
             bookmarks = bookmarks_data.get('bookmarks', [])
+            
+            # 確保每個書籤都有頻道資訊
+            for bookmark in bookmarks:
+                if 'channel' not in bookmark or not bookmark.get('channel'):
+                    summary_path = self.summary_folder / bookmark['filename']
+                    if summary_path.exists():
+                        bookmark['channel'] = self._extract_channel_from_summary(summary_path)
+                    else:
+                        bookmark['channel'] = "未知頻道"
+            
             bookmarks.sort(key=lambda x: x.get('added_date', ''), reverse=True)
             return bookmarks
         except Exception as e:

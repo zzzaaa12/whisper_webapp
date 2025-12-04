@@ -10,22 +10,41 @@
             justify-content: center;
             min-height: 100vh;
             margin: 0;
-            background-color: var(--bs-body-bg);
+            background-color: var(--bg-primary) !important;
         }
         .access-container {
             width: 100%;
             max-width: 400px;
             padding: 2rem;
             margin: auto;
-            border: 1px solid #dee2e6;
+            border: 1px solid var(--border-color);
             border-radius: 0.5rem;
-            background-color: var(--bs-body-bg);
+            background-color: var(--bg-card);
             box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+            color: var(--text-primary);
+        }
+        [data-theme="dark"] .access-container {
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.4);
         }
         main.container {
             margin: 0 !important;
             padding: 0 1rem !important;
             max-width: none !important;
+        }
+        .access-container h1,
+        .access-container p {
+            color: var(--text-primary);
+        }
+        .access-container .text-muted {
+            color: var(--text-muted) !important;
+        }
+        .form-floating > .form-control {
+            background-color: var(--input-bg);
+            border-color: var(--input-border);
+            color: var(--input-text);
+        }
+        .form-floating > label {
+            color: var(--text-secondary);
         }
     </style>
 {% endblock %}

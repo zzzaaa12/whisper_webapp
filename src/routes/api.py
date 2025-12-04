@@ -851,11 +851,11 @@ def api_get_summary():
             }), 400
 
         # 檢查索引類型和範圍
-        if not isinstance(index, int) or index < 1 or index > 5:
+        if not isinstance(index, int) or index < 1 or index > 10:
             return jsonify({
                 'success': False,
                 'error': 'invalid_index',
-                'message': 'index 必須是 1-5 之間的整數'
+                'message': 'index 必須是 1-10 之間的整數'
             }), 400
 
         # 獲取摘要服務
