@@ -18,6 +18,7 @@ class URLService:
         podcast_domains = [
             'spotify.com',
             'soundcloud.com',
+            'soundon.fm',
             'anchor.fm',
             'buzzsprout.com',
             'libsyn.com',

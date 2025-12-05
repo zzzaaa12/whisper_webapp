@@ -20,6 +20,7 @@ import yt_dlp
 from task_queue import get_task_queue, TaskStatus
 from src.config import get_config
 from src.services.notification_service import send_telegram_notification
+from src.services.url_service import URLService
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.srt_converter import segments_to_srt
 from src.utils.logger_manager import create_log_callback, get_logger_manager
@@ -266,45 +267,87 @@ class QueueWorker:
 
         try:
             url = data.get('url')
-            title = data.get('title', '')
+            # 讀取 API 傳入的 metadata
+            user_provided_title = data.get('title', '')
+            user_provided_uploader = data.get('uploader', '')
 
             if not url:
-                raise ValueError("缺少 YouTube URL")
+                raise ValueError("缺少 URL")
 
-            # 移除延遲導入 yt-dlp
-            # if not self.yt_dlp:
-            #     import yt_dlp
-            #     self.yt_dlp = yt_dlp
+            # 偵測 URL 類型
+            url_type = URLService.detect_url_type(url)
+            is_podcast = url_type == 'podcast'
+            content_type_emoji = "🎙️" if is_podcast else "🎬"
+            content_type_name = "Podcast" if is_podcast else "YouTube 影片"
 
-            self.logger_manager.info(f"Processing YouTube URL: {url}", "queue_worker")
+            self.logger_manager.info(f"Processing URL ({url_type}): {url}", "queue_worker")
+            if user_provided_title:
+                self.logger_manager.info(f"API 提供的標題: {user_provided_title}", "queue_worker")
+            if user_provided_uploader:
+                self.logger_manager.info(f"API 提供的頻道: {user_provided_uploader}", "queue_worker")
 
-            # 先獲取影片資訊（不下載）
-            self._emit_log_to_frontend(task_id, "📋 獲取影片資訊...")
-            info_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,  # 改為 False 以獲取完整資訊
-                # 添加 HTTP 相關設定以避免 403 錯誤
-                'http_headers': {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-us,en;q=0.5',
-                    'Sec-Fetch-Mode': 'navigate',
-                },
-                'cookiesfrombrowser': None,
-                'retries': 10,
-                'socket_timeout': 30,
-                'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
-            }
-            with self.yt_dlp.YoutubeDL(info_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
-                video_title = info.get('title', '')
-                uploader = info.get('uploader', '')
-                duration = info.get('duration', 0)
-                view_count = info.get('view_count', 0)
-                upload_date = info.get('upload_date', '')
-                description = info.get('description', '')
-                thumbnail = info.get('thumbnail', '')
+            # 如果 API 同時提供了 title 和 uploader，跳過 yt-dlp 獲取資訊
+            if user_provided_title and user_provided_uploader:
+                self.logger_manager.info("API 已提供完整資訊，跳過 yt-dlp 獲取", "queue_worker")
+                self._emit_log_to_frontend(task_id, f"📋 使用 API 提供的{content_type_name}資訊")
+                video_title = user_provided_title
+                uploader = user_provided_uploader
+                duration = 0
+                view_count = 0
+                upload_date = ""
+                description = ""
+                thumbnail = ""
+            else:
+                # 需要用 yt-dlp 獲取資訊
+                self._emit_log_to_frontend(task_id, f"📋 獲取{content_type_name}資訊...")
+                self.logger_manager.info(f"嘗試用 yt-dlp 獲取資訊: {url}", "queue_worker")
+                info_opts = {
+                    'quiet': True,
+                    'no_warnings': True,
+                    'extract_flat': False,
+                    'http_headers': {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        'Accept-Language': 'en-us,en;q=0.5',
+                        'Sec-Fetch-Mode': 'navigate',
+                    },
+                    'cookiesfrombrowser': None,
+                    'retries': 10,
+                    'socket_timeout': 30,
+                    'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
+                }
+                try:
+                    with self.yt_dlp.YoutubeDL(info_opts) as ydl:
+                        info = ydl.extract_info(url, download=False)
+                        fetched_title = info.get('title', '')
+                        fetched_uploader = info.get('uploader', '')
+                        duration = info.get('duration', 0)
+                        view_count = info.get('view_count', 0)
+                        upload_date = info.get('upload_date', '')
+                        description = info.get('description', '')
+                        thumbnail = info.get('thumbnail', '')
+                    self.logger_manager.info(f"yt-dlp 成功獲取資訊: title={fetched_title}, uploader={fetched_uploader}", "queue_worker")
+
+                    # 優先使用 API 傳入的值，否則使用 yt-dlp 獲取的值
+                    video_title = user_provided_title or fetched_title
+                    uploader = user_provided_uploader or fetched_uploader
+
+                except Exception as ytdlp_error:
+                    self.logger_manager.error(f"yt-dlp 獲取資訊失敗: {ytdlp_error}", "queue_worker")
+                    # 如果 yt-dlp 失敗，使用 API 傳入的值或預設值
+                    video_title = user_provided_title or (f"{content_type_name}音訊" if is_podcast else "未知影片")
+                    uploader = user_provided_uploader or ""
+                    duration = 0
+                    view_count = 0
+                    upload_date = ""
+                    description = ""
+                    thumbnail = ""
+
+                    # 對於非 podcast 且沒有 API 提供的標題，拋出錯誤
+                    if not is_podcast and not user_provided_title:
+                        raise ytdlp_error
+                    else:
+                        self.logger_manager.info(f"使用 API 提供的值繼續處理: title={video_title}, uploader={uploader}", "queue_worker")
 
             # 更新任務資料，包含完整的影片資訊
             video_info_update = {
@@ -322,9 +365,10 @@ class QueueWorker:
             )
 
             # 發送 Telegram 通知
-            notification_msg = f"🎬 開始處理影片\n標題: {video_title}"
+            notification_msg = f"{content_type_emoji} 開始處理{content_type_name}\n標題: {video_title}"
             if uploader:
                 notification_msg += f"\n上傳者: {uploader}"
+            self.logger_manager.info(f"發送開始處理通知: {content_type_name}", "queue_worker")
             send_telegram_notification(notification_msg)
 
             # 準備檔案路徑
@@ -497,7 +541,7 @@ class QueueWorker:
 
             # 發送完成日誌到前端
             processing_method = "字幕擷取" if skip_transcription else "語音轉錄"
-            completion_msg = f"✅ YouTube 影片處理完成 ({processing_method})"
+            completion_msg = f"✅ {content_type_name}處理完成 ({processing_method})"
             self._emit_log_to_frontend(task_id, completion_msg, 'success')
 
             self.task_queue.update_task_status(
@@ -506,7 +550,7 @@ class QueueWorker:
 
             # 發送通知（包含摘要內容）
             processing_method = "📝 字幕擷取" if skip_transcription else "🎤 語音轉錄"
-            notification_msg = f"✅ YouTube 影片處理完成 ({processing_method})\n標題: {video_title}\n檔案: {sanitized_title}\n🔗 網址: {url}"
+            notification_msg = f"✅ {content_type_name}處理完成 ({processing_method})\n標題: {video_title}\n檔案: {sanitized_title}\n🔗 網址: {url}"
 
             # 如果摘要文件存在，添加摘要內容到通知
             if summary_path.exists():
@@ -531,7 +575,13 @@ class QueueWorker:
                 cleanup_original_file(audio_file, self.logger_manager)
 
         except Exception as e:
-            error_msg = f"YouTube 任務處理失敗: {str(e)}"
+            # 確保 content_type_name 有定義
+            if 'content_type_name' not in locals():
+                url = data.get('url', '')
+                url_type = URLService.detect_url_type(url) if url else 'unknown'
+                content_type_name = "Podcast" if url_type == 'podcast' else "YouTube 影片"
+
+            error_msg = f"{content_type_name}任務處理失敗: {str(e)}"
             self.logger_manager.error(error_msg, "queue_worker")
             self.logger_manager.error(f"Error details: {traceback.format_exc()}", "queue_worker")
             self.task_queue.update_task_status(
@@ -541,8 +591,8 @@ class QueueWorker:
             # 發送錯誤通知
             try:
                 # 嘗試獲取影片標題，如果失敗則使用URL
-                video_title = data.get('title', url if 'url' in locals() else '未知影片')
-                error_notification = f"❌ YouTube 影片處理失敗\n標題: {video_title}\n錯誤: {str(e)}"
+                video_title = data.get('title', url if 'url' in locals() else '未知內容')
+                error_notification = f"❌ {content_type_name}處理失敗\n標題: {video_title}\n錯誤: {str(e)}"
                 send_telegram_notification(error_notification)
             except Exception as notify_error:
                 self.logger_manager.error(f"發送錯誤通知失敗: {notify_error}", "queue_worker")
