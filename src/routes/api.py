@@ -3,7 +3,10 @@ from src.config import get_config
 from task_queue import get_task_queue, TaskStatus
 import re
 import os
+import threading
+import psutil
 from pathlib import Path
+from datetime import datetime
 import uuid # Import uuid module
 
 from src.services.auth_service import AuthService
@@ -934,3 +937,65 @@ def api_list_summaries():
 
     except Exception as e:
         return APIResponse.internal_error(f'獲取摘要列表失敗: {str(e)}')
+
+# ===== 健康檢查與系統監控 ==========
+
+@api_bp.route('/health')
+def api_health_check():
+    """健康檢查端點"""
+    try:
+        return jsonify({
+            'status': 'ok',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@api_bp.route('/system/status')
+def api_system_status():
+    """系統狀態監控端點"""
+    try:
+        process = psutil.Process()
+
+        # 記憶體資訊
+        memory_info = process.memory_info()
+        memory_mb = memory_info.rss / 1024 / 1024
+
+        # CPU 資訊
+        cpu_percent = process.cpu_percent(interval=0.1)
+
+        # 執行緒資訊
+        thread_count = threading.active_count()
+        thread_names = [t.name for t in threading.enumerate()]
+
+        # 佇列狀態
+        queue_status = get_task_queue().get_queue_status()
+
+        # 系統整體資訊
+        system_memory = psutil.virtual_memory()
+
+        return jsonify({
+            'status': 'ok',
+            'timestamp': datetime.now().isoformat(),
+            'process': {
+                'memory_mb': round(memory_mb, 2),
+                'cpu_percent': round(cpu_percent, 2),
+                'thread_count': thread_count,
+                'thread_names': thread_names
+            },
+            'system': {
+                'total_memory_gb': round(system_memory.total / 1024 / 1024 / 1024, 2),
+                'available_memory_gb': round(system_memory.available / 1024 / 1024 / 1024, 2),
+                'memory_percent': system_memory.percent
+            },
+            'queue': queue_status
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500

@@ -9,6 +9,7 @@ import shutil
 import time
 import json
 import uuid
+import psutil
 
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from flask_socketio import emit
@@ -488,6 +489,31 @@ if __name__ == '__main__':
         logger_manager.info("✅ 新任務佇列工作程式已啟動", "app")
     except Exception as e:
         logger_manager.warning(f"新任務佇列工作程式啟動失敗: {e}", "app")
+
+    # 啟動系統監控執行緒
+    def system_monitor():
+        """定期記錄系統狀態"""
+        while True:
+            try:
+                time.sleep(300)  # 每 5 分鐘記錄一次
+                process = psutil.Process()
+                memory_mb = process.memory_info().rss / 1024 / 1024
+                cpu_percent = process.cpu_percent(interval=0.1)
+                thread_count = threading.active_count()
+                queue_status = get_task_queue().get_queue_status()
+
+                logger_manager.info(
+                    f"📊 系統狀態 - 記憶體: {memory_mb:.1f}MB, CPU: {cpu_percent:.1f}%, "
+                    f"執行緒: {thread_count}, 佇列: {queue_status.get('queued', 0)} 待處理 / "
+                    f"{queue_status.get('processing', 0)} 處理中",
+                    "monitor"
+                )
+            except Exception as e:
+                logger_manager.error(f"系統監控錯誤: {e}", "monitor")
+
+    monitor_thread = threading.Thread(target=system_monitor, daemon=True, name="SystemMonitor")
+    monitor_thread.start()
+    logger_manager.info("✅ 系統監控執行緒已啟動", "app")
 
 
 
