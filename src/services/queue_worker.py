@@ -626,6 +626,7 @@ class QueueWorker:
                 subtitle_content = subtitle_path.read_text(encoding='utf-8')
 
                 # 檢查是否已有相同內容的摘要檔案
+                from src.utils.filename_matcher import FilenameMatcher
                 skip_summarization = False
                 matching_summaries = FilenameMatcher.find_matching_files(
                     summary_path.name, self.summary_folder, ['.txt']
