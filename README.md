@@ -154,19 +154,7 @@ gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
 
 ## 配置說明
 
-系統支援兩種配置方式：
-
-### 1. 環境變數配置（推薦）
-
-建立 `.env` 檔案：
-```env
-ACCESS_CODE=your_access_code
-OPENAI_API_KEY=your_openai_api_key
-```
-
-### 2. JSON 配置檔案
-
-建立 `config.json` 檔案：
+建立 `config.json` 檔案（可參考 `config.example.json`）：
 ```json
 {
   "ACCESS_CODE": "your_access_code",
@@ -219,7 +207,7 @@ OPENAI_API_KEY=your_openai_api_key
 ## 常見問題
 
 **Q: 如何設定 OpenAI API 金鑰？**
-A: 在 `.env` 檔案或 `config.json` 中設定 `OPENAI_API_KEY`。
+A: 在 `config.json` 中設定 `OPENAI_API_KEY`。
 
 **Q: 支援哪些語言？**
 A: 支援 Whisper 所有語言，包括中文、英文、日文等 99 種語言。

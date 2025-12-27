@@ -13,7 +13,6 @@ import psutil
 
 from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
 from flask_socketio import emit
-from dotenv import load_dotenv
 import requests
 
 from src.services.auth_service import AuthService
@@ -38,7 +37,6 @@ from src.services.gpu_service import GPUService
 from src.services.socket_service import SocketService
 
 # --- Initialization ---
-load_dotenv()
 app = Flask(__name__)
 BASE_DIR = Path(__file__).parent.resolve()
 from src.config import init_config, get_config
