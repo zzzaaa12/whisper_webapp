@@ -33,6 +33,8 @@ class EmailService:
             index = channel_name.find(" ")
         elif "Afford Anything Podcast" in channel_name:
             channel_name = "Afford Anything"
+        elif "The Pragmatic Engineer" in channel_name:
+            channel_name = "Pragmatic Engineer"
 
         if index != -1:
             channel_name = channel_name[:index]
@@ -49,7 +51,10 @@ class EmailService:
             'url': '',
             'process_time': '',
             'core_topic': '',
-            'key_points': '',
+            'prerequisites': '',  # 教學類：前置知識
+            'steps': '',          # 教學類：步驟教學
+            'warnings': '',       # 教學類：常見錯誤
+            'key_points': '',     # 通用類：重點整理
             'quotes': '',
             'conclusion': ''
         }
@@ -72,11 +77,26 @@ class EmailService:
                 result['url'] = line.replace('🔗 網址：', '').strip()
             elif line.startswith('⏰ 處理時間：'):
                 result['process_time'] = line.replace('⏰ 處理時間：', '').strip()
-            # 解析各區塊（寬鬆匹配，不限 # 數量）
+            # 解析各區塊（寬鬆匹配，不限 # 數量，支援教學類和通用類格式）
             elif '🎯 核心主題' in line:
                 if current_section and section_content:
                     result[current_section] = '\n'.join(section_content)
                 current_section = 'core_topic'
+                section_content = []
+            elif '📋 前置知識' in line:
+                if current_section and section_content:
+                    result[current_section] = '\n'.join(section_content)
+                current_section = 'prerequisites'
+                section_content = []
+            elif '📝 步驟教學' in line:
+                if current_section and section_content:
+                    result[current_section] = '\n'.join(section_content)
+                current_section = 'steps'
+                section_content = []
+            elif '⚠️ 常見錯誤' in line or '注意事項' in line:
+                if current_section and section_content:
+                    result[current_section] = '\n'.join(section_content)
+                current_section = 'warnings'
                 section_content = []
             elif '📝 重點整理' in line:
                 if current_section and section_content:
@@ -192,11 +212,16 @@ class EmailService:
         process_time = parsed.get('process_time', '')
         ai_info = parsed.get('ai_info', '')
 
-        # 轉換各區塊為 HTML
+        # 轉換各區塊為 HTML（通用類）
         core_topic_html = self._markdown_to_html(parsed.get('core_topic', ''))
         key_points_html = self._markdown_to_html(parsed.get('key_points', ''))
         quotes_html = self._markdown_to_html(parsed.get('quotes', ''))
         conclusion_html = self._markdown_to_html(parsed.get('conclusion', ''))
+
+        # 轉換教學類區塊為 HTML
+        prerequisites_html = self._markdown_to_html(parsed.get('prerequisites', ''))
+        steps_html = self._markdown_to_html(parsed.get('steps', ''))
+        warnings_html = self._markdown_to_html(parsed.get('warnings', ''))
 
         # 建立影片按鈕
         video_button = ''
@@ -260,10 +285,13 @@ class EmailService:
                     <!-- Core Topic Section -->
                     {self._build_section('🎯 核心主題', core_topic_html, '#667eea') if core_topic_html else ''}
 
-                    <!-- Key Points Section -->
-                    {self._build_section('📝 重點整理', key_points_html, '#48bb78') if key_points_html else ''}
+                    <!-- Tutorial Sections (教學類影片) -->
+                    {self._build_section('📋 前置知識', prerequisites_html, '#3182ce') if prerequisites_html else ''}
+                    {self._build_section('📝 步驟教學', steps_html, '#38a169') if steps_html else ''}
+                    {self._build_section('⚠️ 常見錯誤與注意事項', warnings_html, '#dd6b20') if warnings_html else ''}
 
-                    <!-- Quotes Section -->
+                    <!-- General Sections (通用類影片) -->
+                    {self._build_section('📝 重點整理', key_points_html, '#48bb78') if key_points_html else ''}
                     {self._build_section('💬 關鍵金句', quotes_html, '#ed8936') if quotes_html else ''}
 
                     <!-- Conclusion Section -->
