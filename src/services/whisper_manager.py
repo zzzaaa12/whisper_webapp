@@ -307,12 +307,14 @@ class WhisperModelManager:
                 # 嘗試CPU回退
                 return self._cpu_fallback_transcribe(audio_file, log_callback, **default_params)
             else:
+                self._backend_reason = f"RuntimeError: {e}"
                 if log_callback:
                     log_callback(f"❌ 轉錄失敗: {e}", 'error')
                     log_callback(f"🔍 錯誤詳情: {traceback.format_exc()}", 'error')
                 return False, None
 
         except Exception as e:
+            self._backend_reason = f"{type(e).__name__}: {e}"
             if log_callback:
                 log_callback(f"❌ 轉錄失敗: {e}", 'error')
                 log_callback(f"🔍 錯誤詳情: {traceback.format_exc()}", 'error')

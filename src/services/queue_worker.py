@@ -715,7 +715,20 @@ class QueueWorker:
         self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=60)
 
         try:
-            success, segments_list = whisper_manager.transcribe_with_fallback(str(audio_file))
+            # 傳遞 log_callback 以便在前端顯示詳細的轉錄進度和錯誤
+            def log_callback(msg, level='info'):
+                self._emit_log_to_frontend(task_id, msg, level)
+                if level == 'error':
+                    self.logger_manager.error(msg, "queue_worker")
+                elif level == 'warning':
+                    self.logger_manager.warning(msg, "queue_worker")
+                else:
+                    self.logger_manager.info(msg, "queue_worker")
+
+            success, segments_list = whisper_manager.transcribe_with_fallback(
+                str(audio_file),
+                log_callback=log_callback
+            )
 
             if not success:
                 raise RuntimeError("轉錄失敗")

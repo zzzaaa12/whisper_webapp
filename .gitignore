@@ -11,3 +11,6 @@ __pycache__
 downloads/
 certs/
 .venv/
+.claude/
+.vscode/
+uploads/

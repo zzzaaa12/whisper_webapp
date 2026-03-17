@@ -103,7 +103,7 @@
         border-radius: 0.375rem;
         padding: 2rem;
     }
-    
+
     /* Mobile optimizations */
     @media (max-width: 768px) {
         .summary-content {
@@ -131,7 +131,7 @@
             {{ '已書籤' if is_bookmarked else '加入書籤' }}
         </button>
         <button id="toggle-view-btn" class="btn btn-sm btn-outline-secondary">
-            <i class="bi bi-eye"></i> 切換顯示
+            <i class="bi bi-file-text"></i> 原始文本
         </button>
         <a href="{{ url_for('main.download_summary', filename=filename) }}" class="btn btn-sm btn-outline-primary">
             <i class="bi bi-download"></i> 下載摘要
@@ -150,9 +150,9 @@
 <div class="card">
     <div class="card-body p-0">
         <!-- 原始文本顯示 -->
-        <div id="raw-content" class="raw-content summary-content">{{ content }}</div>
+        <div id="raw-content" class="raw-content summary-content" style="display: none;">{{ content }}</div>
         <!-- Markdown 渲染顯示 -->
-        <div id="markdown-content" class="markdown-content summary-content" style="display: none;"></div>
+        <div id="markdown-content" class="markdown-content summary-content"></div>
     </div>
 </div>
 {% endblock %}
@@ -166,28 +166,30 @@
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
 
 <script>
-    let isMarkdownView = false;
+    let isMarkdownView = true;
     const rawContent = document.getElementById('raw-content');
     const markdownContent = document.getElementById('markdown-content');
     const toggleViewBtn = document.getElementById('toggle-view-btn');
     const bookmarkBtn = document.getElementById('bookmark-btn');
     const deleteBtn = document.getElementById('delete-summary-btn');
 
+    // Initial render markdown on page load
+    (function() {
+        const rawText = rawContent.textContent;
+        const html = marked.parse(rawText);
+        markdownContent.innerHTML = html;
+
+        // Apply syntax highlighting
+        markdownContent.querySelectorAll('pre code').forEach((block) => {
+            Prism.highlightElement(block);
+        });
+    })();
+
     // Toggle view
     toggleViewBtn.addEventListener('click', function() {
         isMarkdownView = !isMarkdownView;
-        
+
         if (isMarkdownView) {
-            // Render markdown
-            const rawText = rawContent.textContent;
-            const html = marked.parse(rawText);
-            markdownContent.innerHTML = html;
-            
-            // Apply syntax highlighting
-            markdownContent.querySelectorAll('pre code').forEach((block) => {
-                Prism.highlightElement(block);
-            });
-            
             rawContent.style.display = 'none';
             markdownContent.style.display = 'block';
             toggleViewBtn.innerHTML = '<i class="bi bi-file-text"></i> 原始文本';
@@ -202,7 +204,7 @@
     bookmarkBtn.addEventListener('click', function() {
         const filename = this.dataset.filename;
         const isBookmarked = this.classList.contains('btn-warning');
-        
+
         fetch('/api/bookmark', {
             method: 'POST',
             headers: {
@@ -238,7 +240,7 @@
     // Delete summary
     deleteBtn.addEventListener('click', function() {
         const filename = this.dataset.filename;
-        
+
         if (confirm('確定要刪除這個摘要嗎？檔案將被移到回收桶。')) {
             fetch('/api/delete', {
                 method: 'POST',
