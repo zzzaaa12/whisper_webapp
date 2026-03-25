@@ -183,7 +183,7 @@ class SummaryService:
                 {"role": "system", "content": "你是專業的影片內容摘要專家，擅長從字幕中提取重點並整理成結構化摘要。請使用正體中文（台灣用語）回答，保持簡潔精準。字幕是透過語音轉文字的方式產出，如果文字或詞語有明顯錯誤，可先修正再回答。"},
                 {"role": "user", "content": prompt}
             ],
-            max_tokens=model_config['max_tokens'],
+            max_completion_tokens=model_config['max_tokens'],
             temperature=model_config['temperature']
         )
         return response
