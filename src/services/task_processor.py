@@ -24,6 +24,8 @@ from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
 from src.services.email_service import EmailService
 
+transcription_task_types = {"youtube", "upload_media"}
+
 
 def cleanup_original_file(file_path, log_callback=None) -> bool:
     """
@@ -207,10 +209,38 @@ class TaskProcessor:
 
             self._log_worker_message(task_id, f"Subtitle saved to {subtitle_path}")
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=80)
+            self._maybe_unload_whisper_after_transcription(task_id, "task completed")
 
         except Exception as e:
             self._log_worker_message(task_id, f"Transcription error: {e}", 'error')
+            self._maybe_unload_whisper_after_transcription(task_id, "task failed")
             raise
+
+    def _is_dynamic_whisper_unload_enabled(self) -> bool:
+        return bool(get_config("whisper.dynamic_unload_enabled", False))
+
+    def _has_pending_transcription_tasks(self, exclude_task_id=None) -> bool:
+        queued_tasks = self.task_queue.get_task_list(status='queued', limit=None)
+        for task in queued_tasks:
+            if exclude_task_id and task.get('task_id') == exclude_task_id:
+                continue
+            if task.get('task_type') in transcription_task_types:
+                return True
+        return False
+
+    def _maybe_unload_whisper_after_transcription(self, task_id: str, reason: str):
+        if not self._is_dynamic_whisper_unload_enabled():
+            return
+
+        if not self.whisper_manager.is_loaded:
+            return
+
+        if self._has_pending_transcription_tasks(exclude_task_id=task_id):
+            self._log_worker_message(task_id, "Keeping Whisper model loaded because more transcription tasks are queued")
+            return
+
+        self.whisper_manager.unload_model()
+        self._log_worker_message(task_id, f"Whisper model unloaded after transcription ({reason})")
 
     def _do_summarize(self, subtitle_content, summary_save_path, task_id, header_info=None):
         """生成摘要（使用統一的摘要服務）"""

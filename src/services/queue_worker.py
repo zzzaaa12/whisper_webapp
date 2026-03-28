@@ -37,6 +37,8 @@ from src.services.transcription_schedule_service import (
     sync_force_run_with_tasks,
 )
 
+transcription_task_types = {"youtube", "upload_media"}
+
 
 def cleanup_original_file(file_path, logger_manager=None) -> bool:
     """
@@ -756,6 +758,7 @@ class QueueWorker:
             self.logger_manager.info(f"Subtitle saved to {subtitle_path}", "queue_worker")
             self._emit_log_to_frontend(task_id, save_msg, 'success')
             self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=80)
+            self._maybe_unload_whisper_after_transcription(task_id, "task completed")
 
         except Exception as e:
             status = whisper_manager.get_status()
@@ -765,7 +768,46 @@ class QueueWorker:
             self.logger_manager.error(error_msg, "queue_worker")
             self.logger_manager.error(f"Transcription error: {e}", "queue_worker")
             self._emit_log_to_frontend(task_id, error_msg, 'error')
+            self._maybe_unload_whisper_after_transcription(task_id, "task failed")
             raise
+
+    def _is_dynamic_whisper_unload_enabled(self) -> bool:
+        return bool(get_config("whisper.dynamic_unload_enabled", False))
+
+    def _has_pending_transcription_tasks(self, exclude_task_id=None) -> bool:
+        queued_tasks = self.task_queue.get_task_list(status='queued', limit=None)
+        for task in queued_tasks:
+            if exclude_task_id and task.get('task_id') == exclude_task_id:
+                continue
+            if task.get('task_type') in transcription_task_types:
+                return True
+        return False
+
+    def _maybe_unload_whisper_after_transcription(self, task_id: str, reason: str):
+        if not self._is_dynamic_whisper_unload_enabled():
+            return
+
+        whisper_manager = get_whisper_manager()
+        if not whisper_manager.is_loaded:
+            return
+
+        if self._has_pending_transcription_tasks(exclude_task_id=task_id):
+            self.logger_manager.info(
+                "Keeping Whisper model loaded because more transcription tasks are queued",
+                "queue_worker"
+            )
+            return
+
+        whisper_manager.unload_model()
+        self.logger_manager.info(
+            f"Whisper model unloaded after transcription ({reason})",
+            "queue_worker"
+        )
+        self._emit_log_to_frontend(
+            task_id,
+            "Whisper model unloaded because no additional transcription tasks are queued.",
+            'info'
+        )
 
     def _can_start_task_now(self, task):
         if can_force_start_task(task):

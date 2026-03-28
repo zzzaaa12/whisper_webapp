@@ -68,6 +68,9 @@
     "preferred_languages": ["zh-TW", "zh-CN", "zh", "en"],
     "quality_threshold": 7
   },
+  "whisper": {
+    "dynamic_unload_enabled": false
+  },
 
   "_comment_other": "=== 其他配置 ===",
   "PUBLIC_PORT": 0,
