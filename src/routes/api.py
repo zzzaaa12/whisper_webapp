@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from src.config import get_config
+from src.config import get_config, set_config
 from task_queue import get_task_queue, TaskStatus
 import re
 import os
@@ -15,6 +15,15 @@ from src.services.trash_service import TrashService
 from src.services.url_service import URLService
 from src.services.file_service import file_service
 from src.services.summary_api_service import get_summary_api_service
+from src.services.transcription_schedule_service import (
+    activate_force_run,
+    clear_force_run,
+    get_schedule_status,
+    get_transcription_schedule_config,
+    sanitize_schedule_payload,
+    schedule_payload,
+    sync_force_run_with_tasks,
+)
 from src.utils.time_formatter import get_timestamp
 from src.utils.file_sanitizer import sanitize_filename
 from src.utils.path_manager import get_path_manager
@@ -35,6 +44,29 @@ auth_service = AuthService()
 bookmark_service = BookmarkService(BOOKMARK_FILE, SUMMARY_FOLDER)
 trash_service = TrashService(TRASH_FOLDER, SUMMARY_FOLDER, SUBTITLE_FOLDER)
 url_service = URLService()
+
+def _extract_config_update_code():
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        return str(data.get('access_code', '') or data.get('admin_code', '')).strip()
+    return str(request.form.get('access_code', '') or request.form.get('admin_code', '')).strip()
+
+def _is_schedule_update_authorized() -> bool:
+    from flask import session
+
+    if get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized'):
+        return True
+
+    admin_code = str(get_config("ADMIN_CODE", "") or "").strip()
+    provided_code = _extract_config_update_code()
+    if admin_code:
+        return provided_code == admin_code
+
+    access_code = str(get_config("ACCESS_CODE", "") or "").strip()
+    if not access_code:
+        return True
+
+    return auth_service.verify_access_code(provided_code)
 
 @api_bp.route('/trash/move', methods=['POST'])
 def api_move_to_trash():
@@ -235,6 +267,43 @@ def api_get_config_status():
             'success': False,
             'message': f'獲取配置狀態失敗: {str(e)}'
         }), 500
+
+@api_bp.route('/system/transcription-schedule', methods=['GET'])
+def api_get_transcription_schedule():
+    try:
+        schedule = get_transcription_schedule_config()
+        return jsonify({
+            'success': True,
+            'schedule': schedule_payload(schedule)
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': str(e)
+        }), 500
+
+@api_bp.route('/system/transcription-schedule', methods=['POST'])
+def api_update_transcription_schedule():
+    try:
+        if not request.is_json:
+            return jsonify({'success': False, 'message': 'JSON body required'}), 400
+
+        if not _is_schedule_update_authorized():
+            return jsonify({'success': False, 'message': 'Unauthorized'}), 401
+
+        data = request.get_json() or {}
+        normalized_schedule = sanitize_schedule_payload(data.get('schedule'))
+        set_config("TRANSCRIPTION_SCHEDULE", normalized_schedule)
+
+        return jsonify({
+            'success': True,
+            'message': 'Transcription schedule updated.',
+            'schedule': schedule_payload(normalized_schedule)
+        })
+    except ValueError as e:
+        return jsonify({'success': False, 'message': str(e)}), 400
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @api_bp.route('/verify_access_code', methods=['POST'])
 def api_verify_access_code():
@@ -669,7 +738,15 @@ def api_queue_status():
     try:
         queue_manager = get_task_queue()
         status = queue_manager.get_queue_status()
-        return APIResponse.success({'status': status})
+        tasks = queue_manager.get_task_list(limit=None)
+        force_state = sync_force_run_with_tasks(tasks)
+        force_start = {
+            'enabled': force_state.get('enabled', False),
+            'forced_at': force_state.get('forced_at'),
+            'forced_by': force_state.get('forced_by'),
+            'task_count': len(force_state.get('forced_task_ids', [])),
+        }
+        return APIResponse.success({'status': status, 'force_start': force_start})
     except Exception as e:
         return APIResponse.internal_error(str(e))
 
@@ -695,6 +772,41 @@ def api_queue_task_detail(task_id):
             return APIResponse.not_found('任務未找到')
     except Exception as e:
         return APIResponse.internal_error(str(e))
+
+@api_bp.route('/queue/force-start', methods=['POST'])
+@require_access_code
+def api_force_start_queue_tasks():
+    try:
+        queue_manager = get_task_queue()
+        queued_tasks = queue_manager.get_task_list(status='queued', limit=None)
+        target_task_ids = [
+            task['task_id']
+            for task in queued_tasks
+            if task.get('task_type') in ['youtube', 'upload_media']
+        ]
+
+        if not target_task_ids:
+            clear_force_run()
+            return APIResponse.success({
+                'force_start': {
+                    'enabled': False,
+                    'task_count': 0,
+                    'forced_at': None,
+                    'forced_by': None,
+                }
+            }, '目前沒有可立即啟動的轉檔排隊任務。')
+
+        force_state = activate_force_run(target_task_ids, forced_by='queue_page')
+        return APIResponse.success({
+            'force_start': {
+                'enabled': force_state.get('enabled', False),
+                'task_count': len(force_state.get('forced_task_ids', [])),
+                'forced_at': force_state.get('forced_at'),
+                'forced_by': force_state.get('forced_by'),
+            }
+        }, f'已立即啟動 {len(target_task_ids)} 個排隊中的轉檔任務。')
+    except Exception as e:
+        return APIResponse.internal_error(f'立即開始工作失敗: {str(e)}')
 
 @api_bp.route('/delete', methods=['POST'])
 def api_delete_summary():

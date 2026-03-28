@@ -29,6 +29,13 @@ from src.services.whisper_manager import get_whisper_manager
 from src.services.ai_summary_service import get_summary_service
 from src.services.file_service import FileService
 from src.services.task_processor import TaskProcessor
+from src.services.transcription_schedule_service import (
+    can_force_start_task,
+    can_process_task,
+    get_force_run_state,
+    get_schedule_status,
+    sync_force_run_with_tasks,
+)
 
 
 def cleanup_original_file(file_path, logger_manager=None) -> bool:
@@ -96,6 +103,7 @@ class QueueWorker:
 
         # Initialize Email Service
         self.email_service = EmailService()
+        self._schedule_block_logged = False
 
         # 工作線程
         self.worker_thread = None
@@ -759,6 +767,53 @@ class QueueWorker:
             self._emit_log_to_frontend(task_id, error_msg, 'error')
             raise
 
+    def _can_start_task_now(self, task):
+        if can_force_start_task(task):
+            return True
+        return can_process_task(task.task_type)
+
+    def _handle_schedule_block(self):
+        queued_tasks = self.task_queue.get_task_list(status='queued', limit=None)
+        sync_force_run_with_tasks(queued_tasks + self.task_queue.get_task_list(status='processing', limit=None))
+        force_state = get_force_run_state()
+        if force_state.get('enabled'):
+            self._schedule_block_logged = False
+            return False
+
+        status = get_schedule_status()
+        if not status.get('is_allowed_now'):
+            blocked_tasks = [task for task in queued_tasks if not can_process_task(task.get('task_type', ''))]
+            runnable_tasks = [task for task in queued_tasks if can_process_task(task.get('task_type', ''))]
+            whisper_manager = get_whisper_manager()
+
+            if runnable_tasks:
+                self._schedule_block_logged = False
+                return False
+
+            if not blocked_tasks:
+                self._schedule_block_logged = False
+                if whisper_manager.is_loaded:
+                    whisper_manager.unload_model()
+                    self.logger_manager.info("Whisper model unloaded outside allowed schedule", "queue_worker")
+                return False
+
+            if not self._schedule_block_logged:
+                next_allowed_at = status.get('next_allowed_at') or "unknown"
+                self.logger_manager.info(
+                    f"Transcription schedule is blocking new work until {next_allowed_at}",
+                    "queue_worker"
+                )
+                self._schedule_block_logged = True
+
+            if whisper_manager.is_loaded:
+                whisper_manager.unload_model()
+                self.logger_manager.info("Whisper model unloaded while waiting for allowed schedule window", "queue_worker")
+
+            return True
+
+        self._schedule_block_logged = False
+        return False
+
     def _worker_loop(self):
         """工作程式主迴圈"""
         self.logger_manager.info("Worker started", "queue_worker")
@@ -766,7 +821,10 @@ class QueueWorker:
         while not self.stop_event.is_set():
             try:
                 # 從佇列取得下一個任務
-                task = self.task_queue.get_next_task()
+                if self._handle_schedule_block():
+                    time.sleep(15)
+                    continue
+                task = self.task_queue.get_next_task(can_process=self._can_start_task_now)
 
                 if task is None:
                     # 沒有任務，等待一秒後繼續

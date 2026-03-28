@@ -200,6 +200,10 @@ def access():
 def index():
     return render_template('index.html')
 
+@main_bp.route('/transcription-schedule')
+def transcription_schedule_page():
+    return render_template('transcription_schedule.html')
+
 
 @main_bp.route('/summary')
 def list_summaries():

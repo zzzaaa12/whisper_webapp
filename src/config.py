@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,7 @@ class ConfigManager:
         self.config_file = config_file
         self.base_dir = base_dir if base_dir else Path.cwd() # Use current working directory if base_dir not provided
         self._config_cache = None
+        self._lock = threading.Lock()
         self._load_config()
 
     def get(self, key: str, default: Any = None) -> Any:
@@ -69,6 +71,39 @@ class ConfigManager:
             logger.error(f"Error loading config file: {e}")
             self._config_cache = {}
 
+    def reload(self):
+        """Reload configuration from disk."""
+        with self._lock:
+            self._load_config()
+
+    def _set_nested_value(self, data: dict, key: str, value: Any):
+        parts = key.split('.')
+        current = data
+        for part in parts[:-1]:
+            nested = current.get(part)
+            if not isinstance(nested, dict):
+                nested = {}
+                current[part] = nested
+            current = nested
+        current[parts[-1]] = value
+
+    def set(self, key: str, value: Any) -> Any:
+        """Set and persist a config value."""
+        logger = logging.getLogger('whisper_webapp.config')
+        with self._lock:
+            if not isinstance(self._config_cache, dict):
+                self._config_cache = {}
+
+            self._set_nested_value(self._config_cache, key, value)
+
+            config_path = self.base_dir / self.config_file
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(self._config_cache, f, ensure_ascii=False, indent=2)
+                f.write('\n')
+
+            logger.info(f"Configuration updated for key: {key}")
+            return value
+
 # Global instance and getter function
 _global_config_manager: ConfigManager = None
 
@@ -91,3 +126,19 @@ def get_config(key: str, default: Any = None) -> Any:
         logger.error(f"ConfigManager not initialized when getting key: {key}")
         raise RuntimeError("ConfigManager not initialized. Call init_config() first.")
     return _global_config_manager.get(key, default)
+
+def set_config(key: str, value: Any) -> Any:
+    logger = logging.getLogger('whisper_webapp.config')
+
+    if _global_config_manager is None:
+        logger.error(f"ConfigManager not initialized when setting key: {key}")
+        raise RuntimeError("ConfigManager not initialized. Call init_config() first.")
+    return _global_config_manager.set(key, value)
+
+def reload_config():
+    logger = logging.getLogger('whisper_webapp.config')
+
+    if _global_config_manager is None:
+        logger.error("ConfigManager not initialized when reloading config")
+        raise RuntimeError("ConfigManager not initialized. Call init_config() first.")
+    _global_config_manager.reload()

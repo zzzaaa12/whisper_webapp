@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}Transcription Schedule{% endblock %}
+
+{% block head %}
+<style>
+    .schedule-shell {
+        display: grid;
+        gap: 1.5rem;
+    }
+
+    .schedule-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+    }
+
+    .summary-tile {
+        border: 1px solid var(--border-color);
+        border-radius: 1rem;
+        padding: 1rem 1.1rem;
+        background: linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
+    }
+
+    .summary-label {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .summary-value {
+        margin-top: 0.35rem;
+        font-size: 1.15rem;
+        font-weight: 700;
+    }
+
+    .schedule-day-card {
+        border: 1px solid var(--border-color);
+        border-radius: 1rem;
+        padding: 1rem;
+        background: var(--bg-primary);
+    }
+
+    .schedule-day-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 0.9rem;
+    }
+
+    .schedule-day-title {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .schedule-timeline {
+        position: relative;
+        height: 22px;
+        border-radius: 999px;
+        background:
+            repeating-linear-gradient(
+                90deg,
+                color-mix(in srgb, var(--border-color) 75%, transparent) 0,
+                color-mix(in srgb, var(--border-color) 75%, transparent) 1px,
+                transparent 1px,
+                transparent calc(100% / 24)
+            ),
+            var(--bg-secondary);
+        overflow: hidden;
+    }
+
+    .schedule-block {
+        position: absolute;
+        top: 3px;
+        height: 16px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #198754, #20c997);
+    }
+
+    .schedule-hours {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        margin-top: 0.45rem;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+    }
+
+    .range-list {
+        display: grid;
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+
+    .range-row {
+        display: grid;
+        grid-template-columns: minmax(110px, 1fr) auto minmax(110px, 1fr) auto;
+        gap: 0.75rem;
+        align-items: center;
+    }
+
+    .range-arrow {
+        color: var(--text-muted);
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .empty-range {
+        margin-top: 0.9rem;
+        color: var(--text-muted);
+        font-size: 0.92rem;
+    }
+
+    @media (max-width: 767.98px) {
+        .range-row {
+            grid-template-columns: 1fr;
+        }
+
+        .range-arrow {
+            display: none;
+        }
+
+        .schedule-day-head {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Transcription Schedule</h1>
+        <p class="text-muted mb-0">Edit daily time ranges. Only selected windows can start `youtube` and `upload_media` transcription jobs.</p>
+    </div>
+    <a href="{{ url_for('main.index') }}" class="btn btn-outline-secondary">Back to Home</a>
+</div>
+
+<div class="schedule-shell">
+    <div class="card">
+        <div class="card-body">
+            <div id="schedule-message" class="alert alert-secondary mb-3" style="display: none;"></div>
+
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-md-5">
+                    <label for="schedule-access-code" class="form-label">Access Code</label>
+                    <input type="password" id="schedule-access-code" class="form-control" placeholder="Required if config protection is enabled">
+                </div>
+                <div class="col-md-7">
+                    <div class="form-check form-switch mt-md-4">
+                        <input class="form-check-input" type="checkbox" id="schedule-enabled">
+                        <label class="form-check-label" for="schedule-enabled">Restrict model loading to selected half-hour slots</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="schedule-summary">
+                <div class="summary-tile">
+                    <div class="summary-label">Status</div>
+                    <div class="summary-value" id="schedule-status-text">Loading...</div>
+                </div>
+                <div class="summary-tile">
+                    <div class="summary-label">Next Allowed</div>
+                    <div class="summary-value" id="schedule-next-allowed">-</div>
+                </div>
+                <div class="summary-tile">
+                    <div class="summary-label">Timezone</div>
+                    <div class="summary-value" id="schedule-timezone">-</div>
+                </div>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="schedule-default-btn">Use Default</button>
+                <button type="button" class="btn btn-primary btn-sm" id="schedule-save-btn">Save Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="schedule-days"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/schedule_settings.js') }}"></script>
+{% endblock %}

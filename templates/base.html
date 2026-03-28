@@ -31,6 +31,9 @@
                         <a class="nav-link {% if request.endpoint == 'main.index' %}active{% endif %}" href="{{ url_for('main.index') }}">首頁</a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'main.transcription_schedule_page' %}active{% endif %}" href="{{ url_for('main.transcription_schedule_page') }}">Schedule</a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'main.list_summaries' %}active{% endif %}" href="{{ url_for('main.list_summaries') }}">摘要列表</a>
                     </li>
                     <li class="nav-item">

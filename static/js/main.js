@@ -21,6 +21,245 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoTitle = document.getElementById('video-title');
     const videoUploader = document.getElementById('video-uploader');
     const videoDetails = document.getElementById('video-details');
+    const scheduleGrid = document.getElementById('schedule-grid');
+    const scheduleEnabledInput = document.getElementById('schedule-enabled');
+    const scheduleStatusBadge = document.getElementById('schedule-status-badge');
+    const scheduleNextAllowed = document.getElementById('schedule-next-allowed');
+    const scheduleTimezone = document.getElementById('schedule-timezone');
+    const scheduleSaveBtn = document.getElementById('schedule-save-btn');
+    const scheduleDefaultBtn = document.getElementById('schedule-default-btn');
+    const scheduleSelectAllBtn = document.getElementById('schedule-select-all-btn');
+    const scheduleClearAllBtn = document.getElementById('schedule-clear-all-btn');
+    const weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const highlightedHours = new Set([0, 6, 12, 18]);
+    let transcriptionSchedule = null;
+
+    function createEmptyScheduleGrid() {
+        const grid = {};
+        for (let day = 0; day < 7; day += 1) {
+            grid[String(day)] = Array(48).fill(false);
+        }
+        return grid;
+    }
+
+    function buildDefaultScheduleState() {
+        const grid = createEmptyScheduleGrid();
+        const defaultSlots = [[0, 15], [25, 26], [37, 39]];
+        Object.keys(grid).forEach((day) => {
+            defaultSlots.forEach(([start, end]) => {
+                for (let slot = start; slot <= end; slot += 1) {
+                    grid[day][slot] = true;
+                }
+            });
+        });
+
+        return {
+            enabled: true,
+            timezone: 'Asia/Taipei',
+            apply_to_task_types: ['youtube', 'upload_media'],
+            grid,
+            is_allowed_now: false,
+            next_allowed_at: null
+        };
+    }
+
+    function getScheduleAccessCode() {
+        return (accessCodeInput ? accessCodeInput.value.trim() : '') ||
+            (accessCodeInputMobile ? accessCodeInputMobile.value.trim() : '');
+    }
+
+    function injectScheduleLinks() {
+        const mobileQueueLink = document.querySelector('.d-md-none a[href="/queue"]');
+        if (mobileQueueLink && !document.querySelector('.d-md-none a[href="/transcription-schedule"]')) {
+            const scheduleLink = document.createElement('a');
+            scheduleLink.href = '/transcription-schedule';
+            scheduleLink.className = 'btn btn-outline-dark btn-sm';
+            scheduleLink.textContent = 'Schedule';
+            mobileQueueLink.insertAdjacentElement('afterend', scheduleLink);
+        }
+
+        const desktopQueueLink = document.querySelector('.d-none.d-md-block a[href="/queue"]');
+        if (desktopQueueLink && !document.querySelector('.d-none.d-md-block a[href="/transcription-schedule"]')) {
+            const scheduleLink = document.createElement('a');
+            scheduleLink.href = '/transcription-schedule';
+            scheduleLink.className = 'btn btn-outline-dark btn-sm ms-2';
+            scheduleLink.textContent = 'Schedule';
+            desktopQueueLink.insertAdjacentElement('afterend', scheduleLink);
+        }
+    }
+
+    function formatScheduleDate(value) {
+        if (!value) {
+            return '-';
+        }
+
+        const parsed = new Date(value);
+        if (Number.isNaN(parsed.getTime())) {
+            return value;
+        }
+
+        return parsed.toLocaleString();
+    }
+
+    function updateScheduleStatusUI() {
+        if (!transcriptionSchedule || !scheduleEnabledInput || !scheduleStatusBadge || !scheduleNextAllowed || !scheduleTimezone) {
+            return;
+        }
+
+        const enabled = Boolean(transcriptionSchedule.enabled);
+        const isAllowedNow = Boolean(transcriptionSchedule.is_allowed_now);
+        scheduleEnabledInput.checked = enabled;
+        scheduleTimezone.textContent = `Timezone: ${transcriptionSchedule.timezone || 'Asia/Taipei'}`;
+
+        if (!enabled) {
+            scheduleStatusBadge.className = 'badge text-bg-secondary';
+            scheduleStatusBadge.textContent = 'Schedule disabled';
+        } else if (isAllowedNow) {
+            scheduleStatusBadge.className = 'badge text-bg-success';
+            scheduleStatusBadge.textContent = 'Allowed now';
+        } else {
+            scheduleStatusBadge.className = 'badge text-bg-warning';
+            scheduleStatusBadge.textContent = 'Blocked now';
+        }
+
+        scheduleNextAllowed.textContent = `Next allowed: ${formatScheduleDate(transcriptionSchedule.next_allowed_at)}`;
+    }
+
+    function renderScheduleGrid() {
+        if (!scheduleGrid || !transcriptionSchedule || !transcriptionSchedule.grid) {
+            return;
+        }
+
+        const table = document.createElement('table');
+        table.className = 'table table-sm schedule-table align-middle';
+
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        const cornerCell = document.createElement('th');
+        cornerCell.className = 'schedule-day-label';
+        cornerCell.textContent = 'Day / Time';
+        headRow.appendChild(cornerCell);
+
+        for (let slot = 0; slot < 48; slot += 1) {
+            const th = document.createElement('th');
+            th.className = 'schedule-slot-label';
+            if (slot % 2 === 0 && highlightedHours.has(slot / 2)) {
+                th.textContent = `${String(slot / 2).padStart(2, '0')}:00`;
+            } else {
+                th.textContent = '';
+            }
+            headRow.appendChild(th);
+        }
+
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        weekdayLabels.forEach((label, dayIndex) => {
+            const row = document.createElement('tr');
+            const dayCell = document.createElement('th');
+            dayCell.className = 'schedule-day-label';
+            dayCell.textContent = label;
+            row.appendChild(dayCell);
+
+            transcriptionSchedule.grid[String(dayIndex)].forEach((enabled, slotIndex) => {
+                const cell = document.createElement('td');
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `schedule-slot${enabled ? ' active' : ''}`;
+                button.dataset.day = String(dayIndex);
+                button.dataset.slot = String(slotIndex);
+                button.title = `${label} ${String(Math.floor(slotIndex / 2)).padStart(2, '0')}:${slotIndex % 2 === 0 ? '00' : '30'}`;
+                cell.appendChild(button);
+                row.appendChild(cell);
+            });
+
+            tbody.appendChild(row);
+        });
+
+        table.appendChild(tbody);
+        scheduleGrid.innerHTML = '';
+        scheduleGrid.appendChild(table);
+        updateScheduleStatusUI();
+    }
+
+    async function loadTranscriptionSchedule() {
+        if (!scheduleGrid) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/system/transcription-schedule');
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'Unable to load transcription schedule.');
+            }
+
+            transcriptionSchedule = result.schedule;
+            renderScheduleGrid();
+        } catch (error) {
+            transcriptionSchedule = buildDefaultScheduleState();
+            renderScheduleGrid();
+            appendLog(`Failed to load transcription schedule: ${error.message}`, 'error');
+        }
+    }
+
+    function setAllScheduleSlots(value) {
+        if (!transcriptionSchedule || !transcriptionSchedule.grid) {
+            return;
+        }
+
+        Object.keys(transcriptionSchedule.grid).forEach((day) => {
+            transcriptionSchedule.grid[day] = transcriptionSchedule.grid[day].map(() => value);
+        });
+        renderScheduleGrid();
+    }
+
+    function applyDefaultSchedule() {
+        transcriptionSchedule = buildDefaultScheduleState();
+        renderScheduleGrid();
+    }
+
+    async function saveTranscriptionSchedule() {
+        if (!transcriptionSchedule) {
+            return;
+        }
+
+        const payload = {
+            access_code: getScheduleAccessCode(),
+            schedule: {
+                enabled: scheduleEnabledInput.checked,
+                timezone: transcriptionSchedule.timezone || 'Asia/Taipei',
+                apply_to_task_types: transcriptionSchedule.apply_to_task_types || ['youtube', 'upload_media'],
+                weekdays: transcriptionSchedule.grid
+            }
+        };
+
+        scheduleSaveBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/system/transcription-schedule', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Unable to save transcription schedule.');
+            }
+
+            transcriptionSchedule = result.schedule;
+            renderScheduleGrid();
+            appendLog('Transcription schedule saved.', 'success');
+        } catch (error) {
+            appendLog(`Failed to save transcription schedule: ${error.message}`, 'error');
+        } finally {
+            scheduleSaveBtn.disabled = false;
+        }
+    }
 
     const appendLog = (message, type = 'info') => {
         const now = new Date();
@@ -90,6 +329,47 @@ document.addEventListener('DOMContentLoaded', () => {
     syncInputs(urlInputMobile, urlInput);
     syncInputs(accessCodeInput, accessCodeInputMobile);
     syncInputs(accessCodeInputMobile, accessCodeInput);
+    injectScheduleLinks();
+
+    if (scheduleGrid) {
+        scheduleGrid.addEventListener('click', (event) => {
+            const slotButton = event.target.closest('.schedule-slot');
+            if (!slotButton || !transcriptionSchedule || !transcriptionSchedule.grid) {
+                return;
+            }
+
+            const day = slotButton.dataset.day;
+            const slot = Number.parseInt(slotButton.dataset.slot, 10);
+            transcriptionSchedule.grid[day][slot] = !transcriptionSchedule.grid[day][slot];
+            slotButton.classList.toggle('active', transcriptionSchedule.grid[day][slot]);
+        });
+    }
+
+    if (scheduleEnabledInput) {
+        scheduleEnabledInput.addEventListener('change', () => {
+            if (!transcriptionSchedule) {
+                transcriptionSchedule = buildDefaultScheduleState();
+            }
+            transcriptionSchedule.enabled = scheduleEnabledInput.checked;
+            updateScheduleStatusUI();
+        });
+    }
+
+    if (scheduleSelectAllBtn) {
+        scheduleSelectAllBtn.addEventListener('click', () => setAllScheduleSlots(true));
+    }
+
+    if (scheduleClearAllBtn) {
+        scheduleClearAllBtn.addEventListener('click', () => setAllScheduleSlots(false));
+    }
+
+    if (scheduleDefaultBtn) {
+        scheduleDefaultBtn.addEventListener('click', applyDefaultSchedule);
+    }
+
+    if (scheduleSaveBtn) {
+        scheduleSaveBtn.addEventListener('click', saveTranscriptionSchedule);
+    }
 
     // 取消處理功能 - 現在主要用於取消當前處理中的任務
     function handleCancel() {
@@ -311,6 +591,10 @@ document.addEventListener('DOMContentLoaded', () => {
             'audio_url': url,
             'access_code': accessCode
         });
+
+        if (transcriptionSchedule && transcriptionSchedule.enabled && !transcriptionSchedule.is_allowed_now) {
+            appendLog(`Queued outside the allowed transcription schedule. Processing will start at ${formatScheduleDate(transcriptionSchedule.next_allowed_at)}.`, 'warning');
+        }
 
         // 清空所有表單，讓用戶可以繼續添加新任務
         if (urlInput) urlInput.value = '';
@@ -566,7 +850,5 @@ document.addEventListener('DOMContentLoaded', () => {
             uploadForm.reset();
         }
     });
-
-
-
+    loadTranscriptionSchedule();
 });

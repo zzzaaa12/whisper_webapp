@@ -273,18 +273,22 @@ class TaskQueue:
         print(f"Added task {task.task_id} ({task_type}) to queue with priority {priority}")
         return task.task_id
 
-    def get_next_task(self) -> Optional[Task]:
+    def get_next_task(self, can_process: Optional[Callable[['Task'], bool]] = None) -> Optional[Task]:
         """獲取下一個要處理的任務"""
         with self._lock:
-            while self._queue_order:
-                task_id = self._queue_order[0]
+            index = 0
+            while index < len(self._queue_order):
+                task_id = self._queue_order[index]
                 task = self._tasks.get(task_id)
 
                 if task and task.status == TaskStatus.QUEUED:
+                    if can_process and not can_process(task):
+                        index += 1
+                        continue
                     # 更新狀態為處理中
                     task.status = TaskStatus.PROCESSING
                     task.started_at = datetime.now()
-                    self._queue_order.pop(0)
+                    self._queue_order.pop(index)
 
                     # 儲存更新
                     self._save_task(task)
@@ -293,7 +297,7 @@ class TaskQueue:
                     return task
                 else:
                     # 移除無效的任務ID
-                    self._queue_order.pop(0)
+                    self._queue_order.pop(index)
 
             return None
 
