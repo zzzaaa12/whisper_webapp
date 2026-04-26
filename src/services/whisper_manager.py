@@ -45,6 +45,7 @@ class WhisperModelManager:
         self.model_name = self.primary_model_name
         self.model = None
         self.device = "cpu"
+        self.cuda_device_index = 0
         self.compute_type = "int8"
         self.is_loaded = False
         self._mlx_module = None
@@ -75,6 +76,28 @@ class WhisperModelManager:
         if backend == "mlx":
             return "mlx-community/whisper-large-v3-turbo-q4"
         return "asadfgglie/faster-whisper-large-v3-zh-TW"
+
+    def _get_cuda_device_index(self) -> int:
+        """Return the CUDA GPU index used for transcription."""
+        raw_value = os.getenv("WHISPER_CUDA_DEVICE_INDEX")
+        if raw_value is None:
+            try:
+                from src.config import get_config
+                raw_value = get_config("whisper.cuda_device_index", 0)
+            except Exception:
+                raw_value = 0
+
+        try:
+            device_index = int(raw_value)
+        except (TypeError, ValueError):
+            device_index = 0
+
+        if torch.cuda.is_available():
+            device_count = torch.cuda.device_count()
+            if device_count > 0 and not 0 <= device_index < device_count:
+                device_index = 0
+
+        return device_index
 
     def _verify_mlx_backend(self) -> bool:
         """Check whether MLX backend can be safely imported and used."""
@@ -112,15 +135,18 @@ class WhisperModelManager:
         if prefer_cuda and torch.cuda.is_available():
             try:
                 # 測試 CUDA 是否真的可以工作
-                test_tensor = torch.zeros(1, device="cuda")
+                self.cuda_device_index = self._get_cuda_device_index()
+                torch.cuda.set_device(self.cuda_device_index)
+                test_tensor = torch.zeros(1, device=f"cuda:{self.cuda_device_index}")
                 del test_tensor
 
                 device = "cuda"
                 compute_type = "float16"
 
                 if log_callback:
-                    gpu_name = torch.cuda.get_device_name(0)
-                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    gpu_name = torch.cuda.get_device_name(self.cuda_device_index)
+                    gpu_memory = torch.cuda.get_device_properties(self.cuda_device_index).total_memory / (1024**3)
+                    log_callback(f"Using CUDA GPU index: {self.cuda_device_index}", 'info')
                     log_callback(f"✅ CUDA 測試成功，使用 GPU 加速", 'success')
                     log_callback(f"📱 GPU 資訊 - 型號: {gpu_name}, 顯存: {gpu_memory:.1f}GB", 'info')
 
@@ -143,6 +169,7 @@ class WhisperModelManager:
         Returns:
             bool: 載入是否成功
         """
+        self._backend_reason = None
         if self.backend == "mlx":
             if not self._verify_mlx_backend():
                 if log_callback:
@@ -178,6 +205,7 @@ class WhisperModelManager:
             self.model = faster_whisper.WhisperModel(
                 self.model_name,
                 device=self.device,
+                device_index=self.cuda_device_index if self.device == "cuda" else 0,
                 compute_type=self.compute_type
             )
 
@@ -194,7 +222,9 @@ class WhisperModelManager:
                 log_callback(error_msg, 'error')
                 log_callback(f"🔍 錯誤詳情: {traceback.format_exc()}", 'error')
 
+            self._backend_reason = f"{type(e).__name__}: {e}"
             self.is_loaded = False
+            self.model = None
             return False
 
     def _load_mlx_model(self, log_callback: Optional[Callable]) -> bool:
@@ -359,6 +389,7 @@ class WhisperModelManager:
             return True, segments_list
 
         except Exception as cpu_error:
+            self._backend_reason = f"CPU fallback failed: {type(cpu_error).__name__}: {cpu_error}"
             if log_callback:
                 log_callback(f"❌ CPU 轉錄也失敗: {cpu_error}", 'error')
             return False, None
@@ -445,7 +476,7 @@ class WhisperModelManager:
     def get_status(self) -> Dict[str, Any]:
         """獲取模型狀態"""
         if self.device == 'cuda':
-            device_name = torch.cuda.get_device_name(0)
+            device_name = torch.cuda.get_device_name(self.cuda_device_index)
         elif self.device == 'mlx':
             raw_name = platform.machine()
             device_name = f"Apple Silicon ({raw_name})" if raw_name else "Apple Silicon"
@@ -455,6 +486,7 @@ class WhisperModelManager:
         return {
             'is_loaded': self.is_loaded,
             'device': self.device,
+            'device_index': self.cuda_device_index if self.device == 'cuda' else None,
             'device_name': device_name,
             'compute_type': self.compute_type,
             'cuda_available': self.device == 'cuda',
