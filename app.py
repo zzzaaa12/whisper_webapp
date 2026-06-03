@@ -524,12 +524,14 @@ if __name__ == '__main__':
         logger_manager.info(f"或透過網路存取：http://你的IP地址:{server_port}", "app")
 
     try:
+        # Direct execution uses the configured threading backend and its Werkzeug server.
         socketio.run(
             app,
             host='0.0.0.0',
             port=server_port,
             use_reloader=False,
-            ssl_context=ssl_context
+            ssl_context=ssl_context,
+            allow_unsafe_werkzeug=True
         )
     finally:
         logger_manager.info("主伺服器準備關閉...", "app")
