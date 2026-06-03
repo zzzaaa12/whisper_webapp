@@ -866,7 +866,10 @@ class QueueWorker:
                 if self._handle_schedule_block():
                     time.sleep(15)
                     continue
-                task = self.task_queue.get_next_task(can_process=self._can_start_task_now)
+                task = self.task_queue.get_next_task(
+                    can_process=self._can_start_task_now,
+                    start_index=2
+                )
 
                 if task is None:
                     # 沒有任務，等待一秒後繼續
