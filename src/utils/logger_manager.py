@@ -65,7 +65,13 @@ class LoggerManager:
 
         # 添加控制台處理器（如果啟用）
         if self.enable_console:
-            console_handler = logging.StreamHandler(sys.stdout)
+            console_stream = sys.stdout
+            if hasattr(console_stream, 'reconfigure'):
+                try:
+                    console_stream.reconfigure(errors='backslashreplace')
+                except (AttributeError, OSError, ValueError):
+                    pass
+            console_handler = logging.StreamHandler(console_stream)
             console_handler.setLevel(logging.INFO)
             console_handler.setFormatter(formatter)
             self.root_logger.addHandler(console_handler)
