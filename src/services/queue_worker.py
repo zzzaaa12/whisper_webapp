@@ -798,7 +798,12 @@ class QueueWorker:
             )
             return
 
-        whisper_manager.unload_model()
+        if not whisper_manager.unload_model():
+            self.logger_manager.warning(
+                "Skipping Whisper model unload on Windows to avoid a native faster-whisper crash",
+                "queue_worker"
+            )
+            return
         self.logger_manager.info(
             f"Whisper model unloaded after transcription ({reason})",
             "queue_worker"
@@ -835,8 +840,13 @@ class QueueWorker:
             if not blocked_tasks:
                 self._schedule_block_logged = False
                 if whisper_manager.is_loaded:
-                    whisper_manager.unload_model()
-                    self.logger_manager.info("Whisper model unloaded outside allowed schedule", "queue_worker")
+                    if whisper_manager.unload_model():
+                        self.logger_manager.info("Whisper model unloaded outside allowed schedule", "queue_worker")
+                    else:
+                        self.logger_manager.warning(
+                            "Skipping Whisper model unload on Windows to avoid a native faster-whisper crash",
+                            "queue_worker"
+                        )
                 return False
 
             if not self._schedule_block_logged:
@@ -848,8 +858,13 @@ class QueueWorker:
                 self._schedule_block_logged = True
 
             if whisper_manager.is_loaded:
-                whisper_manager.unload_model()
-                self.logger_manager.info("Whisper model unloaded while waiting for allowed schedule window", "queue_worker")
+                if whisper_manager.unload_model():
+                    self.logger_manager.info("Whisper model unloaded while waiting for allowed schedule window", "queue_worker")
+                else:
+                    self.logger_manager.warning(
+                        "Skipping Whisper model unload on Windows to avoid a native faster-whisper crash",
+                        "queue_worker"
+                    )
 
             return True
 

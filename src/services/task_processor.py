@@ -239,7 +239,13 @@ class TaskProcessor:
             self._log_worker_message(task_id, "Keeping Whisper model loaded because more transcription tasks are queued")
             return
 
-        self.whisper_manager.unload_model()
+        if not self.whisper_manager.unload_model():
+            self._log_worker_message(
+                task_id,
+                "Skipping Whisper model unload on Windows to avoid a native faster-whisper crash",
+                'warning'
+            )
+            return
         self._log_worker_message(task_id, f"Whisper model unloaded after transcription ({reason})")
 
     def _do_summarize(self, subtitle_content, summary_save_path, task_id, header_info=None):

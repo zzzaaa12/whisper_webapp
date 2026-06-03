@@ -500,8 +500,16 @@ class WhisperModelManager:
             'last_updated': get_timestamp()
         }
 
-    def unload_model(self):
+    def unload_model(self) -> bool:
         """卸載模型以釋放記憶體"""
+        # CTranslate2 CUDA teardown has caused native python.exe crashes on Windows.
+        if (
+            self.model is not None
+            and platform.system().lower() == "windows"
+            and self.backend == "faster_whisper"
+        ):
+            return False
+
         if self.model:
             del self.model
             self.model = None
@@ -510,6 +518,7 @@ class WhisperModelManager:
             torch.cuda.empty_cache()
 
         self.is_loaded = False
+        return True
 
 
 # 全域模型管理器實例
