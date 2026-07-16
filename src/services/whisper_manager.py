@@ -99,6 +99,23 @@ class WhisperModelManager:
 
         return device_index
 
+    def _is_gpu_only_enabled(self) -> bool:
+        raw_value = os.getenv("WHISPER_GPU_ONLY", os.getenv("GPU_ONLY"))
+        if raw_value is not None:
+            return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+
+        try:
+            from src.config import get_config
+            return bool(get_config("GPU_ONLY", False))
+        except Exception:
+            return False
+
+    def _fail_gpu_only(self, reason: str, log_callback: Optional[Callable] = None) -> Tuple[bool, Optional[List]]:
+        self._backend_reason = reason
+        if log_callback:
+            log_callback(f"GPU_ONLY is enabled; stopping transcription because {reason}", "error")
+        return False, None
+
     def _verify_mlx_backend(self) -> bool:
         """Check whether MLX backend can be safely imported and used."""
         if self._mlx_verified:
@@ -131,6 +148,13 @@ class WhisperModelManager:
     def _detect_device_and_compute_type(self, prefer_cuda: bool, log_callback: Optional[Callable]) -> Tuple[str, str]:
         device = "cpu"
         compute_type = "int8"
+        gpu_only = self._is_gpu_only_enabled()
+
+        if gpu_only and not prefer_cuda:
+            raise RuntimeError("GPU_ONLY is enabled but CUDA was not requested")
+
+        if gpu_only and not torch.cuda.is_available():
+            raise RuntimeError("GPU_ONLY is enabled but CUDA is not available")
 
         if prefer_cuda and torch.cuda.is_available():
             try:
@@ -151,6 +175,11 @@ class WhisperModelManager:
                     log_callback(f"📱 GPU 資訊 - 型號: {gpu_name}, 顯存: {gpu_memory:.1f}GB", 'info')
 
             except Exception as cuda_error:
+                if gpu_only:
+                    raise RuntimeError(
+                        f"GPU_ONLY is enabled but CUDA validation failed: {cuda_error}"
+                    ) from cuda_error
+
                 if log_callback:
                     log_callback(f"⚠️ CUDA 測試失敗：{cuda_error}，回退到 CPU", 'warning')
 
@@ -292,6 +321,12 @@ class WhisperModelManager:
                 print(f"[WhisperModelManager] {reason_msg}", flush=True)
             return False, None
 
+        if self._is_gpu_only_enabled() and self.backend == "faster_whisper" and self.device != "cuda":
+            return self._fail_gpu_only(
+                f"the active Whisper device is {self.device}, not cuda",
+                log_callback
+            )
+
         # 設定預設轉錄參數
         # RTX3060 12GB: batch_size 建議值為 8-16
         # 根據顯存調整 - 更大的batch_size會加快轉錄速度但消耗更多GPU記憶體
@@ -331,6 +366,12 @@ class WhisperModelManager:
         except RuntimeError as e:
             # 檢查是否為CUDA相關錯誤
             if "cublas" in str(e).lower() or "cuda" in str(e).lower():
+                if self._is_gpu_only_enabled():
+                    return self._fail_gpu_only(
+                        f"CUDA transcription failed: {e}",
+                        log_callback
+                    )
+
                 if log_callback:
                     log_callback("⚠️ CUDA 錯誤，嘗試使用 CPU 重新轉錄...", 'warning')
 

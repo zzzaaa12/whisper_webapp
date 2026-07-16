@@ -2,25 +2,25 @@
   "SECRET_KEY": "",
   "ACCESS_CODE": "",
   "ACCESS_CODE_ALL_PAGE": false,
-  "_comment_all_page_access": "💡 設為 true 時，所有頁面都需要通行碼驗證",
+  "_comment_all_page_access": "When true, all pages require access-code authentication.",
 
-  "_comment_legacy": "=== 向後兼容的舊版配置 ===",
+  "_comment_legacy": "=== Legacy configuration for backward compatibility ===",
   "OPENAI_API_KEY": "",
   "OPENAI_MAX_TOKENS": 10000,
 
-  "_comment_ai": "=== AI 提供商配置（新版，優先使用） ===",
-  "_comment_disable": "💡 小技巧：如果要暫時停用某個 AI 提供商，可以在 api_key 中保留 '金鑰' 字樣，系統會自動跳過",
+  "_comment_ai": "=== AI provider configuration (preferred) ===",
+  "_comment_disable": "Tip: To temporarily disable an AI provider, leave the word 'key' in its api_key placeholder. The system will skip that provider automatically.",
   "AI_PROVIDER": "openai",
   "AI_PROVIDERS": {
     "openai": {
-      "api_key": "你的 OpenAI API 金鑰",
+      "api_key": "your OpenAI API key",
       "base_url": "https://api.openai.com/v1",
       "model": "gpt-4o-mini",
       "max_tokens": 10000,
       "temperature": 0.7
     },
     "claude": {
-      "api_key": "你的 Anthropic API 金鑰",
+      "api_key": "your Anthropic API key",
       "base_url": "https://api.anthropic.com/v1",
       "model": "claude-3-5-sonnet-20241022",
       "max_tokens": 10000,
@@ -34,23 +34,23 @@
       "temperature": 0.7
     },
 
-    "_comment_grok": "Grok API 配置 (暫時停用範例)",
+    "_comment_grok": "Grok API configuration (temporarily disabled example)",
     "grok": {
-      "api_key": "你的xAI金鑰（暫時停用）",
+      "api_key": "your xAI API key (temporarily disabled)",
       "base_url": "https://api.x.ai/v1",
       "model": "grok-beta",
       "max_tokens": 4096,
       "temperature": 0.7
     },
     "deepseek": {
-      "api_key": "你的 DeepSeek API 金鑰",
+      "api_key": "your DeepSeek API key",
       "base_url": "https://api.deepseek.com/v1",
       "model": "deepseek-chat",
       "max_tokens": 10000,
       "temperature": 0.7
     },
     "gemini": {
-      "api_key": "你的 Google Gemini API 金鑰",
+      "api_key": "your Google Gemini API key",
       "base_url": "https://generativelanguage.googleapis.com/v1beta",
       "model": "gemini-1.5-flash-latest",
       "max_tokens": 8192,
@@ -58,11 +58,11 @@
     }
   },
 
-  "_comment_fallback": "=== 容錯切換配置 ===",
+  "_comment_fallback": "=== AI provider fallback configuration ===",
   "AI_FALLBACK_ENABLED": true,
   "AI_FALLBACK_ORDER": ["openai", "claude", "gemini", "deepseek", "ollama"],
 
-  "_comment_subtitle": "=== YouTube 字幕擷取配置 ===",
+  "_comment_subtitle": "=== YouTube subtitle extraction configuration ===",
   "SUBTITLE_EXTRACTION": {
     "enabled": true,
     "preferred_languages": ["zh-TW", "zh-CN", "zh", "en"],
@@ -71,18 +71,19 @@
   "whisper": {
     "dynamic_unload_enabled": false
   },
-
-  "_comment_other": "=== 其他配置 ===",
+  "GPU_ONLY": true,
+  "_comment_gpu_only": "When true, Whisper transcription stops instead of falling back to CPU if CUDA GPU is unavailable.",
+  "_comment_other": "=== Other configuration ===",
   "PUBLIC_PORT": 0,
-  "_comment_public_port": "0 表示使用 SERVER_PORT，大於 0 時將作為公開訪問埠號",
+  "_comment_public_port": "Use 0 to use SERVER_PORT. A value greater than 0 is used as the public-facing port.",
   "WEBSITE_BASE_URL": "localhost",
-  "TELEGRAM_BOT_TOKEN": "你的 Telegram Bot Token（如需通知功能）",
-  "TELEGRAM_CHAT_ID": "你的 Telegram Chat ID（如需通知功能）",
+  "TELEGRAM_BOT_TOKEN": "your Telegram bot token (optional, for notifications)",
+  "TELEGRAM_CHAT_ID": "your Telegram chat ID (optional, for notifications)",
   "SERVER_PORT": 5000,
   "USE_SSL": false,
-  "_comment_ssl": "💡 SSL 配置說明：設定 USE_SSL 為 true 並將憑證檔案放在 certs/ 目錄下（cert.pem 和 key.pem）",
+  "_comment_ssl": "To enable SSL, set USE_SSL to true and place cert.pem and key.pem in the certs directory.",
 
-  "_comment_paths": "=== 路徑配置 ===",
+  "_comment_paths": "=== Path configuration ===",
   "PATHS": {
     "DOWNLOADS_DIR": "downloads",
     "SUBTITLES_DIR": "subtitles",

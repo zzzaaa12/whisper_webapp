@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Dict, List, Optional
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from src.config import get_config
 
@@ -15,6 +15,7 @@ DEFAULT_TASK_TYPES = ["youtube", "upload_media"]
 WEEKDAY_KEYS = [str(i) for i in range(7)]
 SLOTS_PER_DAY = 48
 SLOT_MINUTES = 30
+DEFAULT_TIMEZONE_FALLBACK = timezone(timedelta(hours=8))
 
 
 _force_run_lock = Lock()
@@ -121,6 +122,18 @@ def build_schedule_grid(schedule: dict) -> Dict[str, List[bool]]:
     return {day: _ranges_to_slots(weekdays.get(day, [])) for day in WEEKDAY_KEYS}
 
 
+def _load_timezone(timezone_name: str):
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as exc:
+        if timezone_name == DEFAULT_TIMEZONE:
+            return DEFAULT_TIMEZONE_FALLBACK
+        raise ValueError(
+            f"Time zone '{timezone_name}' is unavailable. Install the tzdata package "
+            "or choose a time zone available on this system."
+        ) from exc
+
+
 def schedule_payload(schedule: dict, now: Optional[datetime] = None) -> dict:
     normalized = normalize_schedule_config(schedule)
     status = get_schedule_status(normalized, now=now)
@@ -134,7 +147,7 @@ def schedule_payload(schedule: dict, now: Optional[datetime] = None) -> dict:
 def get_schedule_status(schedule: Optional[dict] = None, now: Optional[datetime] = None) -> dict:
     normalized = normalize_schedule_config(schedule or get_transcription_schedule_config())
     timezone_name = normalized["timezone"]
-    tz = ZoneInfo(timezone_name)
+    tz = _load_timezone(timezone_name)
     now_dt = now.astimezone(tz) if now else datetime.now(tz)
     grid = build_schedule_grid(normalized)
     day_key = str(now_dt.weekday())
@@ -236,7 +249,7 @@ def sanitize_schedule_payload(payload: dict) -> dict:
         raise ValueError("Schedule payload must be an object.")
 
     timezone_name = str(payload.get("timezone", DEFAULT_TIMEZONE) or DEFAULT_TIMEZONE)
-    ZoneInfo(timezone_name)
+    _load_timezone(timezone_name)
 
     weekdays = payload.get("weekdays")
     if not isinstance(weekdays, dict):

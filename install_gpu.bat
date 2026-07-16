@@ -1,35 +1,35 @@
 @echo off
-echo 正在安裝 Whisper WebApp 的GPU加速版本...
+setlocal
+
+echo Installing Whisper WebApp GPU dependencies...
 echo.
 
-echo [1/3] 檢查Python環境...
+echo [1/3] Checking Python...
 python --version
 if %errorlevel% neq 0 (
-    echo 錯誤: 找不到Python，請先安裝Python 3.8+
+    echo ERROR: Python was not found.
     pause
     exit /b 1
 )
 
 echo.
-echo [2/3] 安裝CUDA版本的PyTorch (支援NVIDIA GPU)...
-pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+echo [2/3] Installing requirements with CUDA PyTorch wheels...
+python -m pip install --force-reinstall -r requirements.txt
 if %errorlevel% neq 0 (
-    echo 警告: CUDA版本PyTorch安裝失敗，將安裝CPU版本
-    pip install torch torchaudio
+    echo ERROR: Dependency installation failed. CPU fallback is disabled.
+    pause
+    exit /b 1
 )
 
 echo.
-echo [3/3] 安裝其他依賴套件...
-pip install -r requirements.txt
-
-echo.
-echo [測試] 檢查GPU支援...
-python -c "import torch; print('PyTorch版本:', torch.__version__); print('CUDA可用:', torch.cuda.is_available()); print('GPU數量:', torch.cuda.device_count() if torch.cuda.is_available() else 0)"
-
-echo.
-echo 安裝完成！
-if exist config.example.json (
-    echo 請複製 config.example.json 為 config.json 並設定您的API金鑰
+echo [3/3] Verifying CUDA availability...
+python -c "import torch; print('Python:', __import__('sys').executable); print('PyTorch:', torch.__version__); print('CUDA runtime:', torch.version.cuda); print('CUDA available:', torch.cuda.is_available()); print('GPU count:', torch.cuda.device_count()); print('GPU 0:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'N/A')"
+if %errorlevel% neq 0 (
+    echo ERROR: CUDA verification failed.
+    pause
+    exit /b 1
 )
-echo 運行 python app.py 來啟動服務
+
+echo.
+echo Installation complete.
 pause
