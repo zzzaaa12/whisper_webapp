@@ -7,6 +7,7 @@ from pathlib import Path
 
 from src.utils.time_formatter import get_timestamp
 from src.utils.file_sanitizer import sanitize_filename
+from src.services.summary_index import get_summary_index_service
 
 class TrashService:
     """回收桶管理服務"""
@@ -69,6 +70,8 @@ class TrashService:
             }
             metadata.append(trash_record)
             self._save_trash_metadata(metadata)
+            if file_type == "summary":
+                get_summary_index_service().invalidate([file_path.name])
 
             return True, "檔案已移動到回收桶"
         except Exception as e:
@@ -110,6 +113,8 @@ class TrashService:
 
             metadata.pop(record_index)
             self._save_trash_metadata(metadata)
+            if record['file_type'] == 'summary':
+                get_summary_index_service().invalidate([restore_path.name])
 
             return True, "檔案已還原"
         except Exception as e:

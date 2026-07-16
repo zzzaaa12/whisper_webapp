@@ -511,6 +511,9 @@ class SummaryService:
             with open(save_path, 'w', encoding='utf-8') as f:
                 f.write(summary)
 
+            from src.services.summary_index import get_summary_index_service
+            get_summary_index_service().invalidate([save_path.name])
+
             if log_callback:
                 log_callback(f"📄 摘要已儲存至: {save_path}", 'info')
 

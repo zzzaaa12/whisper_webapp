@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}摘要列表{% endblock %}
+
+{% block head %}
+<style>
+  .summary-controls { position: sticky; top: 72px; z-index: 10; background: var(--bs-body-bg); padding: 1rem 0; }
+  .summary-grid { display: grid; gap: .75rem; }
+  .summary-row { border: 1px solid var(--bs-border-color); border-radius: .75rem; padding: 1rem; background: var(--bs-body-bg); display: grid; grid-template-columns: auto 1fr auto; gap: .85rem; align-items: start; }
+  .summary-row:hover { box-shadow: 0 .25rem .8rem rgba(0,0,0,.08); }
+  .summary-title { color: inherit; text-decoration: none; font-weight: 600; }
+  .summary-title:hover { color: var(--bs-primary); }
+  .summary-preview { color: var(--bs-secondary-color); margin: .55rem 0 0; white-space: pre-line; }
+  .summary-meta { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; font-size: .82rem; color: var(--bs-secondary-color); }
+  .summary-actions { display: flex; gap: .25rem; }
+  .card-mode { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card-mode .summary-row { grid-template-columns: auto 1fr; }
+  .card-mode .summary-actions { grid-column: 2; }
+  .loading-shell { min-height: 12rem; display: grid; place-items: center; }
+  .channel-select { min-width: 12rem; }
+  .pagination-status { min-width: 8rem; text-align: center; }
+  @media (max-width: 767px) {
+    .summary-controls { top: 56px; }
+    .summary-row { grid-template-columns: auto 1fr; }
+    .summary-actions { grid-column: 2; }
+    .summary-preview { display: none; }
+    .channel-select { min-width: 0; width: 100%; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <div>
+    <h1 class="h3 mb-1">摘要列表</h1>
+    <div class="text-muted" id="summary-count">正在載入摘要…</div>
+  </div>
+  <div class="btn-group btn-group-sm" aria-label="檢視方式">
+    <button class="btn btn-outline-secondary active" id="list-mode" type="button"><i class="bi bi-list-ul"></i></button>
+    <button class="btn btn-outline-secondary" id="card-mode" type="button"><i class="bi bi-grid-3x3-gap"></i></button>
+  </div>
+</div>
+
+<section class="summary-controls">
+  <div class="row g-2">
+    <div class="col-12 col-md">
+      <div class="input-group">
+        <span class="input-group-text"><i class="bi bi-search"></i></span>
+        <input class="form-control" id="summary-search" type="search" placeholder="搜尋摘要標題…">
+      </div>
+    </div>
+    <div class="col-12 col-md-auto">
+      <select class="form-select channel-select" id="channel-filter">
+        <option value="">全部頻道</option>
+      </select>
+    </div>
+    <div class="col-auto d-flex align-items-center">
+      <div class="form-check">
+        <input class="form-check-input" id="bookmark-filter" type="checkbox">
+        <label class="form-check-label" for="bookmark-filter">只顯示書籤</label>
+      </div>
+    </div>
+    <div class="col-auto">
+      <button class="btn btn-outline-secondary" id="clear-filters" type="button">清除</button>
+    </div>
+  </div>
+</section>
+
+<div class="alert alert-light border d-none" id="batch-toolbar">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span id="selected-count">已選擇 0 個項目</span>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-primary" id="batch-bookmark" type="button">批量書籤</button>
+      <button class="btn btn-outline-danger" id="batch-delete" type="button">批量刪除</button>
+      <button class="btn btn-outline-secondary" id="cancel-selection" type="button">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="summary-grid" id="summary-list" aria-live="polite"></div>
+
+<div class="loading-shell" id="loading-state">
+  <div class="text-center"><div class="spinner-border text-primary"></div><div class="mt-2">讀取摘要中…</div></div>
+</div>
+<div class="alert alert-warning d-none" id="error-state">
+  <span id="error-message">摘要載入失敗。</span>
+  <button class="btn btn-sm btn-outline-dark ms-2" id="retry-load" type="button">重試</button>
+</div>
+<div class="text-center text-muted py-5 d-none" id="empty-state">沒有符合條件的摘要。</div>
+
+<nav class="d-flex justify-content-center align-items-center gap-2 mt-4" aria-label="摘要分頁">
+  <button class="btn btn-outline-primary" id="previous-page" type="button">上一頁</button>
+  <span class="pagination-status" id="pagination-status">第 1 頁</span>
+  <button class="btn btn-outline-primary" id="next-page" type="button">下一頁</button>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const state = { page: 1, perPage: 30, channel: '', search: '', bookmarkedOnly: false, pagination: {}, request: null };
+  const list = document.getElementById('summary-list');
+  const loading = document.getElementById('loading-state');
+  const errorState = document.getElementById('error-state');
+  const emptyState = document.getElementById('empty-state');
+  const search = document.getElementById('summary-search');
+  const channel = document.getElementById('channel-filter');
+  const bookmarkFilter = document.getElementById('bookmark-filter');
+  const batchToolbar = document.getElementById('batch-toolbar');
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[character]));
+  }
+
+  function readUrl() {
+    const params = new URLSearchParams(location.search);
+    state.page = Math.max(1, Number(params.get('page')) || 1);
+    state.channel = params.get('channel') || '';
+    state.search = params.get('search') || '';
+    state.bookmarkedOnly = params.get('bookmarked_only') === '1';
+    search.value = state.search;
+    bookmarkFilter.checked = state.bookmarkedOnly;
+  }
+
+  function writeUrl() {
+    const params = new URLSearchParams();
+    if (state.page > 1) params.set('page', state.page);
+    if (state.channel) params.set('channel', state.channel);
+    if (state.search) params.set('search', state.search);
+    if (state.bookmarkedOnly) params.set('bookmarked_only', '1');
+    history.replaceState(null, '', `${location.pathname}${params.size ? '?' + params : ''}`);
+  }
+
+  function renderChannels(channels) {
+    const selected = state.channel;
+    channel.innerHTML = '<option value="">全部頻道</option>' + channels.map(item =>
+      `<option value="${escapeHtml(item.name)}">${escapeHtml(item.display_name)} (${item.count})</option>`
+    ).join('');
+    channel.value = selected;
+  }
+
+  function renderSummaries(items) {
+    list.innerHTML = items.map(item => {
+      const filename = escapeHtml(item.filename);
+      const encoded = encodeURIComponent(item.filename);
+      return `<article class="summary-row" data-filename="${filename}">
+        <input class="form-check-input summary-checkbox" type="checkbox" data-filename="${filename}" aria-label="選取 ${escapeHtml(item.title)}">
+        <div>
+          <a class="summary-title" href="/summary/${encoded}">${escapeHtml(item.title)}</a>
+          <div class="summary-meta"><button class="btn btn-sm btn-link p-0 channel-link" data-channel="${escapeHtml(item.channel)}">${escapeHtml(item.channel_display)}</button><span>${escapeHtml(item.created_at)}</span><span>${Math.max(1, Math.round(item.file_size / 1024))} KB</span></div>
+          ${item.preview ? `<p class="summary-preview">${escapeHtml(item.preview)}</p>` : ''}
+        </div>
+        <div class="summary-actions">
+          <button class="btn btn-sm btn-outline-primary bookmark-toggle" data-filename="${filename}" title="書籤"><i class="bi bi-bookmark${item.is_bookmarked ? '-fill' : ''}"></i></button>
+          <a class="btn btn-sm btn-outline-success" href="/download/summary/${encoded}" title="下載"><i class="bi bi-download"></i></a>
+        </div>
+      </article>`;
+    }).join('');
+    updateSelection();
+  }
+
+  function renderPagination() {
+    const p = state.pagination;
+    document.getElementById('previous-page').disabled = !p.has_prev;
+    document.getElementById('next-page').disabled = !p.has_next;
+    document.getElementById('pagination-status').textContent = p.total_pages ? `第 ${p.page} / ${p.total_pages} 頁` : '第 0 頁';
+    document.getElementById('summary-count').textContent = `共 ${p.total_count || 0} 個摘要`;
+  }
+
+  async function loadSummaries() {
+    if (state.request) state.request.abort();
+    state.request = new AbortController();
+    loading.classList.remove('d-none'); errorState.classList.add('d-none'); emptyState.classList.add('d-none');
+    try {
+      const response = await fetch('/api/summaries/list', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, signal: state.request.signal,
+        body: JSON.stringify({page: state.page, per_page: state.perPage, channel: state.channel, search: state.search, bookmarked_only: state.bookmarkedOnly})
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || '摘要載入失敗');
+      state.pagination = payload.pagination;
+      state.page = payload.pagination.page || 1;
+      renderChannels(payload.channels || []); renderSummaries(payload.summaries || []); renderPagination(); writeUrl();
+      emptyState.classList.toggle('d-none', payload.summaries.length > 0);
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        document.getElementById('error-message').textContent = error.message;
+        errorState.classList.remove('d-none');
+      }
+    } finally { loading.classList.add('d-none'); state.request = null; }
+  }
+
+  function selectedFilenames() { return [...document.querySelectorAll('.summary-checkbox:checked')].map(item => item.dataset.filename); }
+  function updateSelection() {
+    const count = selectedFilenames().length;
+    batchToolbar.classList.toggle('d-none', count === 0);
+    document.getElementById('selected-count').textContent = `已選擇 ${count} 個項目`;
+  }
+  async function post(url, body) {
+    const response = await fetch(url, {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.message || '操作失敗');
+    return payload;
+  }
+
+  let debounceTimer;
+  search.addEventListener('input', () => { clearTimeout(debounceTimer); debounceTimer = setTimeout(() => { state.search = search.value.trim(); state.page = 1; loadSummaries(); }, 275); });
+  channel.addEventListener('change', () => { state.channel = channel.value; state.page = 1; loadSummaries(); });
+  bookmarkFilter.addEventListener('change', () => { state.bookmarkedOnly = bookmarkFilter.checked; state.page = 1; loadSummaries(); });
+  document.getElementById('clear-filters').addEventListener('click', () => { state.page = 1; state.channel = state.search = ''; state.bookmarkedOnly = false; search.value = ''; bookmarkFilter.checked = false; loadSummaries(); });
+  document.getElementById('previous-page').addEventListener('click', () => { if (state.pagination.has_prev) { state.page--; loadSummaries(); scrollTo(0, 0); } });
+  document.getElementById('next-page').addEventListener('click', () => { if (state.pagination.has_next) { state.page++; loadSummaries(); scrollTo(0, 0); } });
+  document.getElementById('retry-load').addEventListener('click', loadSummaries);
+  document.getElementById('list-mode').addEventListener('click', () => { list.classList.remove('card-mode'); localStorage.setItem('summaryView', 'list'); document.getElementById('list-mode').classList.add('active'); document.getElementById('card-mode').classList.remove('active'); });
+  document.getElementById('card-mode').addEventListener('click', () => { list.classList.add('card-mode'); localStorage.setItem('summaryView', 'card'); document.getElementById('card-mode').classList.add('active'); document.getElementById('list-mode').classList.remove('active'); });
+  list.addEventListener('change', event => { if (event.target.matches('.summary-checkbox')) updateSelection(); });
+  list.addEventListener('click', async event => {
+    const channelButton = event.target.closest('.channel-link');
+    if (channelButton) { state.channel = channelButton.dataset.channel; state.page = 1; await loadSummaries(); return; }
+    const bookmarkButton = event.target.closest('.bookmark-toggle');
+    if (bookmarkButton) { try { await post('/api/bookmark', {filename: bookmarkButton.dataset.filename}); await loadSummaries(); } catch (error) { alert(error.message); } }
+  });
+  document.getElementById('cancel-selection').addEventListener('click', () => { document.querySelectorAll('.summary-checkbox').forEach(item => item.checked = false); updateSelection(); });
+  document.getElementById('batch-bookmark').addEventListener('click', async () => { try { await post('/api/batch-bookmark', {filenames: selectedFilenames()}); await loadSummaries(); } catch (error) { alert(error.message); } });
+  document.getElementById('batch-delete').addEventListener('click', async () => { const filenames = selectedFilenames(); if (filenames.length && confirm(`確定將 ${filenames.length} 份摘要移至回收桶？`)) { try { await post('/api/batch-delete', {filenames}); await loadSummaries(); } catch (error) { alert(error.message); } } });
+
+  readUrl();
+  if (localStorage.getItem('summaryView') === 'card') document.getElementById('card-mode').click();
+  loadSummaries();
+})();
+</script>
+{% endblock %}

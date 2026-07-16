@@ -348,6 +348,8 @@ def api_upload_subtitle():
 
         SUMMARY_FOLDER.mkdir(exist_ok=True)
         file_path.write_text(content, encoding='utf-8')
+        from src.services.summary_index import get_summary_index_service
+        get_summary_index_service().invalidate([safe_filename])
 
         # 如果是通過任務佇列處理，需要創建任務並更新結果
         task_id = data.get('task_id')
@@ -1121,7 +1123,6 @@ def api_get_summary():
         }), 500
 
 @api_bp.route('/summaries/list', methods=['POST'])
-@require_access_code
 def api_list_summaries():
     """
     獲取摘要列表（支援分頁、篩選、搜尋）
@@ -1137,14 +1138,26 @@ def api_list_summaries():
     }
     """
     try:
-        data = request.get_json()
+        if get_config("ACCESS_CODE_ALL_PAGE", False):
+            from flask import session
+            if not session.get("is_authorized"):
+                return APIResponse.auth_error()
+
+        data = request.get_json(silent=True) or {}
 
         # 獲取參數
         page = data.get('page', 1)
         per_page = data.get('per_page', 30)
-        channel = data.get('channel', '').strip() or None
-        search = data.get('search', '').strip() or None
+        channel = data.get('channel', '')
+        search = data.get('search', '')
         bookmarked_only = data.get('bookmarked_only', False)
+
+        if not isinstance(channel, str) or not isinstance(search, str):
+            return APIResponse.validation_error('channel 與 search 必須是字串')
+        if not isinstance(bookmarked_only, bool):
+            return APIResponse.validation_error('bookmarked_only 必須是布林值')
+        channel = channel.strip() or None
+        search = search.strip() or None
 
         # 驗證參數
         if not isinstance(page, int) or page < 1:
@@ -1152,11 +1165,10 @@ def api_list_summaries():
 
         if not isinstance(per_page, int) or per_page < 1 or per_page > 100:
             return APIResponse.validation_error('per_page 必須是 1-100 之間的整數')
-
-        # 獲取書籤列表
-        bookmarked_files = None
-        if bookmarked_only or True:  # 總是獲取書籤狀態
-            bookmarked_files = [b['filename'] for b in bookmark_service.get_bookmarks()]
+        # Load bookmarks once and use set membership.
+        bookmarked_files = {
+            item['filename'] for item in bookmark_service.get_bookmarks()
+        }
 
         # 呼叫服務獲取列表
         summary_service = get_summary_api_service()

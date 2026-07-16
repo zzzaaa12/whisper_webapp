@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import List, Dict, Optional, Tuple
 from src.utils.path_manager import get_path_manager
 from src.utils.channel_mapping import get_display_name
+from src.services.summary_index import get_summary_index_service
 
 class SummaryAPIService:
     """摘要 API 服務類"""
@@ -15,6 +16,7 @@ class SummaryAPIService:
     def __init__(self):
         self.path_manager = get_path_manager()
         self.summary_folder = self.path_manager.get_summary_folder()
+        self.index_service = get_summary_index_service()
 
     def get_latest_summaries(self, limit: int = 10) -> List[Dict]:
         """
@@ -230,138 +232,84 @@ class SummaryAPIService:
                           search: Optional[str] = None,
                           bookmarked_only: bool = False,
                           bookmarked_files: Optional[List[str]] = None) -> Dict:
-        """
-        獲取摘要列表（支援分頁、篩選、搜尋）
-
-        Args:
-            page: 頁碼（從1開始）
-            per_page: 每頁數量
-            channel: 頻道篩選（原始頻道名稱或顯示名稱）
-            search: 搜尋關鍵字（搜尋標題）
-            bookmarked_only: 只顯示書籤
-            bookmarked_files: 書籤檔案列表（從外部傳入，避免循環依賴）
-
-        Returns:
-            Dict: 包含 summaries（摘要列表）、pagination（分頁資訊）、channels（頻道統計）
-        """
+        """Return an indexed, filtered and paginated summary list."""
         try:
-            # 獲取所有摘要檔案
-            all_files = []
-            if self.summary_folder.exists():
-                for file_path in self.summary_folder.glob("*.txt"):
-                    if file_path.is_file():
-                        all_files.append(file_path)
+            bookmarked_set = set(bookmarked_files or [])
+            all_summaries = self.index_service.snapshot()
+            all_summaries.sort(key=lambda item: item["mtime_ns"], reverse=True)
+            for item in all_summaries:
+                item["file_size"] = item.pop("size", 0)
+                item["is_bookmarked"] = item["filename"] in bookmarked_set
 
-            # 按修改時間排序（最新的在前）
-            all_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-
-            # 提取所有檔案的資訊
-            all_summaries = []
             channel_counts = {}
-
-            for file_path in all_files:
-                # 提取頻道和標題
-                channel_name = self._extract_channel(file_path)
-                title = self._extract_title(file_path)
-                channel_display = get_display_name(channel_name)
-
-                # 統計頻道數量
-                if channel_display not in channel_counts:
-                    channel_counts[channel_display] = {
-                        'name': channel_name,
-                        'display_name': channel_display,
-                        'count': 0
+            for item in all_summaries:
+                display = item["channel_display"]
+                if display not in channel_counts:
+                    channel_counts[display] = {
+                        "name": item["channel"],
+                        "display_name": display,
+                        "count": 0,
                     }
-                channel_counts[channel_display]['count'] += 1
+                channel_counts[display]["count"] += 1
 
-                # 提取核心主題作為預覽
-                preview = self._extract_core_topics(file_path)
-
-                # 建立摘要項目
-                summary_item = {
-                    'filename': file_path.name,
-                    'title': title,
-                    'channel': channel_name,
-                    'channel_display': channel_display,
-                    'created_at': datetime.fromtimestamp(file_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
-                    'file_size': file_path.stat().st_size,
-                    'is_bookmarked': bookmarked_files and file_path.name in bookmarked_files,
-                    'preview': preview
-                }
-
-                all_summaries.append(summary_item)
-
-            # 篩選：書籤
-            if bookmarked_only and bookmarked_files:
-                all_summaries = [s for s in all_summaries if s['is_bookmarked']]
-
-            # 篩選：頻道
+            if bookmarked_only:
+                all_summaries = [
+                    item for item in all_summaries if item["is_bookmarked"]
+                ]
             if channel:
-                # 同時支援原始名稱和顯示名稱
                 all_summaries = [
-                    s for s in all_summaries
-                    if s['channel'] == channel or s['channel_display'] == channel
+                    item for item in all_summaries
+                    if item["channel"] == channel
+                    or item["channel_display"] == channel
                 ]
-
-            # 篩選：搜尋
             if search:
-                search_lower = search.lower()
+                search_lower = search.casefold()
                 all_summaries = [
-                    s for s in all_summaries
-                    if search_lower in s['title'].lower()
+                    item for item in all_summaries
+                    if search_lower in item["title"].casefold()
                 ]
 
-            # 計算分頁
             total_count = len(all_summaries)
-            total_pages = (total_count + per_page - 1) // per_page if total_count > 0 else 0
-
-            # 驗證頁碼
-            if page < 1:
-                page = 1
-            if page > total_pages and total_pages > 0:
+            total_pages = (
+                (total_count + per_page - 1) // per_page if total_count else 0
+            )
+            if page > total_pages and total_pages:
                 page = total_pages
-
-            # 計算起始和結束索引
             start_index = (page - 1) * per_page
-            end_index = start_index + per_page
+            page_summaries = all_summaries[start_index:start_index + per_page]
+            for item in page_summaries:
+                item.pop("mtime_ns", None)
 
-            # 取得當前頁的摘要
-            page_summaries = all_summaries[start_index:end_index]
-
-            # 整理頻道列表（按數量降序排列）
             channels_list = sorted(
                 channel_counts.values(),
-                key=lambda x: (-x['count'], x['display_name'])
+                key=lambda item: (-item["count"], item["display_name"]),
             )
-
             return {
-                'summaries': page_summaries,
-                'pagination': {
-                    'page': page,
-                    'per_page': per_page,
-                    'total_count': total_count,
-                    'total_pages': total_pages,
-                    'has_next': page < total_pages,
-                    'has_prev': page > 1
+                "summaries": page_summaries,
+                "pagination": {
+                    "page": page,
+                    "per_page": per_page,
+                    "total_count": total_count,
+                    "total_pages": total_pages,
+                    "has_next": page < total_pages,
+                    "has_prev": page > 1,
                 },
-                'channels': channels_list
+                "channels": channels_list,
             }
-
-        except Exception as e:
-            print(f"Error getting summaries list: {e}")
+        except Exception as error:
+            print(f"Error getting summaries list: {error}")
             return {
-                'summaries': [],
-                'pagination': {
-                    'page': 1,
-                    'per_page': per_page,
-                    'total_count': 0,
-                    'total_pages': 0,
-                    'has_next': False,
-                    'has_prev': False
+                "summaries": [],
+                "pagination": {
+                    "page": 1,
+                    "per_page": per_page,
+                    "total_count": 0,
+                    "total_pages": 0,
+                    "has_next": False,
+                    "has_prev": False,
                 },
-                'channels': []
+                "channels": [],
             }
-
     def _extract_channel(self, file_path: Path) -> str:
         """
         從摘要文件中提取頻道信息
