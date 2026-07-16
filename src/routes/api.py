@@ -3,6 +3,7 @@ from src.config import get_config, set_config
 from task_queue import get_task_queue, TaskStatus
 import re
 import os
+import time
 import threading
 import psutil
 from pathlib import Path
@@ -732,6 +733,129 @@ def api_process_youtube():
 
     except Exception as e:
         return LegacyAPIResponse.error(f'處理請求時發生錯誤：{str(e)}', 500)
+
+@api_bp.route('/process2', methods=['POST'])
+def api_process2():
+    """Process a URL and wait for the background task to produce a summary."""
+    if not request.is_json:
+        return jsonify({'status': 'error', 'message': 'JSON body required'}), 400
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'status': 'error', 'message': 'Invalid JSON body'}), 400
+
+    audio_url = str(data.get('youtube_url', '') or data.get('audio_url', '')).strip()
+    access_code = str(data.get('access_code', '') or '').strip()
+    user_title = str(data.get('title', '') or '').strip()
+    user_uploader = str(data.get('uploader', '') or '').strip()
+
+    if not audio_url:
+        return jsonify({'status': 'error', 'message': 'youtube_url or audio_url is required'}), 400
+
+    from flask import session
+    session_authorized = get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized')
+    if not session_authorized and not auth_service.verify_access_code(access_code):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    if not audio_url.startswith(('http://', 'https://')):
+        return jsonify({'status': 'error', 'message': 'URL must use http:// or https://'}), 400
+    if len(audio_url) > 500:
+        return jsonify({'status': 'error', 'message': 'URL is too long'}), 400
+
+    url_type = url_service.detect_url_type(audio_url)
+    if url_type == 'youtube':
+        is_live, live_message = url_service.is_youtube_live(audio_url)
+        if is_live:
+            return jsonify({'status': 'error', 'message': live_message}), 400
+
+    video_title = user_title
+    if not video_title and url_type == 'youtube':
+        try:
+            import yt_dlp
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                info = ydl.extract_info(audio_url, download=False)
+                video_title = str(info.get('title', '') or '').strip()
+        except Exception:
+            # The queue worker retries metadata extraction and records terminal failures.
+            pass
+
+    summary_service = get_summary_api_service()
+    if video_title:
+        existing_summary = summary_service.search_summary_by_title(video_title)
+        if existing_summary:
+            return jsonify({
+                'status': 'completed',
+                'has_existing_summary': True,
+                'summary': {
+                    'title': existing_summary['title'],
+                    'content': existing_summary['content'],
+                    'created_at': existing_summary['created_at'],
+                    'file_name': existing_summary['file_name'],
+                    'file_size': existing_summary['file_size']
+                },
+                'youtube_url': audio_url
+            }), 200
+
+    task_data = {
+        'url': audio_url,
+        'auto': data.get('auto', 0) == 1,
+        'process2': True,
+        'max_transcription_duration_seconds': 40 * 60
+    }
+    if user_title:
+        task_data['title'] = user_title
+    if user_uploader:
+        task_data['uploader'] = user_uploader
+
+    queue_manager = get_task_queue()
+    task_id = queue_manager.add_task(
+        'youtube', task_data, priority=5, user_ip=auth_service.get_client_ip()
+    )
+
+    timeout_seconds = int(get_config('PROCESS2_TIMEOUT_SECONDS', 3600))
+    deadline = time.monotonic() + max(1, timeout_seconds)
+    while time.monotonic() < deadline:
+        task = queue_manager.get_task(task_id)
+        if not task:
+            break
+
+        status = task.get('status')
+        if status == TaskStatus.COMPLETED.value:
+            result = task.get('result') or {}
+            if result.get('skipped_reason') == 'too_long_to_transcribe':
+                return jsonify({
+                    'status': 'skipped',
+                    'message': '太長不轉錄',
+                    'task_id': task_id
+                }), 200
+
+            summary_file = result.get('summary_file')
+            if summary_file:
+                summary_path = Path(summary_file)
+                if summary_path.is_file():
+                    content = summary_path.read_text(encoding='utf-8').strip()
+                    if content:
+                        return jsonify({
+                            'status': 'completed',
+                            'has_existing_summary': False,
+                            'summary': {
+                                'title': result.get('video_title') or video_title,
+                                'content': content,
+                                'file_name': summary_path.stem,
+                                'file_size': summary_path.stat().st_size
+                            },
+                            'task_id': task_id,
+                            'youtube_url': audio_url
+                        }), 200
+            return jsonify({'status': 'error', 'message': '摘要失敗', 'task_id': task_id}), 500
+
+        if status in (TaskStatus.FAILED.value, TaskStatus.CANCELLED.value):
+            return jsonify({'status': 'error', 'message': '摘要失敗', 'task_id': task_id}), 500
+
+        time.sleep(0.5)
+
+    return jsonify({'status': 'error', 'message': '摘要失敗', 'task_id': task_id}), 504
+
 
 @api_bp.route('/queue/status')
 def api_queue_status():

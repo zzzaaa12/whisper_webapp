@@ -6,6 +6,7 @@
 import os
 import sys
 import time
+import subprocess
 import traceback
 import threading
 from datetime import datetime
@@ -297,7 +298,8 @@ class QueueWorker:
                 self.logger_manager.info(f"API 提供的頻道: {user_provided_uploader}", "queue_worker")
 
             # 如果 API 同時提供了 title 和 uploader，跳過 yt-dlp 獲取資訊
-            if user_provided_title and user_provided_uploader:
+            duration_limit = data.get('max_transcription_duration_seconds')
+            if user_provided_title and user_provided_uploader and not duration_limit:
                 self.logger_manager.info("API 已提供完整資訊，跳過 yt-dlp 獲取", "queue_worker")
                 self._emit_log_to_frontend(task_id, f"📋 使用 API 提供的{content_type_name}資訊")
                 video_title = user_provided_title
@@ -482,6 +484,22 @@ class QueueWorker:
             # 只有在需要轉錄時才下載影片
             if not skip_transcription:
                 # 尋找是否已下載相同影片
+                if duration_limit and duration and duration > duration_limit:
+                    result = {
+                        'video_title': video_title,
+                        'uploader': uploader,
+                        'subtitle_file': None,
+                        'summary_file': None,
+                        'original_file': None,
+                        'skipped_reason': 'too_long_to_transcribe',
+                        'duration': duration
+                    }
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
+                    self._emit_log_to_frontend(task_id, '太長不轉錄', 'warning')
+                    return
+
                 if not audio_file:
                     audio_file = self._download_youtube_audio(url, task_id, video_title)
                 else:
@@ -491,6 +509,39 @@ class QueueWorker:
                     raise FileNotFoundError(f"音訊檔案不存在: {audio_file}")
 
                 # 轉錄音訊
+                if duration_limit and not duration:
+                    try:
+                        probe = subprocess.run(
+                            [
+                                'ffprobe', '-v', 'error', '-show_entries',
+                                'format=duration', '-of',
+                                'default=noprint_wrappers=1:nokey=1', str(audio_file)
+                            ],
+                            capture_output=True, text=True, timeout=30, check=True
+                        )
+                        duration = float(probe.stdout.strip())
+                    except (OSError, ValueError, subprocess.SubprocessError) as error:
+                        self.logger_manager.warning(
+                            f"Unable to probe media duration: {error}", "queue_worker"
+                        )
+
+                if duration_limit and duration and duration > duration_limit:
+                    cleanup_original_file(audio_file, self.logger_manager)
+                    result = {
+                        'video_title': video_title,
+                        'uploader': uploader,
+                        'subtitle_file': None,
+                        'summary_file': None,
+                        'original_file': None,
+                        'skipped_reason': 'too_long_to_transcribe',
+                        'duration': duration
+                    }
+                    self.task_queue.update_task_status(
+                        task_id, TaskStatus.COMPLETED, progress=100, result=result
+                    )
+                    self._emit_log_to_frontend(task_id, '太長不轉錄', 'warning')
+                    return
+
                 self._transcribe_audio(audio_file, subtitle_path, task_id)
             else:
                 # 已有字幕，跳過下載和轉錄
