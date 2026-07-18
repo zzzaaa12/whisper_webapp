@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" rel="stylesheet">
+<style>
+  .detail-back { color: var(--bs-secondary-color); text-decoration: none; display: inline-flex; align-items: center; gap: .35rem; margin-bottom: 1rem; }
+  .detail-back:hover { color: var(--bs-primary); }
+  .detail-header { margin-bottom: 1.25rem; }
+  .detail-title { font-size: clamp(1.5rem, 3vw, 2rem); font-weight: 600; line-height: 1.3; margin-bottom: .65rem; }
+  .detail-meta { display: flex; flex-wrap: wrap; gap: .45rem 1rem; color: var(--bs-secondary-color); font-size: .9rem; }
+  .detail-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+  .detail-card { border: 1px solid var(--bs-border-color); border-radius: .75rem; background: var(--bs-body-bg); padding: clamp(1rem, 3vw, 2rem); }
+  .markdown-content { color: var(--text-primary); line-height: 1.8; overflow-wrap: anywhere; }
+  .markdown-content h1, .markdown-content h2, .markdown-content h3 { color: var(--text-primary); font-weight: 600; margin: 2rem 0 1rem; line-height: 1.35; }
+  .markdown-content h1 { font-size: 1.65rem; }
+  .markdown-content h2 { font-size: 1.4rem; padding-bottom: .45rem; border-bottom: 1px solid var(--border-color); }
+  .markdown-content h3 { font-size: 1.2rem; }
+  .markdown-content p, .markdown-content ul, .markdown-content ol { margin: 1rem 0; }
+  .markdown-content li { margin: .4rem 0; }
+  .markdown-content blockquote { background: var(--bg-secondary); border-left: 4px solid var(--bs-primary); border-radius: 0 .4rem .4rem 0; padding: .8rem 1rem; margin: 1rem 0; }
+  .markdown-content code { background: var(--bg-secondary); border-radius: .25rem; padding: .15rem .35rem; }
+  .markdown-content pre { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: .5rem; padding: 1rem; overflow-x: auto; }
+  .markdown-content pre code { background: transparent; padding: 0; }
+  .markdown-content table { width: 100%; border-collapse: collapse; margin: 1rem 0; display: block; overflow-x: auto; }
+  .markdown-content th, .markdown-content td { border: 1px solid var(--border-color); padding: .65rem; }
+  .markdown-content th { background: var(--bg-secondary); }
+  .raw-content { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; line-height: 1.65; overflow-wrap: anywhere; }
+  @media (max-width: 767px) {
+    .detail-actions .btn { flex: 1 1 auto; }
+    .detail-meta { gap: .35rem .75rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<a class="detail-back" href="{{ url_for('main.list_summaries') }}"><i class="bi bi-arrow-left"></i>返回摘要列表</a>
+
+<header class="detail-header">
+  <h1 class="detail-title">{{ title }}</h1>
+  <div class="detail-meta">
+    {% if video_info.channel %}<span><i class="bi bi-collection-play me-1"></i>{{ video_info.channel }}</span>{% endif %}
+    {% if video_info.duration %}<span><i class="bi bi-clock me-1"></i>{{ video_info.duration }}</span>{% endif %}
+    {% if video_info.process_time %}<span><i class="bi bi-calendar3 me-1"></i>{{ video_info.process_time }}</span>{% endif %}
+  </div>
+  <div class="detail-actions">
+    <button id="bookmark-btn" class="btn btn-sm btn-outline-primary" data-filename="{{ filename }}" data-bookmarked="{{ is_bookmarked|lower }}" type="button">
+      <i class="bi bi-bookmark{{ '-fill' if is_bookmarked else '' }}"></i>
+      <span>{{ '已加入書籤' if is_bookmarked else '加入書籤' }}</span>
+    </button>
+    <button id="toggle-view-btn" class="btn btn-sm btn-outline-secondary" type="button"><i class="bi bi-file-text"></i> 原始文本</button>
+    <a href="{{ url_for('main.download_summary', filename=filename) }}" class="btn btn-sm btn-outline-success"><i class="bi bi-download"></i> 下載摘要</a>
+    {% if has_subtitle %}<a href="{{ url_for('main.download_subtitle', filename=filename) }}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-file-earmark-text"></i> 下載字幕</a>{% endif %}
+    {% if video_info.url %}<a href="{{ video_info.url }}" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener noreferrer"><i class="bi bi-box-arrow-up-right"></i> 原始影片</a>{% endif %}
+    <button id="delete-summary-btn" class="btn btn-sm btn-outline-danger" data-filename="{{ filename }}" type="button"><i class="bi bi-trash"></i> 刪除</button>
+  </div>
+</header>
+
+<article class="detail-card">
+  <div id="raw-content" class="raw-content d-none">{{ content }}</div>
+  <div id="markdown-content" class="markdown-content"></div>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+<script>
+(() => {
+  const raw = document.getElementById('raw-content');
+  const markdown = document.getElementById('markdown-content');
+  const toggle = document.getElementById('toggle-view-btn');
+  const bookmark = document.getElementById('bookmark-btn');
+  const deleteButton = document.getElementById('delete-summary-btn');
+  let markdownMode = true;
+
+  markdown.innerHTML = marked.parse(raw.textContent);
+  markdown.querySelectorAll('pre code').forEach(block => Prism.highlightElement(block));
+
+  toggle.addEventListener('click', () => {
+    markdownMode = !markdownMode;
+    raw.classList.toggle('d-none', markdownMode);
+    markdown.classList.toggle('d-none', !markdownMode);
+    toggle.innerHTML = markdownMode ? '<i class="bi bi-file-text"></i> 原始文本' : '<i class="bi bi-eye"></i> Markdown 顯示';
+  });
+
+  bookmark.addEventListener('click', async () => {
+    bookmark.disabled = true;
+    try {
+      const response = await fetch('/api/bookmark', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({filename: bookmark.dataset.filename})});
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || '書籤操作失敗');
+      const active = bookmark.dataset.bookmarked !== 'true';
+      bookmark.dataset.bookmarked = String(active);
+      bookmark.querySelector('i').className = `bi bi-bookmark${active ? '-fill' : ''}`;
+      bookmark.querySelector('span').textContent = active ? '已加入書籤' : '加入書籤';
+    } catch (error) { alert(error.message); }
+    finally { bookmark.disabled = false; }
+  });
+
+  deleteButton.addEventListener('click', async () => {
+    if (!confirm('確定要刪除這個摘要嗎？檔案將移至回收桶。')) return;
+    deleteButton.disabled = true;
+    try {
+      const response = await fetch('/api/delete', {method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({filename: deleteButton.dataset.filename})});
+      const payload = await response.json();
+      if (!response.ok || !payload.success) throw new Error(payload.message || '刪除失敗');
+      location.href = '{{ url_for("main.list_summaries") }}';
+    } catch (error) { deleteButton.disabled = false; alert(error.message); }
+  });
+})();
+</script>
+{% endblock %}

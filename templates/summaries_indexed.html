@@ -147,7 +147,7 @@
         <input class="form-check-input summary-checkbox" type="checkbox" data-filename="${filename}" aria-label="選取 ${escapeHtml(item.title)}">
         <div>
           <a class="summary-title" href="/summary/${encoded}">${escapeHtml(item.title)}</a>
-          <div class="summary-meta"><button class="btn btn-sm btn-link p-0 channel-link" data-channel="${escapeHtml(item.channel)}">${escapeHtml(item.channel_display)}</button><span>${escapeHtml(item.created_at)}</span><span>${Math.max(1, Math.round(item.file_size / 1024))} KB</span></div>
+          <div class="summary-meta"><button class="btn btn-sm btn-link p-0 channel-link" data-channel="${escapeHtml(item.channel)}">${escapeHtml(item.channel_display)}</button><span>${escapeHtml(String(item.created_at || '').slice(0, 16))}</span></div>
           ${item.preview ? `<p class="summary-preview">${escapeHtml(item.preview)}</p>` : ''}
         </div>
         <div class="summary-actions">

@@ -243,6 +243,8 @@ def show_summary(filename):
 
     # 提取影片信息
     video_info = extract_video_info_from_summary(safe_path)
+    if video_info.get('url') and not video_info['url'].startswith(('http://', 'https://')):
+        video_info['url'] = None
 
     # 使用文件內容中的標題，如果沒有則處理檔名作為標題
     if video_info.get('title'):
@@ -256,11 +258,12 @@ def show_summary(filename):
         filename_title = filename_title.replace('_', ' ')  # 將底線替換為空格
         page_title = filename_title
 
-    return render_template('summary_detail.html',
+    return render_template('summary_detail_indexed.html',
                          title=page_title,
                          content=content,
                          filename=safe_path.name,
                          has_subtitle=has_subtitle,
+                         is_bookmarked=bookmark_service.is_bookmarked(safe_path.name),
                          video_info=video_info)
 
 @main_bp.route('/download/summary/<filename>')
@@ -296,7 +299,7 @@ def trash_page():
 def bookmarks_page():
     try:
         bookmarks = bookmark_service.get_bookmarks()
-        return render_template('bookmarks.html', bookmarks=bookmarks)
+        return render_template('bookmarks_indexed.html', bookmarks=bookmarks)
     except Exception as e:
         return f"Error loading bookmarks page: {e}", 500
 

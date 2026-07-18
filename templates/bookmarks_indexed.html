@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}書籤{% endblock %}
+
+{% block head %}
+<style>
+  .bookmark-controls { position: sticky; top: 72px; z-index: 10; background: var(--bs-body-bg); padding: 1rem 0; }
+  .bookmark-grid { display: grid; gap: .75rem; }
+  .bookmark-row { border: 1px solid var(--bs-border-color); border-radius: .75rem; padding: 1rem; background: var(--bs-body-bg); display: grid; grid-template-columns: auto 1fr auto; gap: .85rem; align-items: start; }
+  .bookmark-row:hover { box-shadow: 0 .25rem .8rem rgba(0,0,0,.08); }
+  .bookmark-title { color: inherit; text-decoration: none; font-weight: 600; }
+  .bookmark-title:hover { color: var(--bs-primary); }
+  .bookmark-meta { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; font-size: .82rem; color: var(--bs-secondary-color); }
+  .bookmark-preview { color: var(--bs-secondary-color); margin: .55rem 0 0; white-space: pre-line; }
+  .bookmark-actions { display: flex; gap: .25rem; }
+  .card-mode { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+  .card-mode .bookmark-row { grid-template-columns: auto 1fr; }
+  .card-mode .bookmark-actions { grid-column: 2; }
+  @media (max-width: 767px) {
+    .bookmark-controls { top: 56px; }
+    .bookmark-row { grid-template-columns: auto 1fr; }
+    .bookmark-actions { grid-column: 2; }
+    .bookmark-preview { display: none; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <div>
+    <h1 class="h3 mb-1">書籤</h1>
+    <div class="text-muted" id="bookmark-count">共 {{ bookmarks|length }} 個書籤</div>
+  </div>
+  {% if bookmarks %}
+  <div class="btn-group btn-group-sm" aria-label="檢視方式">
+    <button class="btn btn-outline-secondary active" id="list-mode" type="button"><i class="bi bi-list-ul"></i></button>
+    <button class="btn btn-outline-secondary" id="card-mode" type="button"><i class="bi bi-grid-3x3-gap"></i></button>
+  </div>
+  {% endif %}
+</div>
+
+{% if bookmarks %}
+<section class="bookmark-controls">
+  <div class="input-group">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input class="form-control" id="bookmark-search" type="search" placeholder="搜尋書籤標題或頻道…">
+    <button class="btn btn-outline-secondary" id="clear-search" type="button">清除</button>
+  </div>
+</section>
+
+<div class="alert alert-light border d-none" id="batch-toolbar">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span id="selected-count">已選擇 0 個項目</span>
+    <div class="btn-group btn-group-sm">
+      <button class="btn btn-outline-danger" id="batch-remove" type="button">批量移除</button>
+      <button class="btn btn-outline-secondary" id="cancel-selection" type="button">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="bookmark-grid" id="bookmark-list">
+  {% for bookmark in bookmarks %}
+  <article class="bookmark-row" data-filename="{{ bookmark.filename }}" data-search="{{ bookmark.title|lower }} {{ bookmark.channel|default('未知頻道')|lower }}">
+    <input class="form-check-input bookmark-checkbox" type="checkbox" data-filename="{{ bookmark.filename }}" aria-label="選取 {{ bookmark.title }}">
+    <div>
+      <a class="bookmark-title" href="{{ url_for('main.show_summary', filename=bookmark.filename) }}">{{ bookmark.title }}</a>
+      <div class="bookmark-meta">
+        <span>{{ bookmark.channel|default('未知頻道') }}</span>
+        {% if bookmark.added_date %}<span>加入於 {{ bookmark.added_date[:16]|replace('T', ' ') }}</span>{% endif %}
+      </div>
+      {% if bookmark.summary_preview %}<p class="bookmark-preview">{{ bookmark.summary_preview }}</p>{% endif %}
+    </div>
+    <div class="bookmark-actions">
+      <button class="btn btn-sm btn-outline-primary remove-bookmark" data-filename="{{ bookmark.filename }}" type="button" title="移除書籤"><i class="bi bi-bookmark-fill"></i></button>
+      <a class="btn btn-sm btn-outline-success" href="{{ url_for('main.download_summary', filename=bookmark.filename) }}" title="下載"><i class="bi bi-download"></i></a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+<div class="text-center text-muted py-5 d-none" id="no-results">
+  <i class="bi bi-search fs-1 d-block mb-2"></i>
+  沒有符合搜尋條件的書籤。
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+  <i class="bi bi-bookmark fs-1 d-block mb-3"></i>
+  <h2 class="h5">還沒有書籤</h2>
+  <p>在摘要列表中點擊書籤按鈕，即可將摘要收藏到這裡。</p>
+  <a href="{{ url_for('main.list_summaries') }}" class="btn btn-primary">前往摘要列表</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if bookmarks %}
+<script>
+(() => {
+  const list = document.getElementById('bookmark-list');
+  const search = document.getElementById('bookmark-search');
+  const toolbar = document.getElementById('batch-toolbar');
+  const rows = () => [...list.querySelectorAll('.bookmark-row')];
+  const selected = () => [...list.querySelectorAll('.bookmark-checkbox:checked')];
+
+  function setMode(mode) {
+    const card = mode === 'card';
+    list.classList.toggle('card-mode', card);
+    document.getElementById('card-mode').classList.toggle('active', card);
+    document.getElementById('list-mode').classList.toggle('active', !card);
+    localStorage.setItem('bookmarkView', mode);
+  }
+
+  function updateSelection() {
+    const count = selected().length;
+    toolbar.classList.toggle('d-none', count === 0);
+    document.getElementById('selected-count').textContent = `已選擇 ${count} 個項目`;
+  }
+
+  function filterBookmarks() {
+    const term = search.value.trim().toLocaleLowerCase();
+    let visible = 0;
+    rows().forEach(row => {
+      const matches = !term || row.dataset.search.includes(term);
+      row.classList.toggle('d-none', !matches);
+      if (matches) visible++;
+    });
+    document.getElementById('bookmark-count').textContent = term ? `顯示 ${visible} 個書籤` : `共 ${rows().length} 個書籤`;
+    document.getElementById('no-results').classList.toggle('d-none', visible !== 0);
+  }
+
+  async function removeBookmark(filename) {
+    const response = await fetch('/api/bookmarks/remove', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename})
+    });
+    const payload = await response.json();
+    if (!response.ok || !payload.success) throw new Error(payload.message || '移除書籤失敗');
+    const row = rows().find(item => item.dataset.filename === filename);
+    if (row) row.remove();
+  }
+
+  document.getElementById('list-mode').addEventListener('click', () => setMode('list'));
+  document.getElementById('card-mode').addEventListener('click', () => setMode('card'));
+  search.addEventListener('input', filterBookmarks);
+  document.getElementById('clear-search').addEventListener('click', () => { search.value = ''; filterBookmarks(); search.focus(); });
+  list.addEventListener('change', event => { if (event.target.matches('.bookmark-checkbox')) updateSelection(); });
+  list.addEventListener('click', async event => {
+    const button = event.target.closest('.remove-bookmark');
+    if (!button || !confirm('確定要移除這個書籤嗎？')) return;
+    button.disabled = true;
+    try { await removeBookmark(button.dataset.filename); filterBookmarks(); updateSelection(); }
+    catch (error) { button.disabled = false; alert(error.message); }
+  });
+  document.getElementById('cancel-selection').addEventListener('click', () => { selected().forEach(item => item.checked = false); updateSelection(); });
+  document.getElementById('batch-remove').addEventListener('click', async () => {
+    const filenames = selected().map(item => item.dataset.filename);
+    if (!filenames.length || !confirm(`確定要移除選中的 ${filenames.length} 個書籤嗎？`)) return;
+    try {
+      for (const filename of filenames) await removeBookmark(filename);
+      filterBookmarks(); updateSelection();
+    } catch (error) { alert(error.message); }
+  });
+
+  setMode(localStorage.getItem('bookmarkView') === 'card' ? 'card' : 'list');
+})();
+</script>
+{% endif %}
+{% endblock %}
