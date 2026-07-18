@@ -614,30 +614,9 @@ def api_process_youtube():
         if len(audio_url) > 500:
             return jsonify({'status': 'error', 'message': 'URL 長度超過限制'}), 400
 
-        # 只對YouTube URL進行直播檢測
-        if url_service.detect_url_type(audio_url) == 'youtube':
-            is_live, live_message = url_service.is_youtube_live(audio_url)
-            if is_live:
-                return jsonify({'status': 'error', 'message': f'不支援處理直播影片。{live_message}'}), 400
-
-        # 🆕 檢查是否已有現成的摘要 - 先獲取影片資訊
-        video_title = user_title  # 優先使用用戶提供的標題
-
-        # 如果沒有用戶提供標題且是 YouTube URL，嘗試獲取實際標題
-        if not video_title and url_service.detect_url_type(audio_url) == 'youtube':
-            try:
-                import yt_dlp
-                info_opts = {
-                    'quiet': True,
-                    'no_warnings': True,
-                    'extract_flat': False
-                }
-                with yt_dlp.YoutubeDL(info_opts) as ydl:
-                    info = ydl.extract_info(audio_url, download=False)
-                    video_title = info.get('title', '')
-            except Exception as e:
-                # 如果無法獲取標題，繼續處理
-                print(f"無法獲取 YouTube 標題: {e}")
+        # Metadata and live-stream validation are performed once by the worker.
+        # Keeping yt-dlp out of this request makes queue submission immediate.
+        video_title = user_title
 
         # 檢查是否已有摘要
         if video_title:
@@ -1188,6 +1167,38 @@ def api_list_summaries():
 
 # ===== 健康檢查與系統監控 ==========
 
+@api_bp.route('/client-diagnostics', methods=['POST'])
+def api_client_diagnostics():
+    """Receive low-volume browser diagnostics for unresponsive-page analysis."""
+    try:
+        if get_config("ACCESS_CODE_ALL_PAGE", False):
+            from flask import session
+            if not session.get("is_authorized"):
+                return ('', 204)
+
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return ('', 204)
+
+        allowed = (
+            "type", "page", "message", "source", "line", "column",
+            "stack", "url", "status", "duration_ms", "timestamp"
+        )
+        sanitized = {}
+        for key in allowed:
+            value = data.get(key)
+            if value is None:
+                continue
+            limit = 2000 if key == "stack" else 500
+            sanitized[key] = str(value)[:limit]
+
+        from src.utils.logger_manager import get_logger_manager
+        get_logger_manager().warning(
+            f"Browser diagnostic: {sanitized}", "client_diagnostics"
+        )
+        return ('', 204)
+    except Exception:
+        return ('', 204)
 @api_bp.route('/health')
 def api_health_check():
     """健康檢查端點"""

@@ -152,6 +152,7 @@ class QueueWorker:
 
     def _do_summarize(self, subtitle_content, summary_save_path, task_id, header_info=None):
         """生成摘要（使用統一的摘要服務）"""
+        stage_started_at = time.monotonic()
         if not self.openai_key:
             no_key_msg = "⚠️ 未設定 OpenAI API Key，跳過摘要生成"
             self.logger_manager.warning("OpenAI API key not set, skipping summarization", "queue_worker")
@@ -201,6 +202,12 @@ class QueueWorker:
                 self.logger_manager.error(f"Summary generation failed: {result}", "queue_worker")
                 self._emit_log_to_frontend(task_id, summary_error_msg, 'error')
 
+            self.logger_manager.info(
+                f"[Task:{task_id[:8]}] Stage timing: summary duration_ms="
+                f"{round((time.monotonic() - stage_started_at) * 1000)}",
+                "queue_worker"
+            )
+
         except Exception as e:
             error_msg = f"❌ 摘要生成過程發生錯誤: {str(e)}"
             self.logger_manager.error(f"Error generating summary: {e}", "queue_worker")
@@ -208,6 +215,7 @@ class QueueWorker:
             self._emit_log_to_frontend(task_id, error_msg, 'error')
 
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
+        stage_started_at = time.monotonic()
         # 清理影片標題，避免 Windows 檔名禁用字元（:, !, ?, *, <, >, |, \, /, "）
         safe_title = sanitize_filename(video_title)
 
@@ -229,9 +237,9 @@ class QueueWorker:
             # 使用 cookies（如果需要）
             'cookiesfrombrowser': None,  # 可以設置為 ('chrome',) 或 ('firefox',) 來使用瀏覽器 cookies
             # 添加重試和超時設定
-            'retries': 10,
-            'fragment_retries': 10,
-            'socket_timeout': 30,
+            'retries': 2,
+            'fragment_retries': 2,
+            'socket_timeout': 20,
             # 避免被偵測為機器人
             'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
@@ -265,6 +273,11 @@ class QueueWorker:
 
         download_complete_msg = "✅ 影片下載完成"
         self.logger_manager.info(f"Downloaded: {filename}", "queue_worker")
+        self.logger_manager.info(
+            f"[Task:{task_id[:8]}] Stage timing: download duration_ms="
+            f"{round((time.monotonic() - stage_started_at) * 1000)}",
+            "queue_worker"
+        )
         self._emit_log_to_frontend(task_id, download_complete_msg, 'success')
 
         audio_file = Path(filename)
@@ -324,11 +337,12 @@ class QueueWorker:
                         'Sec-Fetch-Mode': 'navigate',
                     },
                     'cookiesfrombrowser': None,
-                    'retries': 10,
-                    'socket_timeout': 30,
+                    'retries': 2,
+                    'socket_timeout': 20,
                     'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
                 }
                 try:
+                    metadata_started_at = time.monotonic()
                     with self.yt_dlp.YoutubeDL(info_opts) as ydl:
                         info = ydl.extract_info(url, download=False)
                         fetched_title = info.get('title', '')
@@ -338,6 +352,16 @@ class QueueWorker:
                         upload_date = info.get('upload_date', '')
                         description = info.get('description', '')
                         thumbnail = info.get('thumbnail', '')
+                    self.logger_manager.info(
+                        f"[Task:{task_id[:8]}] Stage timing: metadata duration_ms="
+                        f"{round((time.monotonic() - metadata_started_at) * 1000)}",
+                        "queue_worker"
+                    )
+                    if (
+                        info.get('is_live', False)
+                        or info.get('live_status') in ('is_live', 'is_upcoming')
+                    ):
+                        raise ValueError("Live or upcoming YouTube streams are not supported")
                     self.logger_manager.info(f"yt-dlp 成功獲取資訊: title={fetched_title}, uploader={fetched_uploader}", "queue_worker")
 
                     # 優先使用 API 傳入的值，否則使用 yt-dlp 獲取的值
@@ -770,6 +794,7 @@ class QueueWorker:
                 self._emit_log_to_frontend(task_id, error_msg, 'error')
                 raise RuntimeError("Whisper 模型載入失敗")
 
+        stage_started_at = time.monotonic()
         transcribe_msg = "🎤 開始語音轉錄..."
         self.logger_manager.info(f"Transcribing audio: {audio_file}", "queue_worker")
         self._emit_log_to_frontend(task_id, transcribe_msg)
@@ -796,6 +821,11 @@ class QueueWorker:
 
             transcribe_complete_msg = f"✅ 語音轉錄完成，共 {len(segments_list)} 個片段"
             self.logger_manager.info(f"Transcription completed, {len(segments_list)} segments", "queue_worker")
+            self.logger_manager.info(
+                f"[Task:{task_id[:8]}] Stage timing: transcription duration_ms="
+                f"{round((time.monotonic() - stage_started_at) * 1000)}",
+                "queue_worker"
+            )
             self._emit_log_to_frontend(task_id, transcribe_complete_msg, 'success')
 
             srt_content = segments_to_srt(segments_list)

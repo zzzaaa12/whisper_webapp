@@ -11,7 +11,7 @@ import json
 import uuid
 import psutil
 
-from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_file, session, redirect, url_for, g
 from flask_socketio import emit
 import requests
 
@@ -83,6 +83,17 @@ url_service = URLService()
 # 安全性增強：設定安全標頭
 @app.after_request
 def set_security_headers(response):
+    started = getattr(g, 'request_started_at', None)
+    if started is not None:
+        elapsed_ms = round((time.perf_counter() - started) * 1000)
+        response.headers['Server-Timing'] = f'app;dur={elapsed_ms}'
+        if elapsed_ms >= 1000 or response.status_code >= 500:
+            logger_manager.warning(
+                f'Slow/error request: {request.method} {request.path} '
+                f'status={response.status_code} duration_ms={elapsed_ms}',
+                'http_diagnostics'
+            )
+
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-XSS-Protection'] = '1; mode=block'
@@ -99,6 +110,7 @@ def set_security_headers(response):
 @app.before_request
 def require_access_code():
     """在每個請求前檢查是否需要通行碼"""
+    g.request_started_at = time.perf_counter()
     # API 請求應跳過此驗證
     if request.path.startswith('/api'):
         return
