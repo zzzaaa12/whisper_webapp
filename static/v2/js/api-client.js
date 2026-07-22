@@ -27,4 +27,3 @@ export const api = Object.freeze({
   post: (path, body) => request(path, {method: 'POST', body: JSON.stringify(body)}),
   upload: (path, formData) => request(path, {method: 'POST', body: formData}),
 });
-

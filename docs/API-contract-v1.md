@@ -154,4 +154,3 @@ errors currently map to HTTP 400, 401, 404, 409, 413, and 500 respectively.
 The `/v2` JavaScript API adapter may normalize responses internally, but that
 normalization must stay in the browser. It must not change server responses.
 The v2 Socket.IO adapter follows the same rule.
-

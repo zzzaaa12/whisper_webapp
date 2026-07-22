@@ -16,4 +16,3 @@ export function connectSocket(handlers = {}) {
     raw: socket,
   });
 }
-
