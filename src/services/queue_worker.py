@@ -17,6 +17,7 @@ import re
 import requests
 from urllib.parse import unquote
 import yt_dlp
+from src.utils.ytdlp_options import get_ytdlp_network_options
 
 from task_queue import get_task_queue, TaskStatus
 from src.config import get_config
@@ -221,6 +222,7 @@ class QueueWorker:
 
         # 配置 yt-dlp 下載（使用清理後的標題）
         ydl_opts = {
+            **get_ytdlp_network_options(),
             'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp3]/bestaudio/best[height<=720]/best',
             'outtmpl': str(self.download_folder / f'{safe_title}.%(ext)s'),
             'noplaylist': True,
@@ -327,6 +329,7 @@ class QueueWorker:
                 self._emit_log_to_frontend(task_id, f"📋 獲取{content_type_name}資訊...")
                 self.logger_manager.info(f"嘗試用 yt-dlp 獲取資訊: {url}", "queue_worker")
                 info_opts = {
+                    **get_ytdlp_network_options(),
                     'quiet': True,
                     'no_warnings': True,
                     'extract_flat': False,

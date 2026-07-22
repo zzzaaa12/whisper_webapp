@@ -1,6 +1,7 @@
 
 import re
 import yt_dlp
+from src.utils.ytdlp_options import get_ytdlp_network_options
 
 class URLService:
     """URL 處理服務"""
@@ -96,6 +97,7 @@ class URLService:
         try:
             # 使用 yt-dlp 獲取影片資訊
             ydl_opts = {
+                **get_ytdlp_network_options(),
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,  # 需要詳細資訊來檢測直播狀態

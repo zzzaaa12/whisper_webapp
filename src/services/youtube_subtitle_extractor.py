@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 import yt_dlp
+from src.utils.ytdlp_options import get_ytdlp_network_options
 from src.utils.logger_manager import get_logger_manager
 from src.config import get_config
 
@@ -68,6 +69,7 @@ class YouTubeSubtitleExtractor:
 
             # 配置 yt-dlp 選項
             ydl_opts = {
+                **get_ytdlp_network_options(),
                 'writesubtitles': True,           # 下載手動字幕
                 'writeautomaticsub': True,        # 下載自動字幕
                 'subtitleslangs': self.supported_languages,  # 語言優先順序

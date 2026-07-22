@@ -31,6 +31,7 @@ from src.utils.path_manager import get_path_manager
 from src.utils.api_response import APIResponse, LegacyAPIResponse
 from src.utils.url_builder import URLBuilder
 from src.utils.auth_decorator import require_access_code, require_access_code_legacy
+from src.utils.ytdlp_options import get_ytdlp_network_options
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -753,7 +754,11 @@ def api_process2():
     if not video_title and url_type == 'youtube':
         try:
             import yt_dlp
-            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+            with yt_dlp.YoutubeDL({
+                **get_ytdlp_network_options(),
+                'quiet': True,
+                'no_warnings': True,
+            }) as ydl:
                 info = ydl.extract_info(audio_url, download=False)
                 video_title = str(info.get('title', '') or '').strip()
         except Exception:

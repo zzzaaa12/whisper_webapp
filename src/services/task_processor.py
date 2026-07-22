@@ -12,6 +12,7 @@ import re
 import requests
 from urllib.parse import unquote
 import yt_dlp
+from src.utils.ytdlp_options import get_ytdlp_network_options
 
 from task_queue import get_task_queue, TaskStatus
 from src.config import get_config
@@ -146,6 +147,7 @@ class TaskProcessor:
     def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
         # 配置 yt-dlp 下載
         ydl_opts = {
+            **get_ytdlp_network_options(),
             'format': 'best[ext=mp4]/best',
             'outtmpl': str(self.download_folder / '%(title)s.%(ext)s'),
             'noplaylist': True,
@@ -331,6 +333,7 @@ class TaskProcessor:
 
             # 先獲取影片資訊（不下載）
             info_opts = {
+                **get_ytdlp_network_options(),
                 'quiet': True,
                 'no_warnings': True,
                 'extract_flat': False,  # 改為 False 以獲取完整信息

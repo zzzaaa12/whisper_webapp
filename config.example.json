@@ -1,4 +1,5 @@
 {
+  "YTDLP_FORCE_IPV4": true,
   "SECRET_KEY": "",
   "ACCESS_CODE": "",
   "ACCESS_CODE_ALL_PAGE": false,
