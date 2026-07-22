@@ -1,0 +1,62 @@
+{% extends "v2/base.html" %}
+{% block title %}設定 · Whisper V2{% endblock %}
+{% block page_title %}設定{% endblock %}
+{% block content %}
+<form class="settings-form" data-settings-form>
+  <section class="settings-section">
+    <div class="settings-heading"><div><h2>AI 與備援</h2><p>密鑰留空會保留目前設定。</p></div></div>
+    <div class="settings-grid">
+      <label><span>主要供應商</span><select data-config-key="AI_PROVIDER">{% for provider in providers %}<option value="{{ provider.name }}" {{ 'selected' if provider.name == current_provider else '' }}>{{ provider.name }}</option>{% endfor %}</select></label>
+      <label class="setting-check"><input type="checkbox" data-config-key="AI_FALLBACK_ENABLED" {{ 'checked' if fallback_enabled else '' }}><span>啟用 AI 備援</span></label>
+      <label class="settings-wide"><span>備援順序</span><input data-config-key="AI_FALLBACK_ORDER" data-value-type="list" value="{{ fallback_order }}" placeholder="openai, claude, gemini"></label>
+    </div>
+    <div class="provider-list">
+      {% for provider in providers %}
+      <details class="provider-card" {{ 'open' if provider.name == current_provider else '' }}>
+        <summary><strong>{{ provider.name }}</strong><span>{{ '金鑰已設定' if provider.configured else '尚未設定金鑰' }}</span></summary>
+        <div class="settings-grid">
+          <label class="settings-wide"><span>API Key</span><input type="password" data-config-key="AI_PROVIDERS.{{ provider.name }}.api_key" placeholder="留空以保留目前金鑰" autocomplete="new-password"></label>
+          <label class="settings-wide"><span>Base URL</span><input data-config-key="AI_PROVIDERS.{{ provider.name }}.base_url" value="{{ provider.base_url }}"></label>
+          <label><span>模型</span><input data-config-key="AI_PROVIDERS.{{ provider.name }}.model" value="{{ provider.model }}"></label>
+          <label><span>Max tokens</span><input type="number" min="1" max="200000" data-config-key="AI_PROVIDERS.{{ provider.name }}.max_tokens" data-value-type="number" value="{{ provider.max_tokens }}"></label>
+          <label><span>Temperature</span><input type="number" min="0" max="2" step="0.1" data-config-key="AI_PROVIDERS.{{ provider.name }}.temperature" data-value-type="number" value="{{ provider.temperature }}"></label>
+        </div>
+      </details>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="settings-section"><div class="settings-heading"><div><h2>轉錄與下載</h2><p>控制 GPU、模型卸載與 yt-dlp 網路行為。</p></div></div><div class="settings-grid settings-check-grid">
+    <label class="setting-check"><input type="checkbox" data-config-key="GPU_ONLY" {{ 'checked' if gpu_only else '' }}><span>僅使用 GPU</span></label>
+    <label class="setting-check"><input type="checkbox" data-config-key="whisper.dynamic_unload_enabled" {{ 'checked' if dynamic_unload else '' }}><span>閒置時卸載 Whisper</span></label>
+    <label class="setting-check"><input type="checkbox" data-config-key="YTDLP_FORCE_IPV4" {{ 'checked' if force_ipv4 else '' }}><span>yt-dlp 強制 IPv4</span></label>
+  </div></section>
+
+  <section class="settings-section"><div class="settings-heading"><div><h2>Telegram</h2><p>{{ 'Bot Token 已設定' if telegram_configured else 'Bot Token 尚未設定' }}</p></div></div><div class="settings-grid">
+    <label class="settings-wide"><span>Bot Token</span><input type="password" data-config-key="TELEGRAM_BOT_TOKEN" placeholder="留空以保留目前 Token" autocomplete="new-password"></label>
+    <label><span>Chat ID</span><input data-config-key="TELEGRAM_CHAT_ID" value="{{ telegram_chat_id }}"></label>
+    <label><span>重試次數</span><input type="number" min="1" max="10" data-config-key="TELEGRAM_MAX_ATTEMPTS" data-value-type="number" value="{{ telegram_attempts }}"></label>
+  </div></section>
+
+  <section class="settings-section"><div class="settings-heading"><div><h2>轉錄排程</h2><p>一天可輸入多個時段，以逗號分隔。</p></div></div><div class="settings-grid">
+    <label class="setting-check"><input type="checkbox" data-config-key="TRANSCRIPTION_SCHEDULE.enabled" {{ 'checked' if schedule.get('enabled', false) else '' }}><span>啟用轉錄排程</span></label>
+    <label><span>時區</span><input data-config-key="TRANSCRIPTION_SCHEDULE.timezone" value="{{ schedule.get('timezone', 'Asia/Taipei') }}"></label>
+    <label><span>時段分鐘數</span><input type="number" min="5" max="240" data-config-key="TRANSCRIPTION_SCHEDULE.slot_minutes" data-value-type="number" value="{{ schedule.get('slot_minutes', 30) }}"></label>
+    <label class="settings-wide"><span>套用任務類型</span><input data-config-key="TRANSCRIPTION_SCHEDULE.apply_to_task_types" data-value-type="list" value="{{ schedule.get('apply_to_task_types', [])|join(', ') }}"></label>
+    {% set day_names = ['星期一','星期二','星期三','星期四','星期五','星期六','星期日'] %}
+    {% for day in range(7) %}<label><span>{{ day_names[day] }}</span><input data-config-key="TRANSCRIPTION_SCHEDULE.weekdays.{{ day }}" data-value-type="list" value="{{ schedule.get('weekdays', {}).get(day|string, [])|join(', ') }}" placeholder="00:00-08:00, 18:30-20:00"></label>{% endfor %}
+  </div></section>
+
+  <section class="settings-section restart-section"><div class="settings-heading"><div><h2>系統連線</h2><p>這一區儲存後需要重新啟動程式。</p></div><span class="restart-badge">需重啟</span></div><div class="settings-grid">
+    <label class="settings-wide"><span>通行碼</span><input type="password" data-config-key="ACCESS_CODE" placeholder="{{ '已設定；留空以保留' if access_code_configured else '輸入新通行碼' }}" autocomplete="new-password"></label>
+    <label class="setting-check"><input type="checkbox" data-config-key="ACCESS_CODE_ALL_PAGE" {{ 'checked' if access_all else '' }}><span>所有頁面要求通行碼</span></label>
+    <label class="setting-check"><input type="checkbox" data-config-key="USE_SSL" {{ 'checked' if use_ssl else '' }}><span>內建 SSL</span></label>
+    <label><span>伺服器 Port</span><input type="number" min="1" max="65535" data-config-key="SERVER_PORT" data-value-type="number" value="{{ server_port }}"></label>
+    <label><span>對外 Port</span><input type="number" min="0" max="65535" data-config-key="PUBLIC_PORT" data-value-type="number" value="{{ public_port }}"></label>
+    <label class="settings-wide"><span>網站位址</span><input data-config-key="WEBSITE_BASE_URL" value="{{ website_base_url }}"></label>
+  </div></section>
+
+  <div class="settings-save"><p class="summary-message" data-settings-message role="status" aria-live="polite"></p><button class="primary-button" type="submit">儲存設定</button></div>
+</form>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/settings.js') }}"></script>{% endblock %}

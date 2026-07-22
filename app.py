@@ -211,9 +211,11 @@ def update_server_state(is_busy, task_description):
 
 from src.routes.main import main_bp
 from src.routes.api import api_bp
+from src.routes.v2 import v2_bp
 
 app.register_blueprint(main_bp)
 app.register_blueprint(api_bp)
+app.register_blueprint(v2_bp)
 
 
 @socketio.on('connect')

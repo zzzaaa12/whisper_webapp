@@ -1,0 +1,133 @@
+{% extends "v2/base.html" %}
+{% block title %}API 使用說明 · Whisper V2{% endblock %}
+{% block page_title %}API 使用說明{% endblock %}
+{% block content %}
+<div class="docs-intro">
+  <p>V2 沿用現有 <code>/api/*</code> 路徑。以下範例可直接修改主機位址、網址與通行碼後使用。</p>
+</div>
+
+<nav class="docs-index" aria-label="本頁章節">
+  <a href="#quick-start">快速開始</a><a href="#authentication">驗證</a><a href="#endpoints">常用端點</a><a href="#examples">程式範例</a><a href="#vimeo">Vimeo</a>
+</nav>
+
+<div class="docs-layout">
+  <article class="docs-content">
+    <section id="quick-start" class="docs-section">
+      <h2>快速開始</h2>
+      <p>主要流程是送出網址取得 <code>task_id</code>，再定期查詢任務，直到狀態變成 <code>completed</code> 或 <code>failed</code>。</p>
+      <ol class="request-flow"><li><span>1</span><div><strong>建立任務</strong><code>POST /api/process</code></div></li><li><span>2</span><div><strong>保存 task_id</strong><code>status: processing</code></div></li><li><span>3</span><div><strong>查詢狀態</strong><code>GET /api/queue/task/&lt;task_id&gt;</code></div></li></ol>
+    </section>
+
+    <section id="authentication" class="docs-section">
+      <h2>驗證方式</h2>
+      <p>如果伺服器啟用了通行碼，請在 JSON 或 multipart form 中傳入 <code>access_code</code>。已經透過瀏覽器完成全站驗證的請求可以沿用 session。</p>
+      <div class="notice"><strong>安全提醒</strong><p>不要把正式通行碼提交到 Git、公開 Apps Script 或前端原始碼。範例中的 <code>YOUR_ACCESS_CODE</code> 必須改由環境變數或 Script Properties 讀取。</p></div>
+    </section>
+
+    <section id="endpoints" class="docs-section">
+      <h2>常用端點</h2>
+      <div class="endpoint-list">
+        <div><span class="method post">POST</span><code>/api/process</code><p>加入網址處理任務。JSON 必填 <code>youtube_url</code> 或 <code>audio_url</code>。</p></div>
+        <div><span class="method post">POST</span><code>/api/process2</code><p>等待背景任務完成後直接回傳摘要；長時間請求可能受到網路逾時限制。</p></div>
+        <div><span class="method get">GET</span><code>/api/queue/task/&lt;task_id&gt;</code><p>取得單一任務的狀態、進度與結果。</p></div>
+        <div><span class="method get">GET</span><code>/api/queue/status</code><p>取得等待中與處理中的數量。</p></div>
+        <div><span class="method post">POST</span><code>/api/upload_media</code><p>上傳本機影音。使用 multipart 欄位 <code>media_file</code>，最大 2 GB。</p></div>
+        <div><span class="method get">GET</span><code>/api/health</code><p>檢查服務是否可連線。</p></div>
+      </div>
+    </section>
+
+    <section id="examples" class="docs-section">
+      <h2>Python</h2>
+      <p>需要安裝 <code>requests</code>：<code>pip install requests</code></p>
+      <div class="code-block"><div><span>python</span><button type="button" data-copy-code>複製</button></div><pre><code>import os
+import time
+import requests
+
+BASE_URL = "http://127.0.0.1:5000"
+ACCESS_CODE = os.environ.get("WHISPER_ACCESS_CODE", "")
+
+response = requests.post(
+    f"{BASE_URL}/api/process",
+    json={
+        "youtube_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+        "access_code": ACCESS_CODE,
+    },
+    timeout=30,
+)
+response.raise_for_status()
+payload = response.json()
+
+if payload.get("status") == "completed":
+    print(payload["summary"])
+    raise SystemExit
+
+task_id = payload["task_id"]
+while True:
+    task_response = requests.get(
+        f"{BASE_URL}/api/queue/task/{task_id}", timeout=30
+    )
+    task_response.raise_for_status()
+    task = task_response.json()["task"]
+    print(task["status"], task.get("progress", 0))
+    if task["status"] in {"completed", "failed", "cancelled"}:
+        print(task.get("result") or task.get("error_message"))
+        break
+    time.sleep(2)</code></pre></div>
+
+      <h2>Google Apps Script</h2>
+      <p>先在「專案設定 → 指令碼屬性」建立 <code>WHISPER_ACCESS_CODE</code>，避免把通行碼寫在程式中。</p>
+      <div class="code-block"><div><span>apps script</span><button type="button" data-copy-code>複製</button></div><pre><code>function createWhisperTask() {
+  const baseUrl = 'https://YOUR_SERVER';
+  const accessCode = PropertiesService.getScriptProperties()
+    .getProperty('WHISPER_ACCESS_CODE') || '';
+
+  const response = UrlFetchApp.fetch(baseUrl + '/api/process', {
+    method: 'post',
+    contentType: 'application/json',
+    payload: JSON.stringify({
+      youtube_url: 'https://www.youtube.com/watch?v=VIDEO_ID',
+      access_code: accessCode
+    }),
+    muteHttpExceptions: true
+  });
+
+  const result = JSON.parse(response.getContentText());
+  if (response.getResponseCode() &gt;= 400) {
+    throw new Error(result.message || 'API request failed');
+  }
+  Logger.log(result);
+  return result.task_id || null;
+}
+
+function getWhisperTask(taskId) {
+  const response = UrlFetchApp.fetch(
+    'https://YOUR_SERVER/api/queue/task/' + encodeURIComponent(taskId)
+  );
+  return JSON.parse(response.getContentText()).task;
+}</code></pre></div>
+
+      <h2>curl</h2>
+      <div class="code-block"><div><span>建立網址任務</span><button type="button" data-copy-code>複製</button></div><pre><code>curl -X POST "http://127.0.0.1:5000/api/process" \
+  -H "Content-Type: application/json" \
+  -d '{"youtube_url":"https://www.youtube.com/watch?v=VIDEO_ID","access_code":"YOUR_ACCESS_CODE"}'</code></pre></div>
+      <div class="code-block"><div><span>查詢任務</span><button type="button" data-copy-code>複製</button></div><pre><code>curl "http://127.0.0.1:5000/api/queue/task/TASK_ID"</code></pre></div>
+      <div class="code-block"><div><span>上傳影音</span><button type="button" data-copy-code>複製</button></div><pre><code>curl -X POST "http://127.0.0.1:5000/api/upload_media" \
+  -F "media_file=@C:/media/example.mp4" \
+  -F "access_code=YOUR_ACCESS_CODE"</code></pre></div>
+    </section>
+
+    <section id="vimeo" class="docs-section">
+      <h2>Vimeo 密碼影片</h2>
+      <p>可以把密碼接在 Vimeo 網址後方，使用一個空格分隔：</p>
+      <div class="code-block"><div><span>簡寫格式</span><button type="button" data-copy-code>複製</button></div><pre><code>https://vimeo.com/123456789 abc123</code></pre></div>
+      <p>API 也支援把密碼獨立放在 <code>video_password</code>。任務查詢與 log 不會回傳原始密碼。</p>
+      <div class="code-block"><div><span>推薦的 API 格式</span><button type="button" data-copy-code>複製</button></div><pre><code>{
+  "youtube_url": "https://vimeo.com/123456789",
+  "video_password": "abc123",
+  "access_code": "YOUR_ACCESS_CODE"
+}</code></pre></div>
+    </section>
+  </article>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/api-docs.js') }}"></script>{% endblock %}

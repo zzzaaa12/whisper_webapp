@@ -1,0 +1,17 @@
+{% extends "v2/base.html" %}
+{% block title %}書籤 · Whisper V2{% endblock %}
+{% block page_title %}書籤{% endblock %}
+{% block content %}
+<section class="bookmark-toolbar">
+  <div class="summary-search"><label for="bookmark-search">搜尋書籤</label><input id="bookmark-search" type="search" placeholder="輸入標題關鍵字…" autocomplete="off"></div>
+  <button class="secondary-action" type="button" data-refresh-bookmarks>重新整理</button>
+</section>
+<div class="summary-list-heading"><span data-bookmark-count>正在讀取…</span></div>
+<div class="summary-message" data-bookmark-message role="status" aria-live="polite"></div>
+<section class="summary-list card-view" data-bookmark-list aria-live="polite" aria-busy="true"></section>
+<nav class="summary-pagination" aria-label="書籤分頁"><button class="secondary-action" type="button" data-bookmark-previous>上一頁</button><span data-bookmark-page>第 1 頁</span><button class="secondary-action" type="button" data-bookmark-next>下一頁</button></nav>
+<template id="bookmark-card-template">
+  <article class="summary-row bookmark-card"><div class="summary-row-main"><a class="summary-title-link"><div class="summary-title"></div></a><div class="summary-meta"><span class="summary-channel-label"></span><time></time></div><p class="summary-preview"></p></div><div class="summary-actions"><button class="icon-text bookmark-action" type="button">移除書籤</button><a class="icon-text download-action" download>摘要</a></div></article>
+</template>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/bookmarks.js') }}"></script>{% endblock %}

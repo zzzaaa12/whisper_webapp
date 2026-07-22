@@ -1,0 +1,64 @@
+{% extends "v2/base.html" %}
+{% block title %}新增任務 · Whisper V2{% endblock %}
+{% block page_title %}新增任務{% endblock %}
+{% block content %}
+<div class="task-layout">
+  <section class="section-card task-form-card">
+    <form data-task-form novalidate>
+      <label class="field-label" for="task-url">影片或音訊網址</label>
+      <div class="url-field">
+        <input id="task-url" name="url" type="url" inputmode="url" autocomplete="url" placeholder="https://www.youtube.com/watch?v=..." required>
+        <button class="primary-button" type="submit">加入佇列</button>
+      </div>
+      <p class="field-help">支援 YouTube、Podcast 與可直接存取的影音網址。</p>
+      <details class="url-support">
+        <summary>查看支援的網址</summary>
+        <div>
+          <p><strong>影片：</strong>YouTube、Vimeo、Dailymotion、Twitch、Facebook、Instagram、X / Twitter、TikTok、Bilibili、Youku。</p>
+          <p><strong>Podcast：</strong>Spotify、SoundCloud、SoundOn、Apple Podcasts、Google Podcasts、Castbox、Pocket Casts、TuneIn、iHeart 與常見 Podcast 託管平台。</p>
+          <p><strong>直接音訊：</strong>MP3、WAV、M4A、AAC、OGG、FLAC、WMA 的公開網址。</p>
+          <p>其他公開 http(s) 網址也會交由 yt-dlp 嘗試，但來源網站不保證皆可使用。</p>
+        </div>
+      </details>
+      <div class="form-message" data-form-message role="status" aria-live="polite"></div>
+    </form>
+    <div class="form-divider"><span>或上傳本機檔案</span></div>
+    <form data-upload-form novalidate>
+      <label class="file-picker" for="media-file">
+        <input id="media-file" name="media_file" type="file" accept=".mp3,.mp4,.wav,.m4a,.flv,.avi,.mov,.mkv,.webm,.ogg,.aac,.wma,.wmv,.3gp" required>
+        <span class="file-picker-copy"><strong data-file-name>選擇音訊或影片</strong><small>MP3、MP4、WAV、M4A、MOV、MKV、WebM 等，最大 2 GB</small></span>
+        <span class="secondary-button" aria-hidden="true">選擇檔案</span>
+      </label>
+      <div class="upload-actions">
+        <button class="primary-button" type="submit">上傳並加入佇列</button>
+        <button class="text-button" type="button" data-cancel-upload hidden>取消上傳</button>
+      </div>
+      <div class="upload-progress" data-upload-progress hidden>
+        <div><span data-upload-status>準備上傳</span><span data-upload-percent>0%</span></div>
+        <progress max="100" value="0">0%</progress>
+      </div>
+      <div class="form-message" data-upload-message role="status" aria-live="polite"></div>
+    </form>
+  </section>
+  <section class="section-card progress-card" data-progress-card hidden>
+    <div class="section-heading progress-heading">
+      <div><h2 data-task-title>處理任務</h2></div>
+      <span class="status-pill" data-task-status><i></i><span>準備中</span></span>
+    </div>
+    <div class="task-reference"><span>任務 ID</span><code data-task-id>—</code></div>
+    <ol class="stage-list" data-stage-list>
+      <li data-stage="queued"><span>1</span><div><strong>加入佇列</strong><small>等待 worker 接手</small></div></li>
+      <li data-stage="metadata"><span>2</span><div><strong>讀取影片資訊</strong><small>標題、頻道與影片狀態</small></div></li>
+      <li data-stage="subtitle"><span>3</span><div><strong>偵測字幕</strong><small>優先尋找可用字幕</small></div></li>
+      <li data-stage="download"><span>4</span><div><strong>下載音訊</strong><small>只有需要轉錄時才下載</small></div></li>
+      <li data-stage="transcription"><span>5</span><div><strong>語音轉錄</strong><small>使用 Whisper 產生字幕</small></div></li>
+      <li data-stage="summary"><span>6</span><div><strong>生成摘要</strong><small>整理內容並發送通知</small></div></li>
+    </ol>
+    <div class="task-log" aria-live="polite">
+      <div class="task-log-heading"><strong>最新進度</strong><button type="button" class="text-button" data-clear-task>清除畫面</button></div>
+      <div data-task-log><p>等待任務訊息…</p></div>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/new-task.js') }}"></script>{% endblock %}

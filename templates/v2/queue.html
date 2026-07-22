@@ -1,0 +1,27 @@
+{% extends "v2/base.html" %}
+{% block title %}任務佇列 · Whisper V2{% endblock %}
+{% block page_title %}任務佇列{% endblock %}
+{% block content %}
+<section class="queue-toolbar" aria-label="任務篩選">
+  <div class="queue-filters" role="toolbar">
+    <button type="button" class="filter-button active" data-status-filter="" aria-pressed="true">全部 <span data-count="all">—</span></button>
+    <button type="button" class="filter-button" data-status-filter="processing" aria-pressed="false">處理中 <span data-count="processing">—</span></button>
+    <button type="button" class="filter-button" data-status-filter="queued" aria-pressed="false">等待中 <span data-count="queued">—</span></button>
+    <button type="button" class="filter-button" data-status-filter="failed" aria-pressed="false">失敗 <span data-count="failed">—</span></button>
+  </div>
+  <button type="button" class="secondary-action" data-refresh-queue>重新整理</button>
+</section>
+
+<div class="queue-message" data-queue-message role="status" aria-live="polite"></div>
+<section class="queue-list" data-queue-list aria-live="polite" aria-busy="true">
+  <div class="queue-loading">正在讀取任務…</div>
+</section>
+<template id="queue-task-template">
+  <article class="queue-task">
+    <div class="task-main"><div class="task-name"></div><div class="task-meta"><span class="task-kind"></span><time></time><code></code></div></div>
+    <div class="task-state"><span class="queue-status"></span><div class="mini-progress"><i></i></div><small></small></div>
+    <div class="task-actions"><button type="button" class="text-button cancel-action">取消</button><button type="button" class="secondary-action restart-action">重新啟動</button></div>
+  </article>
+</template>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/queue.js') }}"></script>{% endblock %}

@@ -104,6 +104,22 @@ class ConfigManager:
             logger.info(f"Configuration updated for key: {key}")
             return value
 
+    def update(self, values: dict) -> None:
+        """Persist multiple validated values in one atomic replacement."""
+        logger = logging.getLogger('whisper_webapp.config')
+        with self._lock:
+            if not isinstance(self._config_cache, dict):
+                self._config_cache = {}
+            for key, value in values.items():
+                self._set_nested_value(self._config_cache, key, value)
+            config_path = self.base_dir / self.config_file
+            temporary_path = config_path.with_suffix(config_path.suffix + '.tmp')
+            with open(temporary_path, 'w', encoding='utf-8') as handle:
+                json.dump(self._config_cache, handle, ensure_ascii=False, indent=2)
+                handle.write('\n')
+            os.replace(temporary_path, config_path)
+            logger.info("Configuration updated for %d keys", len(values))
+
 # Global instance and getter function
 _global_config_manager: ConfigManager = None
 
@@ -142,3 +158,8 @@ def reload_config():
         logger.error("ConfigManager not initialized when reloading config")
         raise RuntimeError("ConfigManager not initialized. Call init_config() first.")
     _global_config_manager.reload()
+
+def update_config(values: dict) -> None:
+    if _global_config_manager is None:
+        raise RuntimeError("ConfigManager not initialized. Call init_config() first.")
+    _global_config_manager.update(values)

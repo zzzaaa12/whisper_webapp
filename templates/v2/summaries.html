@@ -1,0 +1,25 @@
+{% extends "v2/base.html" %}
+{% block title %}摘要資料庫 · Whisper V2{% endblock %}
+{% block page_title %}摘要資料庫{% endblock %}
+{% block content %}
+<section class="summary-toolbar" aria-label="摘要搜尋與篩選">
+  <div class="summary-search"><label for="summary-search">搜尋摘要</label><input id="summary-search" type="search" placeholder="輸入標題關鍵字…" autocomplete="off"></div>
+  <div class="summary-select"><label for="channel-filter">頻道</label><select id="channel-filter"><option value="">全部頻道</option></select></div>
+  <div class="summary-select"><label for="summary-type">摘要類型</label><select id="summary-type"><option value="all">全部</option><option value="manual">一般摘要</option><option value="auto">Auto 摘要</option></select></div>
+  <label class="bookmark-check"><input type="checkbox" data-bookmarked-only><span>只顯示書籤</span></label>
+  <button type="button" class="secondary-action clear-summary-filters" data-clear-filters>清除篩選</button>
+</section>
+<div class="summary-list-heading"><span data-summary-count>正在讀取…</span><div class="summary-heading-actions"><button type="button" class="view-button" data-view="list" aria-pressed="false">列表</button><button type="button" class="view-button active" data-view="card" aria-pressed="true">卡片</button><button type="button" class="text-button" data-refresh-summaries>重新整理</button></div></div>
+<section class="summary-batch" data-batch-toolbar hidden><span data-selected-count>已選擇 0 個項目</span><div><button type="button" class="secondary-action" data-batch-bookmark>批量書籤</button><button type="button" class="secondary-action danger" data-batch-delete>移到垃圾桶</button><button type="button" class="text-button" data-cancel-selection>取消選取</button></div></section>
+<div class="summary-message" data-summary-message role="status" aria-live="polite"></div>
+<section class="summary-list card-view" data-summary-list aria-live="polite" aria-busy="true"></section>
+<nav class="summary-pagination" aria-label="摘要分頁"><button type="button" class="secondary-action" data-previous-page>上一頁</button><span data-page-status>第 1 頁</span><button type="button" class="secondary-action" data-next-page>下一頁</button></nav>
+<template id="summary-row-template">
+  <article class="summary-row">
+    <input class="summary-checkbox" type="checkbox" aria-label="選取摘要">
+    <div class="summary-row-main"><a class="summary-title-link"><div class="summary-title"></div></a><div class="summary-meta"><button type="button" class="summary-channel"></button><time></time><span class="auto-label" hidden>Auto</span></div><p class="summary-preview"></p></div>
+    <div class="summary-actions"><button type="button" class="icon-text bookmark-action">加入書籤</button><a class="icon-text download-action">摘要</a><a class="icon-text subtitle-action" hidden>字幕</a><button type="button" class="icon-text danger delete-action">移到垃圾桶</button></div>
+  </article>
+</template>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='v2/js/summaries.js') }}"></script>{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "v2/base.html" %}
+{% block title %}{{ title }} · Whisper V2{% endblock %}
+{% block page_title %}摘要內容{% endblock %}
+{% block content %}
+<a class="detail-back" href="{{ return_url }}">← 返回上一頁</a>
+<header class="v2-detail-header">
+  <h1>{{ title }}</h1>
+  <div class="v2-detail-meta">
+    {% if video_info.channel %}<span>{{ video_info.channel }}</span>{% endif %}
+    {% if video_info.duration %}<span>{{ video_info.duration }}</span>{% endif %}
+    {% if video_info.process_time %}<span>{{ video_info.process_time[:16] }}</span>{% endif %}
+  </div>
+  <div class="v2-detail-actions">
+    <button class="secondary-action" type="button" data-detail-bookmark data-filename="{{ filename }}" data-bookmarked="{{ is_bookmarked|lower }}">{{ '移除書籤' if is_bookmarked else '加入書籤' }}</button>
+    <button class="secondary-action" type="button" data-detail-view>原始文本</button>
+    <a class="secondary-action" href="{{ url_for('main.download_summary', filename=filename) }}" download>下載摘要</a>
+    {% if has_subtitle %}<a class="secondary-action" href="{{ url_for('main.download_subtitle', filename=subtitle_filename) }}" download>下載字幕</a>{% endif %}
+    {% if video_info.url %}<a class="secondary-action" href="{{ video_info.url }}" target="_blank" rel="noopener noreferrer">原始影片</a>{% endif %}
+    <button class="secondary-action danger" type="button" data-detail-delete data-filename="{{ filename }}">移到垃圾桶</button>
+  </div>
+  <p class="summary-message" data-detail-message role="status" aria-live="polite"></p>
+</header>
+<article class="v2-detail-card">
+  <div class="raw-content" data-raw-content hidden>{{ content }}</div>
+  <div class="markdown-content" data-markdown-content></div>
+</article>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+<script type="module" src="{{ url_for('static', filename='v2/js/summary-detail.js') }}"></script>
+{% endblock %}

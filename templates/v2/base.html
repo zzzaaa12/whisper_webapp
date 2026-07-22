@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>{% block title %}Whisper V2{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='v2/css/app.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <a class="skip-link" href="#main-content">跳到主要內容</a>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar" aria-label="主要導覽">
+      <a class="brand" href="{{ url_for('v2.index') }}" aria-label="Whisper V2 首頁">
+        <span class="brand-mark" aria-hidden="true">W</span>
+        <span><strong>Whisper</strong><small>Workspace V2</small></span>
+      </a>
+      <nav class="nav-list">
+        <a class="nav-item {{ 'active' if active_page == 'home' else '' }}" href="{{ url_for('v2.index') }}"><span aria-hidden="true">⌂</span>工作台</a>
+        <a class="nav-item {{ 'active' if active_page == 'new-task' else '' }}" href="{{ url_for('v2.new_task') }}"><span aria-hidden="true">＋</span>新增任務</a>
+        <a class="nav-item {{ 'active' if active_page == 'api-docs' else '' }}" href="{{ url_for('v2.api_docs') }}"><span aria-hidden="true">{ }</span>API 使用說明</a>
+        <a class="nav-item {{ 'active' if active_page == 'queue' else '' }}" href="{{ url_for('v2.queue') }}"><span aria-hidden="true">≡</span>任務佇列</a>
+        <a class="nav-item {{ 'active' if active_page == 'summaries' else '' }}" href="{{ url_for('v2.summaries') }}"><span aria-hidden="true">▤</span>摘要資料庫</a>
+        <a class="nav-item {{ 'active' if active_page == 'bookmarks' else '' }}" href="{{ url_for('v2.bookmarks') }}"><span aria-hidden="true">☆</span>書籤</a>
+        <a class="nav-item {{ 'active' if active_page == 'settings' else '' }}" href="{{ url_for('v2.settings') }}"><span aria-hidden="true">⚙</span>設定</a>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="version-switch" aria-label="介面版本"><a href="{{ url_for('main.index') }}">V1</a><span aria-current="page">V2</span></div>
+        <a class="legacy-link" href="{{ url_for('main.index') }}">返回目前版本</a>
+      </div>
+    </aside>
+
+    <div class="content-shell">
+      <header class="topbar">
+        <button class="icon-button menu-button" type="button" data-sidebar-toggle aria-controls="sidebar" aria-expanded="false" aria-label="開啟導覽">☰</button>
+        <div class="topbar-title">{% block page_title %}工作台{% endblock %}</div>
+        <div class="topbar-actions">
+          <span class="connection-state" data-connection-state><i></i><span>正在連線</span></span>
+          <button class="icon-button" type="button" data-theme-toggle aria-label="切換明暗主題">◐</button>
+        </div>
+      </header>
+      <main id="main-content" class="main-content">{% block content %}{% endblock %}</main>
+    </div>
+  </div>
+  <div class="sidebar-backdrop" data-sidebar-backdrop></div>
+  <div class="toast-region" data-toast-region aria-live="polite" aria-atomic="true"></div>
+  <dialog class="confirm-dialog" data-confirm-dialog>
+    <form method="dialog">
+      <h2 data-confirm-title>確認操作</h2>
+      <p data-confirm-message></p>
+      <div><button class="secondary-action" value="cancel">取消</button><button class="primary-button" value="confirm" data-confirm-submit>確認</button></div>
+    </form>
+  </dialog>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script type="module" src="{{ url_for('static', filename='v2/js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

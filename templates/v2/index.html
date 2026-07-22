@@ -1,0 +1,33 @@
+{% extends "v2/base.html" %}
+{% block title %}工作台 · Whisper V2{% endblock %}
+{% block page_title %}工作台{% endblock %}
+{% block content %}
+<section class="metric-grid" aria-label="系統摘要">
+  <article class="metric-card">
+    <span>已完成任務</span>
+    <strong data-completed-count>—</strong>
+    <small>已成功處理完成</small>
+  </article>
+  <article class="metric-card">
+    <span>等待中的任務</span>
+    <strong data-queued-count>—</strong>
+    <small>尚未開始處理</small>
+  </article>
+  <article class="metric-card">
+    <span>處理中的任務</span>
+    <strong data-processing-count>—</strong>
+    <small>目前正在執行</small>
+  </article>
+  <article class="metric-card">
+    <span>失敗任務</span>
+    <strong data-failed-count>—</strong>
+    <small>需要重新啟動或檢查</small>
+  </article>
+</section>
+
+<div class="dashboard-grid">
+  <section class="section-card dashboard-section"><div class="section-heading"><h2>目前任務</h2><a href="{{ url_for('v2.queue') }}">查看全部</a></div><div class="dashboard-list" data-dashboard-tasks><p class="dashboard-empty">正在讀取…</p></div></section>
+  <section class="section-card dashboard-section"><div class="section-heading"><h2>最近摘要</h2><a href="{{ url_for('v2.summaries') }}">查看全部</a></div><div class="dashboard-list" data-dashboard-summaries><p class="dashboard-empty">正在讀取…</p></div></section>
+</div>
+<a class="dashboard-new-task primary-button" href="{{ url_for('v2.new_task') }}">新增任務</a>
+{% endblock %}
