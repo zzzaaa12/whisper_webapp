@@ -39,8 +39,11 @@ class Task:
         self.error_message = ""
         self.progress = 0
 
-    def to_dict(self) -> dict:
+    def to_dict(self, include_secrets: bool = False) -> dict:
         """轉換為字典格式"""
+        data = self.data.copy()
+        if not include_secrets and data.get('video_password'):
+            data['video_password'] = '***'
         return {
             'task_id': self.task_id,
             'task_type': self.task_type,
@@ -50,7 +53,7 @@ class Task:
             'completed_at': self.completed_at.isoformat() if self.completed_at else None,
             'priority': self.priority,
             'user_ip': self.user_ip,
-            'data': self.data,
+            'data': data,
             'result': self.result,
             'error_message': self.error_message,
             'progress': self.progress
@@ -234,7 +237,7 @@ class TaskQueue:
         """儲存單一任務到檔案"""
         task_file = self.tasks_dir / f"{task.task_id}.json"
         with open(task_file, 'w', encoding='utf-8') as f:
-            json.dump(task.to_dict(), f, ensure_ascii=False, indent=2)
+            json.dump(task.to_dict(include_secrets=True), f, ensure_ascii=False, indent=2)
 
     def _save_queue_metadata(self):
         """儲存佇列元資料"""

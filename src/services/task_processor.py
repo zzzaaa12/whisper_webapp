@@ -144,7 +144,7 @@ class TaskProcessor:
             return False, f"摘要檔案檢查失敗: {str(e)}"
 
 
-    def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
+    def _download_youtube_audio(self, url: str, task_id: str, video_title: str, video_password: str = '') -> Path:
         # 配置 yt-dlp 下載
         ydl_opts = {
             **get_ytdlp_network_options(),
@@ -167,6 +167,8 @@ class TaskProcessor:
             # 避免被偵測為機器人
             'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
+        if video_password:
+            ydl_opts['videopassword'] = video_password
 
         # 下載影片
         self.task_queue.update_task_status(
@@ -320,6 +322,7 @@ class TaskProcessor:
         """處理 YouTube 任務"""
         task_id = task.task_id
         data = task.data
+        video_password = str(data.get('video_password', '') or '')
 
         try:
             url = data.get('url')
@@ -449,7 +452,7 @@ class TaskProcessor:
 
             # 尋找是否已下載相同影片
             if not audio_file:
-                audio_file = self._download_youtube_audio(url, task_id, video_title)
+                audio_file = self._download_youtube_audio(url, task_id, video_title, video_password)
             else:
                 self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 

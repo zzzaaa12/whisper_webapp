@@ -16,6 +16,7 @@ class SummaryAPIService:
     def __init__(self):
         self.path_manager = get_path_manager()
         self.summary_folder = self.path_manager.get_summary_folder()
+        self.subtitle_folder = self.path_manager.get_subtitle_folder()
         self.index_service = get_summary_index_service()
 
     def get_latest_summaries(self, limit: int = 10) -> List[Dict]:
@@ -231,7 +232,8 @@ class SummaryAPIService:
                           channel: Optional[str] = None,
                           search: Optional[str] = None,
                           bookmarked_only: bool = False,
-                          bookmarked_files: Optional[List[str]] = None) -> Dict:
+                          bookmarked_files: Optional[List[str]] = None,
+                          summary_type: str = "all") -> Dict:
         """Return an indexed, filtered and paginated summary list."""
         try:
             bookmarked_set = set(bookmarked_files or [])
@@ -240,6 +242,10 @@ class SummaryAPIService:
             for item in all_summaries:
                 item["file_size"] = item.pop("size", 0)
                 item["is_bookmarked"] = item["filename"] in bookmarked_set
+                item["is_auto"] = "[auto]" in item["filename"].casefold() or "[auto]" in item["title"].casefold()
+                subtitle_filename = f"{Path(item['filename']).stem}.srt"
+                item["has_subtitle"] = (self.subtitle_folder / subtitle_filename).is_file()
+                item["subtitle_filename"] = subtitle_filename if item["has_subtitle"] else None
 
             channel_counts = {}
             for item in all_summaries:
@@ -249,6 +255,7 @@ class SummaryAPIService:
                         "name": item["channel"],
                         "display_name": display,
                         "count": 0,
+                        "latest_mtime_ns": item["mtime_ns"],
                     }
                 channel_counts[display]["count"] += 1
 
@@ -256,6 +263,10 @@ class SummaryAPIService:
                 all_summaries = [
                     item for item in all_summaries if item["is_bookmarked"]
                 ]
+            if summary_type == "auto":
+                all_summaries = [item for item in all_summaries if item["is_auto"]]
+            elif summary_type == "manual":
+                all_summaries = [item for item in all_summaries if not item["is_auto"]]
             if channel:
                 all_summaries = [
                     item for item in all_summaries
@@ -282,8 +293,13 @@ class SummaryAPIService:
 
             channels_list = sorted(
                 channel_counts.values(),
-                key=lambda item: (-item["count"], item["display_name"]),
+                key=lambda item: (
+                    -item["latest_mtime_ns"],
+                    item["display_name"],
+                ),
             )
+            for channel_item in channels_list:
+                channel_item.pop("latest_mtime_ns", None)
             return {
                 "summaries": page_summaries,
                 "pagination": {

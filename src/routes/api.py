@@ -422,7 +422,9 @@ def api_cancel_queue_task():
         task_id = data['task_id']
         access_code = data.get('access_code', '').strip()
 
-        if not auth_service.verify_access_code(access_code):
+        from flask import session
+        session_authorized = get_config("ACCESS_CODE_ALL_PAGE", False) and session.get('is_authorized')
+        if not session_authorized and not auth_service.verify_access_code(access_code):
             return jsonify({'success': False, 'message': '通行碼錯誤'}), 401
 
         queue_manager = get_task_queue()
@@ -587,7 +589,10 @@ def api_process_youtube():
 
         data = request.get_json()
         # 支援兩種參數名稱以保持向後相容性
-        audio_url = data.get('youtube_url', '').strip() or data.get('audio_url', '').strip()
+        raw_audio_url = data.get('youtube_url', '').strip() or data.get('audio_url', '').strip()
+        audio_url, video_password = url_service.parse_vimeo_credentials(
+            raw_audio_url, data.get('video_password', '')
+        )
         auto_process = data.get('auto', 0) == 1
         access_code = data.get('access_code', '').strip()
 
@@ -647,6 +652,8 @@ def api_process_youtube():
             'url': audio_url,
             'auto': auto_process
         }
+        if video_password:
+            task_data['video_password'] = video_password
 
         # 如果用戶提供了metadata，優先使用
         if user_title:
@@ -726,7 +733,10 @@ def api_process2():
     if not isinstance(data, dict):
         return jsonify({'status': 'error', 'message': 'Invalid JSON body'}), 400
 
-    audio_url = str(data.get('youtube_url', '') or data.get('audio_url', '')).strip()
+    raw_audio_url = str(data.get('youtube_url', '') or data.get('audio_url', '')).strip()
+    audio_url, video_password = url_service.parse_vimeo_credentials(
+        raw_audio_url, data.get('video_password', '')
+    )
     access_code = str(data.get('access_code', '') or '').strip()
     user_title = str(data.get('title', '') or '').strip()
     user_uploader = str(data.get('uploader', '') or '').strip()
@@ -788,6 +798,8 @@ def api_process2():
         'process2': True,
         'max_transcription_duration_seconds': 40 * 60
     }
+    if video_password:
+        task_data['video_password'] = video_password
     if user_title:
         task_data['title'] = user_title
     if user_uploader:
@@ -1135,11 +1147,14 @@ def api_list_summaries():
         channel = data.get('channel', '')
         search = data.get('search', '')
         bookmarked_only = data.get('bookmarked_only', False)
+        summary_type = data.get('summary_type', 'all')
 
         if not isinstance(channel, str) or not isinstance(search, str):
             return APIResponse.validation_error('channel 與 search 必須是字串')
         if not isinstance(bookmarked_only, bool):
             return APIResponse.validation_error('bookmarked_only 必須是布林值')
+        if summary_type not in ('all', 'auto', 'manual'):
+            return APIResponse.validation_error('summary_type 必須是 all、auto 或 manual')
         channel = channel.strip() or None
         search = search.strip() or None
 
@@ -1162,7 +1177,8 @@ def api_list_summaries():
             channel=channel,
             search=search,
             bookmarked_only=bookmarked_only,
-            bookmarked_files=bookmarked_files
+            bookmarked_files=bookmarked_files,
+            summary_type=summary_type
         )
 
         return APIResponse.success(result)

@@ -1,10 +1,27 @@
 
 import re
+from urllib.parse import urlparse
 import yt_dlp
 from src.utils.ytdlp_options import get_ytdlp_network_options
 
 class URLService:
     """URL 處理服務"""
+
+    @staticmethod
+    def parse_vimeo_credentials(raw_url: str, explicit_password: str = '') -> tuple[str, str]:
+        """Split `Vimeo URL password` input without treating other URLs as credentials."""
+        value = str(raw_url or '').strip()
+        parts = value.split(None, 1)
+        clean_url = parts[0] if parts else ''
+        password = str(explicit_password or '').strip()
+        try:
+            hostname = (urlparse(clean_url).hostname or '').lower()
+        except ValueError:
+            hostname = ''
+        is_vimeo = hostname == 'vimeo.com' or hostname.endswith('.vimeo.com')
+        if is_vimeo and not password and len(parts) == 2:
+            password = parts[1].strip()
+        return clean_url, password if is_vimeo else ''
 
     @staticmethod
     def detect_url_type(url: str) -> str:

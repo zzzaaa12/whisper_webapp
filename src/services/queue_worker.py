@@ -215,7 +215,7 @@ class QueueWorker:
             self.logger_manager.error(f"Summary error details: {traceback.format_exc()}", "queue_worker")
             self._emit_log_to_frontend(task_id, error_msg, 'error')
 
-    def _download_youtube_audio(self, url: str, task_id: str, video_title: str) -> Path:
+    def _download_youtube_audio(self, url: str, task_id: str, video_title: str, video_password: str = '') -> Path:
         stage_started_at = time.monotonic()
         # 清理影片標題，避免 Windows 檔名禁用字元（:, !, ?, *, <, >, |, \, /, "）
         safe_title = sanitize_filename(video_title)
@@ -245,6 +245,8 @@ class QueueWorker:
             # 避免被偵測為機器人
             'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
+        if video_password:
+            ydl_opts['videopassword'] = video_password
 
         # 下載影片
         download_msg = "🔄 開始下載影片..."
@@ -293,6 +295,7 @@ class QueueWorker:
 
         try:
             url = data.get('url')
+            video_password = str(data.get('video_password', '') or '')
             # 讀取 API 傳入的 metadata
             user_provided_title = data.get('title', '')
             user_provided_uploader = data.get('uploader', '')
@@ -344,6 +347,8 @@ class QueueWorker:
                     'socket_timeout': 20,
                     'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
                 }
+                if video_password:
+                    info_opts['videopassword'] = video_password
                 try:
                     metadata_started_at = time.monotonic()
                     with self.yt_dlp.YoutubeDL(info_opts) as ydl:
@@ -528,7 +533,7 @@ class QueueWorker:
                     return
 
                 if not audio_file:
-                    audio_file = self._download_youtube_audio(url, task_id, video_title)
+                    audio_file = self._download_youtube_audio(url, task_id, video_title, video_password)
                 else:
                     self.task_queue.update_task_status(task_id, TaskStatus.PROCESSING, progress=50)
 

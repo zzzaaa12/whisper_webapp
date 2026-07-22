@@ -18,7 +18,7 @@ class FileService:
         self.upload_folder = path_manager.uploads_dir
         self.subtitle_folder = path_manager.subtitles_dir
         self.summary_folder = path_manager.summaries_dir
-        self.max_file_size = 500 * 1024 * 1024  # 500MB
+        self.max_file_size = 2 * 1024 * 1024 * 1024  # 2GB
         self.allowed_extensions = {
             '.mp3', '.mp4', '.wav', '.m4a', '.flv', '.avi', '.mov',
             '.mkv', '.webm', '.ogg', '.aac', '.wma', '.wmv', '.3gp'
@@ -37,7 +37,7 @@ class FileService:
         file.seek(0)
 
         if file_size > self.max_file_size:
-            message = f'檔案過大，最大限制 500MB，目前檔案 {file_size / (1024*1024):.1f}MB'
+            message = f'檔案過大，最大限制 2GB，目前檔案 {file_size / (1024*1024):.1f}MB'
             return {'success': False, 'message': message, 'status_code': 413}
 
         file_ext = Path(file.filename).suffix.lower()

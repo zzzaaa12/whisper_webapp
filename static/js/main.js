@@ -628,8 +628,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (file) {
             // 檢查檔案大小
             const fileSizeMB = file.size / (1024 * 1024);
-            if (fileSizeMB > 500) {
-                appendLog(`⚠️ 檔案過大：${fileSizeMB.toFixed(1)}MB，建議不超過 500MB`, 'error');
+            if (fileSizeMB > 2048) {
+                appendLog(`⚠️ 檔案過大：${fileSizeMB.toFixed(1)}MB，建議不超過 2GB`, 'error');
             } else {
                 appendLog(`📁 已選擇檔案：${file.name} (${fileSizeMB.toFixed(1)}MB)`, 'info');
             }
@@ -681,8 +681,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 檢查檔案大小
         const fileSizeMB = file.size / (1024 * 1024);
-        if (fileSizeMB > 500) {
-            appendLog(`檔案過大：${fileSizeMB.toFixed(1)}MB，最大限制 500MB`, 'error');
+        if (fileSizeMB > 2048) {
+            appendLog(`檔案過大：${fileSizeMB.toFixed(1)}MB，最大限制 2GB`, 'error');
             return;
         }
 
